@@ -4,9 +4,9 @@
 import type { ChangeEvent } from 'react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays } from 'lucide-react'; // Added CalendarDays
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit } from 'lucide-react'; // Added Edit
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -95,11 +95,11 @@ export default function Home() {
     setIsLoading(true); // Start loading
     const savedData = localStorage.getItem('appData');
     if (savedData) {
-      console.log("Found data in localStorage:", savedData);
+      console.log("Found data in localStorage:", savedData.substring(0, 500) + '...'); // Log truncated data
       let parsedData: any; // Use any initially for safe parsing
       try {
         parsedData = JSON.parse(savedData);
-        console.log("Successfully parsed localStorage data:", parsedData);
+        console.log("Successfully parsed localStorage data");
 
         // --- Robust Validation ---
         if (!Array.isArray(parsedData)) {
@@ -209,8 +209,8 @@ export default function Home() {
                                 status = 'Completed';
                             }
 
-                            // Validate Planning Tasks (new and spillover)
-                            const validateTasks = (tasks: any[] | undefined): Task[] => {
+                             // Validate Planning Tasks (new and spillover)
+                             const validateTasks = (tasks: any[] | undefined): Task[] => {
                                 if (!Array.isArray(tasks)) return [];
                                 const emptyTask = createEmptyTaskRow();
                                 return tasks.map((taskData: any) => {
@@ -226,8 +226,9 @@ export default function Home() {
                                         reviewer: typeof taskData.reviewer === 'string' ? taskData.reviewer : emptyTask.reviewer,
                                         status: typeof taskData.status === 'string' && taskStatuses.includes(taskData.status as any) ? taskData.status : emptyTask.status,
                                         startDate: typeof taskData.startDate === 'string' && isValid(parseISO(taskData.startDate)) ? taskData.startDate : emptyTask.startDate,
-                                        ticketNumber: typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : emptyTask.ticketNumber, // Legacy field
-                                        devTime: typeof taskData.devTime === 'string' ? taskData.devTime : emptyTask.devTime, // Legacy field
+                                        // Legacy fields - keep optional for compatibility
+                                        ticketNumber: typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : undefined,
+                                        devTime: typeof taskData.devTime === 'string' ? taskData.devTime : undefined,
                                     };
                                 }).filter((task): task is Task => task !== null); // Filter out nulls
                             };
@@ -243,7 +244,8 @@ export default function Home() {
                                 testingStrategy: (loadedPlanning && typeof loadedPlanning.testingStrategy === 'string') ? loadedPlanning.testingStrategy : initialSprintPlanning.testingStrategy,
                             };
 
-                            // Validate Sprint Details
+
+                            // Validate Sprint Details (legacy)
                             const validatedDetails: SprintDetailItem[] = [];
                             if (Array.isArray(sprintData.details)) {
                                 sprintData.details.forEach((detailData: any) => {
@@ -361,10 +363,10 @@ export default function Home() {
    useEffect(() => {
        // Only run save logic after initial load is complete
        if (!isLoading) {
-          console.log("Projects state changed, attempting to save to localStorage:", projects);
+          console.log("Projects state changed, attempting to save to localStorage...");
            try {
                const dataToSave = JSON.stringify(projects);
-               console.log("Stringified data to save:", dataToSave);
+               console.log("Stringified data to save:", dataToSave.substring(0, 500) + '...'); // Log truncated data
                localStorage.setItem('appData', dataToSave);
                console.log("Successfully saved project data to localStorage.");
            } catch (error: any) {
@@ -387,9 +389,9 @@ export default function Home() {
             console.log(`Saving selected project ID to localStorage: ${selectedProjectId}`);
             localStorage.setItem('selectedProjectId', selectedProjectId);
          } else {
-            console.log("No project selected, potentially removing selectedProjectId from localStorage.");
-            // Optionally remove if no project is selected
-            // localStorage.removeItem('selectedProjectId');
+            console.log("No project selected, removing selectedProjectId from localStorage.");
+            // Remove if no project is selected to avoid stale references
+            localStorage.removeItem('selectedProjectId');
          }
       } else {
          console.log("Skipping saving selected project ID during initial load.");
@@ -670,73 +672,84 @@ export default function Home() {
     planningData: SprintPlanning
   ) => {
     if (!selectedProjectId) {
-      toast({ variant: "destructive", title: "Error", description: "No project selected." });
+      // Toast handled within this function if needed
       return;
     }
     let projectNameForToast = 'N/A';
+    let projectWasUpdated = false;
 
     setProjects(prevProjects => {
-       let projectUpdated = false;
        const updatedProjects = prevProjects.map(p => {
         if (p.id === selectedProjectId) {
-          projectNameForToast = p.name; // Assign name before potentially returning early
-          // Check if sprint number already exists
-          if (p.sprintData.sprints.some(s => s.sprintNumber === sprintDetails.sprintNumber)) {
-             toast({ variant: "destructive", title: "Error", description: `Sprint number ${sprintDetails.sprintNumber} already exists.` });
-             return p; // Return unchanged project if error
-          }
+            projectNameForToast = p.name;
+            if (p.sprintData.sprints.some(s => s.sprintNumber === sprintDetails.sprintNumber)) {
+                console.error(`Sprint number ${sprintDetails.sprintNumber} already exists for project ${p.name}.`);
+                // Error handled by returning original 'p'
+                return p;
+            }
 
-           // Ensure task IDs are present and correctly typed before saving
-            const emptyTask = createEmptyTaskRow();
-            const validatedPlanning: SprintPlanning = {
+             // Validate planning data before creating
+             const emptyTask = createEmptyTaskRow();
+             const validatedPlanning: SprintPlanning = {
                 ...planningData,
                  newTasks: (planningData.newTasks || []).map(task => ({
                     ...task,
                     id: task.id || `task_create_new_${Date.now()}_${Math.random()}`,
-                    devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime, // Preserve or default
+                    devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime,
                     qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
                     bufferTime: task.bufferTime ?? emptyTask.bufferTime,
                  })),
                  spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
                     ...task,
                     id: task.id || `task_create_spill_${Date.now()}_${Math.random()}`,
-                    devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime, // Preserve or default
+                    devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime,
                     qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
                     bufferTime: task.bufferTime ?? emptyTask.bufferTime,
                  })),
+             };
+
+            const newSprint: Sprint = {
+                ...sprintDetails,
+                committedPoints: 0,
+                completedPoints: 0,
+                status: 'Planned',
+                details: [],
+                planning: validatedPlanning,
             };
 
-          const newSprint: Sprint = {
-              ...sprintDetails,
-              committedPoints: 0, // Initialize commitment/delivered to 0 for new sprints
-              completedPoints: 0,
-              status: 'Planned', // New sprints always start as Planned
-              details: [],
-              planning: validatedPlanning, // Use validated planning
-          };
+            const updatedSprints = [...p.sprintData.sprints, newSprint];
+            updatedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber);
+            projectWasUpdated = true; // Mark that an update occurred
 
-          const updatedSprints = [...p.sprintData.sprints, newSprint];
-          updatedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber); // Keep sorted
-          projectUpdated = true;
-
-          return {
-            ...p,
-            sprintData: {
-              ...p.sprintData,
-              sprints: updatedSprints,
-               // Optionally recalculate overall metrics if needed
-               daysInSprint: Math.max(p.sprintData.daysInSprint || 0, newSprint.totalDays),
-            },
-          };
+            return {
+                ...p,
+                sprintData: {
+                    ...p.sprintData,
+                    sprints: updatedSprints,
+                    daysInSprint: Math.max(p.sprintData.daysInSprint || 0, newSprint.totalDays),
+                },
+            };
         }
         return p;
       });
-       // Only show toast if the project was actually updated
-       if (projectUpdated) {
-          toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
-       }
-       return projectUpdated ? updatedProjects : prevProjects;
+
+      // If no update happened (e.g., sprint number existed), return the previous state
+      if (!projectWasUpdated) {
+          toast({ variant: "destructive", title: "Error", description: `Sprint number ${sprintDetails.sprintNumber} already exists in project '${projectNameForToast}'.` });
+          return prevProjects;
+      }
+
+       // Return the updated projects array
+       return updatedProjects;
     });
+
+    // Show toast *after* setProjects has potentially completed its update cycle
+    if (projectWasUpdated) {
+        // Using setTimeout to ensure toast doesn't interfere with rendering updates
+        setTimeout(() => {
+             toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
+        }, 0);
+    }
 
   }, [selectedProjectId, toast, projects]);
 
@@ -762,33 +775,46 @@ export default function Home() {
 
    // Handler to save holiday calendars for the *selected* project
    const handleSaveHolidayCalendars = useCallback((updatedCalendars: HolidayCalendar[]) => {
-       if (!selectedProjectId) {
-           toast({ variant: "destructive", title: "Error", description: "No project selected." });
-           return;
-       }
-       // Get project name *before* updating state
-       const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+     if (!selectedProjectId) {
+         toast({ variant: "destructive", title: "Error", description: "No project selected." });
+         return;
+     }
 
-       setProjects(prevProjects => {
-           const updatedProjects = prevProjects.map(p => {
-               if (p.id === selectedProjectId) {
-                    // Also need to check if any member's assigned calendar was deleted
-                    const updatedMembers = (p.members || []).map(member => {
-                        if (member.holidayCalendarId && !updatedCalendars.some(cal => cal.id === member.holidayCalendarId)) {
-                           toast({ variant: "warning", title: "Calendar Unassigned", description: `Holiday calendar assigned to ${member.name} was deleted.` });
-                           return { ...member, holidayCalendarId: null }; // Unassign deleted calendar
-                        }
-                        return member;
-                    });
+     const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+     let membersToUpdate: Member[] = [];
 
-                   return { ...p, holidayCalendars: updatedCalendars, members: updatedMembers };
-               }
-               return p;
-           });
-           return updatedProjects;
-       });
-       toast({ title: "Success", description: `Holiday calendars updated for project '${currentProjectName}'.` });
-   }, [selectedProjectId, toast, projects]);
+     setProjects(prevProjects => {
+         const updatedProjects = prevProjects.map(p => {
+             if (p.id === selectedProjectId) {
+                 // Keep track of members whose calendars might change
+                 membersToUpdate = (p.members || []).map(member => {
+                     if (member.holidayCalendarId && !updatedCalendars.some(cal => cal.id === member.holidayCalendarId)) {
+                         return { ...member, holidayCalendarId: null }; // Mark for update
+                     }
+                     return member;
+                 }).filter((m, index) => m.holidayCalendarId !== (p.members || [])[index].holidayCalendarId); // Only keep those that changed
+
+                 const updatedMembers = (p.members || []).map(member => ({
+                     ...member,
+                     holidayCalendarId: member.holidayCalendarId && updatedCalendars.some(cal => cal.id === member.holidayCalendarId) ? member.holidayCalendarId : null,
+                 }));
+
+                 return { ...p, holidayCalendars: updatedCalendars, members: updatedMembers };
+             }
+             return p;
+         });
+         return updatedProjects;
+     });
+
+     // Show toasts *after* the state update
+      setTimeout(() => {
+         toast({ title: "Success", description: `Holiday calendars updated for project '${currentProjectName}'.` });
+         membersToUpdate.forEach(member => {
+             toast({ variant: "warning", title: "Calendar Unassigned", description: `Holiday calendar assigned to ${member.name} was deleted or is no longer available.` });
+         });
+      }, 0);
+
+ }, [selectedProjectId, toast, projects]);
 
 
   // Handler to add members to the *newly created* project (from dialog)
@@ -805,9 +831,12 @@ export default function Home() {
          });
          return updatedProjects;
        });
-       toast({ title: "Members Added", description: `Members added to project '${newProjectName}'.` });
-       setIsAddMembersDialogOpen(false); // Close the dialog
-       setNewlyCreatedProjectId(null); // Reset the tracked ID
+        // Using setTimeout to avoid potential nested updates
+       setTimeout(() => {
+          toast({ title: "Members Added", description: `Members added to project '${newProjectName}'.` });
+          setIsAddMembersDialogOpen(false); // Close the dialog
+          setNewlyCreatedProjectId(null); // Reset the tracked ID
+       }, 0);
    }, [newlyCreatedProjectId, toast, projects]);
 
   // Handler to delete a sprint
@@ -868,7 +897,7 @@ export default function Home() {
            XLSX.utils.book_append_sheet(wb, wsSummary, 'Sprint Summary');
        }
 
-       // Sprint Details Sheet
+       // Sprint Details Sheet (Legacy)
        const detailsExist = selectedProject.sprintData?.sprints?.some(s => s.details && s.details.length > 0);
        if (detailsExist) {
            const allDetails: any[] = [];
@@ -885,7 +914,7 @@ export default function Home() {
            });
            if (allDetails.length > 0) {
                const wsDetails = XLSX.utils.json_to_sheet(allDetails);
-               XLSX.utils.book_append_sheet(wb, wsDetails, 'Sprint Details');
+               XLSX.utils.book_append_sheet(wb, wsDetails, 'Sprint Details (Legacy)');
            }
        }
 
@@ -916,7 +945,9 @@ export default function Home() {
                       'Reviewer': task.reviewer,
                       'Status': task.status,
                       'StartDate': task.startDate,
-                      'TicketNumber': task.ticketNumber,
+                      // Include legacy fields if they exist, marked as legacy
+                      'TicketNumber (Legacy)': task.ticketNumber,
+                      'DevTime (Legacy)': task.devTime,
                     });
 
 
@@ -1010,15 +1041,18 @@ export default function Home() {
       holidayCalendars: [], // Initialize with empty holiday calendars
     };
 
+    // Update projects state first
     setProjects(prevProjects => [...prevProjects, newProject]);
     setSelectedProjectId(newProject.id);
     setNewProjectName('');
     setIsNewProjectDialogOpen(false);
-    toast({ title: "Project Created", description: `Project "${trimmedName}" created successfully.` });
+    setNewlyCreatedProjectId(newProject.id); // Track the new project ID for dialog
 
-    // Open the Add Members dialog for the newly created project
-    setNewlyCreatedProjectId(newProject.id); // Track the new project ID
-    setIsAddMembersDialogOpen(true); // Open the dialog
+    // Defer the toast and dialog opening slightly
+     setTimeout(() => {
+        toast({ title: "Project Created", description: `Project "${trimmedName}" created successfully.` });
+        setIsAddMembersDialogOpen(true); // Open the dialog AFTER state update
+    }, 0);
   };
 
 
@@ -1199,6 +1233,3 @@ export default function Home() {
     </div>
   );
 }
-
-
-    
