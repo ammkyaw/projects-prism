@@ -1,10 +1,10 @@
 
 "use client";
 
-import type { Task, Member } from '@/types/sprint-data'; // Import Member
+import type { Task, Member } from '@/types/sprint-data';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from 'recharts';
 import { ChartConfig, ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
-import { format, parseISO, differenceInDays, addDays, isWithinInterval, getDay, eachDayOfInterval, isValid } from 'date-fns'; // Import getDay, eachDayOfInterval, isValid
+import { format, parseISO, differenceInDays, addDays, isWithinInterval, getDay, eachDayOfInterval, isValid } from 'date-fns';
 import { useMemo } from 'react';
 import { cn } from "@/lib/utils";
 
@@ -17,32 +17,12 @@ interface SprintTimelineChartProps {
   tasks: TaskWithEndDate[]; // Expect tasks with the calculated endDate
   sprintStartDate?: string;
   sprintEndDate?: string;
-  members: Member[]; // Add members for coloring
+  members: Member[]; // Kept for potential future use but not used for coloring now
 }
 
-// Define a base color palette for assignees (expandable)
-const assigneeColors = [
-  'hsl(var(--chart-1))', // Blue
-  'hsl(var(--chart-2))', // Gold
-  'hsl(var(--chart-3))', // Muted Blue
-  'hsl(var(--chart-4))', // Orangeish
-  'hsl(var(--chart-5))', // Greenish
-  'hsl(270 60% 60%)', // Purple
-  'hsl(180 50% 55%)', // Teal
-  'hsl(330 70% 65%)', // Pink
-];
-
-const statusColors: { [key: string]: string } = {
-  'To Do': 'hsl(var(--muted) / 0.5)', // Lighter gray for To Do
-  'In Progress': 'hsl(var(--accent))', // Use Accent color (Gold)
-  'Done': 'hsl(var(--primary))', // Blue
-  'Blocked': 'hsl(var(--destructive))', // Red
-};
-
 const weekendColor = 'hsl(var(--muted) / 0.2)'; // Very light gray for weekend background
-
-
-const defaultColor = 'hsl(var(--muted-foreground))'; // Gray for unassigned/default
+const taskBarColor = 'hsl(var(--primary))'; // Use primary color (blue) for all task bars
+const defaultColor = 'hsl(var(--muted-foreground))'; // Gray for unassigned/default - maybe used elsewhere
 
 
 // --- Helper Functions (Copied from planning-tab.tsx for now) ---
@@ -110,9 +90,14 @@ const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number):
       workingDaysCounted++;
     }
     // If we haven't reached the target working days, increment daysAdded to check the next day
-    if (workingDaysCounted < workingDays) {
+    // IMPORTANT: Increment daysAdded *after* checking the current day, otherwise we skip the first day.
+    // But if the target is met, we don't need to check the next day.
+     if (workingDaysCounted < workingDays) {
         daysAdded++;
-    }
+     } else {
+        // If we just counted the last working day, this currentDate is the end date.
+        break;
+     }
   }
   return currentDate; // The final end date
 };
@@ -121,16 +106,6 @@ const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number):
 
 
 export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndDate, members }: SprintTimelineChartProps) {
-
-  // Create a map for consistent assignee colors
-  const memberColorMap = useMemo(() => {
-    const map: { [assigneeName: string]: string } = {};
-    members.forEach((member, index) => {
-      map[member.name] = assigneeColors[index % assigneeColors.length];
-    });
-    return map;
-  }, [members]);
-
 
   const chartData = useMemo(() => {
     if (!tasks || tasks.length === 0 || !sprintStartDate || !sprintEndDate || !isValid(parseISO(sprintStartDate)) || !isValid(parseISO(sprintEndDate))) {
@@ -156,28 +131,21 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             const startDayIndex = differenceInDays(taskStartObj, sprintStartObj);
             const endDayIndex = differenceInDays(actualEndDateObj, sprintStartObj);
 
-             // Ensure indices are within sprint boundaries (or handle visualization if needed)
-             // For simplicity, we might let bars extend slightly if domain allows, or clamp:
-             // const clampedStartDayIndex = Math.max(0, startDayIndex);
-             // const clampedEndDayIndex = Math.min(differenceInDays(sprintEndObj, sprintStartObj), endDayIndex);
-
-
-            // Assign color based on assignee first, fallback to status or default
-            const color = task.assignee && memberColorMap[task.assignee]
-                ? memberColorMap[task.assignee]
-                : statusColors[task.status ?? ''] || defaultColor;
+             // The bar should visually cover the end day.
+             // Recharts Bar draws from range[0] up to (but not including) range[1] visually in intervals.
+             // To make it cover the block for endDayIndex, the range end needs to be endDayIndex + 1.
+            const barEndIndex = endDayIndex + 1;
 
             return {
                 name: task.description || `Task ${task.id}`,
                 taskIndex: index, // Use index for Y-axis positioning
-                // range should be [start_day_index, end_day_index]
-                // The bar will visually span from the start of startDayIndex to the end of endDayIndex
-                range: [startDayIndex, endDayIndex],
-                fill: color,
+                // range should be [start_day_index, end_day_index + 1] for correct visual span
+                range: [startDayIndex, barEndIndex],
+                fill: taskBarColor, // Use fixed blue color for all bars
                 tooltip: `${task.description || 'Task'} (${task.status || 'N/A'}) - Est. ${task.estimatedTime || '?'} ${task.assignee ? '(' + task.assignee + ')' : '(Unassigned)'} [${format(taskStartObj, 'MM/dd')} - ${format(actualEndDateObj, 'MM/dd')}]` // Updated tooltip shows calculated end date
             };
-        }).filter(item => item !== null && item.range[0] <= item.range[1]); // Remove null items and invalid ranges
-  }, [tasks, sprintStartDate, sprintEndDate, memberColorMap]); // Add memberColorMap dependency
+        }).filter(item => item !== null && item.range[0] < item.range[1]); // Remove null items and invalid ranges (start must be before end)
+  }, [tasks, sprintStartDate, sprintEndDate]);
 
   // Calculate weekend days within the sprint range
    const weekendIndices = useMemo(() => {
@@ -206,6 +174,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
    let sprintDays = 0;
    try {
+     // Get the number of calendar days in the sprint for the axis domain
      sprintDays = differenceInDays(parseISO(sprintEndDate!), parseISO(sprintStartDate!)) + 1;
    } catch (e) {
       console.error("Error calculating sprint days:", e);
@@ -229,7 +198,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
 
   const chartConfig = {
-    value: { label: 'Duration' }, // Dummy config, color is set per bar
+    value: { label: 'Duration', color: taskBarColor }, // Use the blue color
   } satisfies ChartConfig;
 
   return (
@@ -244,7 +213,9 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
           <XAxis
              type="number"
-             dataKey="range[0]" // Position based on start day index
+             // Use a dummy key here since the bar position is determined by the range
+             dataKey="taskIndex" // Needs a dataKey, but not used for position
+             scale="linear"
              domain={[0, sprintDays ]} // Domain from day 0 to sprintDays
              ticks={sprintDayIndices} // Ticks for each day index
              tickFormatter={(tick) => xTicks[tick] ?? ''} // Format ticks to dates
@@ -252,20 +223,20 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
              axisLine={false}
              tickLine={true}
              interval={0} // Ensure all ticks are considered for rendering based on formatter
-             allowDuplicatedCategory={false} // Prevent duplicate category labels if needed
+             allowDuplicatedCategory={false}
            />
-           {/* Add ReferenceAreas for Weekend Highlighting */}
+           {/* Add ReferenceLines for Weekend Highlighting */}
            {weekendIndices.map((index) => (
-               // Use ReferenceArea to cover the full day block
+               // Use ReferenceLine, representing the *start* of the weekend day block
                <ReferenceLine
                  key={`weekend-line-${index}`}
                  x={index} // Position at the start of the weekend day index
                  stroke={weekendColor} // Use very light gray for weekends
-                 strokeWidth={10} // Adjust width visually - MAY NEED TUNING BASED ON BAR SIZE/GAPS
-                 ifOverflow="visible" // Allow drawing outside strict plot area if needed? Or hidden
-                 segment={[{ x: index, y: -1 }, { x: index, y: chartData.length }]} // Draw vertical line covering y-axis
-                 // Optional label:
-                 // label={{ value: "W", position: 'top', fontSize: 8, fill: 'hsl(var(--muted-foreground))', dy: -5 }}
+                 strokeWidth={10} // Adjust width visually - MAY NEED TUNING
+                 strokeDasharray="1 0" // Make it solid, not dashed
+                 ifOverflow="extendDomain" // Ensure it covers the full height
+                 // Vertical segment from top to bottom of chart area
+                 segment={[{ x: index, y: -1 }, { x: index, y: chartData.length + 1 }]}
                />
            ))}
 
@@ -287,7 +258,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                      const data = payload[0].payload;
                      return (
                          <div className="text-xs bg-background border rounded px-2 py-1 shadow-sm max-w-xs">
-                             <p className="font-semibold break-words" style={{ color: data.fill }}>{data.tooltip}</p>
+                             {/* Use fixed color style from taskBarColor */}
+                             <p className="font-semibold break-words" style={{ color: taskBarColor }}>{data.tooltip}</p>
                          </div>
                      );
                  }
@@ -295,8 +267,11 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
               }}
              />
            <Legend content={null} /> {/* Hide default legend */}
-           {/* Bar dataKey uses range [startDayIndex, endDayIndex]. Bar length is endDayIndex - startDayIndex + 1 */}
-           <Bar dataKey="range" radius={2} barSize={10} fill={(data) => data.payload.fill} />
+           {/* Bar dataKey uses range [startDayIndex, endDayIndex + 1].
+               The Bar component uses this to determine position and length.
+               It effectively positions the bar starting at range[0] with a length of range[1] - range[0].
+            */}
+           <Bar dataKey="range" radius={2} barSize={10} fill={taskBarColor} />
 
         </BarChart>
       </ResponsiveContainer>
