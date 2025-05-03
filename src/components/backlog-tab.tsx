@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'; // Added useRef
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'; // Added React import
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PlusCircle, Trash2, Package, Save, ArrowUpDown, View, ArrowRightSquare, LinkIcon } from 'lucide-react'; // Added LinkIcon
-import type { Task, Member, Sprint, SprintStatus } from '@/types/sprint-data';
+import type { Task, Member, Sprint, SprintStatus, TaskType } from '@/types/sprint-data'; // Added TaskType
 import { taskTypes, taskPriorities, initialBacklogTask } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -53,7 +53,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
   const [selectedTargetSprint, setSelectedTargetSprint] = useState<number | null>(null);
   const [isDepsDialogOpen, setIsDepsDialogOpen] = useState(false); // State for dependencies dialog
   const [editingDepsTaskId, setEditingDepsTaskId] = useState<string | null>(null); // ID of the task whose dependencies are being edited
-  const backlogContainerRef = useRef<HTMLDivElement>(null); // Ref for the container of backlog rows - FIXED SYNTAX
+  const backlogContainerRef = useRef<HTMLDivElement>(null); // Ref for the container of backlog rows
 
   // Map internal IDs to refs for scrolling
   const rowRefs = useRef<Map<string, React.RefObject<HTMLDivElement>>>(new Map());
@@ -233,9 +233,9 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
         if (targetRow && targetRow.ref?.current) {
             targetRow.ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
             // Optionally add a temporary highlight effect
-            targetRow.ref.current.classList.add('bg-accent'); // Add highlight class
+            targetRow.ref.current.classList.add('bg-accent/20'); // Use lighter accent for highlight
             setTimeout(() => {
-                targetRow.ref.current?.classList.remove('bg-accent'); // Remove highlight after a delay
+                targetRow.ref.current?.classList.remove('bg-accent/20'); // Remove highlight after a delay
             }, 1500);
         } else {
             toast({ variant: "default", title: "Info", description: `Backlog item '${dependencyBacklogId}' not found or not rendered.` });
@@ -398,7 +398,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                                  value={row.backlogId ?? ''}
                                  onChange={e => handleInputChange(row._internalId, 'backlogId', e.target.value)}
                                  placeholder="ID-123"
-                                 className={cn("h-9 pr-8", row.backlogId?.trim() && "text-transparent")} // Hide text if ID exists and link is shown
+                                 className={cn("h-9", row.backlogId?.trim() && "text-transparent")} // Hide text if ID exists and link is shown
                                  required
                              />
                              {row.backlogId?.trim() && (
@@ -659,3 +659,6 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
     </>
   );
 }
+
+
+    
