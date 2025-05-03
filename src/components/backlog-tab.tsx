@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react'; // Added useMemo import
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -108,7 +108,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                reviewer: undefined,
                startDate: undefined,
                ticketNumber: undefined, // Remove ticketNumber from comparison if backlogId is primary
-           })).sort((a, b) => a.backlogId.localeCompare(b.backlogId)); // Sort consistently by backlogId
+           })).sort((a, b) => (a.backlogId || '').localeCompare(b.backlogId || '')); // Sort consistently by backlogId
 
        const originalBacklogString = JSON.stringify(cleanBacklog(initialBacklog));
        const currentBacklogString = JSON.stringify(
@@ -189,7 +189,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
         return;
       }
 
-      const backlogId = row.backlogId.trim();
+      const backlogId = row.backlogId?.trim() || ''; // Ensure string
       const title = row.title?.trim();
       const description = row.description?.trim();
       const storyPointsRaw = row.storyPoints?.toString().trim();
@@ -202,7 +202,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
       let rowErrors: string[] = [];
       if (!backlogId) rowErrors.push("Backlog ID required");
-      if (backlogIds.has(backlogId.toLowerCase())) rowErrors.push(`Duplicate Backlog ID "${backlogId}"`);
+      if (backlogId && backlogIds.has(backlogId.toLowerCase())) rowErrors.push(`Duplicate Backlog ID "${backlogId}"`);
       if (!title) rowErrors.push("Title required"); // Make title required
       if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) rowErrors.push("Invalid Story Points");
        if (!createdDate || !isValid(parseISO(createdDate))) rowErrors.push("Invalid Created Date (use YYYY-MM-DD)");
@@ -221,7 +221,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
         return; // Stop processing this row
       }
 
-       backlogIds.add(backlogId.toLowerCase()); // Add valid id to set
+       if (backlogId) backlogIds.add(backlogId.toLowerCase()); // Add valid id to set
 
       finalBacklog.push({
         id: row.id || `backlog_${projectId}_${Date.now()}_${index}`, // Generate ID if new
@@ -251,7 +251,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
     }
 
     // Sort backlog by priority then ID before saving
-    finalBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority) - taskPriorities.indexOf(b.priority)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
+    finalBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
 
 
     onSaveBacklog(finalBacklog);
