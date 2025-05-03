@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -92,41 +90,44 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
        }
   }
 
-  return totalDays > 0 ? totalDays : null;
+  return totalDays >= 0 ? totalDays : null; // Allow 0 days
 };
 
 // Helper function to calculate end date skipping weekends
 const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number): Date => {
-  let currentDate = startDate;
-  let daysAdded = 0;
-  let workingDaysCounted = 0;
+   let currentDate = startDate;
+   let workingDaysCounted = 0;
 
-  if (workingDays <= 0) return startDate;
-
-  // Adjust initial date if it's a weekend
-  while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
-     currentDate = addDays(currentDate, 1);
-  }
-
-  // We need to count the start date as the first working day if it's not a weekend
-  // So we need to achieve workingDays - 1 additional steps
-  while (workingDaysCounted < workingDays) {
-    const currentDayOfWeek = getDay(currentDate);
-    if (currentDayOfWeek !== 0 && currentDayOfWeek !== 6) {
-      workingDaysCounted++;
-    }
-    // Only advance the date if we haven't reached the target number of working days
-    if (workingDaysCounted < workingDays) {
-        currentDate = addDays(currentDate, 1);
-        // Skip weekends while advancing
-        while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
+   // If 0 working days, the end date is the start date itself (or the next working day if start is weekend)
+   if (workingDays <= 0) {
+       while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
            currentDate = addDays(currentDate, 1);
-        }
-    } else {
-        // Target met, this currentDate is the end date
-        break;
-    }
-  }
+       }
+       return currentDate;
+   }
+
+   // Adjust start date if it falls on a weekend BEFORE starting the count
+   while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
+     currentDate = addDays(currentDate, 1);
+   }
+
+   // Loop until the required number of working days are counted
+   while (workingDaysCounted < workingDays) {
+      const dayOfWeek = getDay(currentDate);
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+          workingDaysCounted++;
+      }
+
+      // Only advance the date if we haven't reached the target number of working days yet
+      if (workingDaysCounted < workingDays) {
+          currentDate = addDays(currentDate, 1);
+          // Skip subsequent weekends while advancing
+          while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
+              currentDate = addDays(currentDate, 1);
+          }
+      }
+   }
+
   return currentDate;
 };
 
@@ -165,10 +166,6 @@ const createEmptyTaskRow = (): TaskRow => ({
   startDateObj: undefined,
 });
 
-interface ChartTask extends Task {
-  // No longer adding calculated endDate here, chart component will derive ranges
-}
-
 
 export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members }: PlanningTabProps) {
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | null>(null);
@@ -198,13 +195,22 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       return selectedSprint?.endDate;
   }, [isCreatingNewSprint, newSprintForm.startDate, newSprintForm.duration, selectedSprint]);
 
-   // Prepare tasks for the chart (only those with valid start date and dev estimate)
-   const tasksForChart: ChartTask[] = useMemo(() => {
+   // Prepare tasks for the chart (only those with valid start date and estimates)
+   const tasksForChart: Task[] = useMemo(() => {
        const allTaskRows = [...newTasks, ...spilloverTasks];
 
        return allTaskRows
-         .filter(task => task.startDate && task.devEstimatedTime && isValid(parseISO(task.startDate)) && parseEstimatedTimeToDays(task.devEstimatedTime) !== null)
-         .map(task => ({ ...task })); // Just pass the task data, chart calculates ranges
+         .filter(task =>
+             task.startDate &&
+             task.devEstimatedTime !== undefined && // Check if dev time exists
+             task.qaEstimatedTime !== undefined && // Check if qa time exists
+             task.bufferTime !== undefined && // Check if buffer time exists
+             isValid(parseISO(task.startDate)) &&
+             parseEstimatedTimeToDays(task.devEstimatedTime) !== null && // Check if parsable
+             parseEstimatedTimeToDays(task.qaEstimatedTime) !== null &&
+             parseEstimatedTimeToDays(task.bufferTime) !== null
+         )
+         .map(task => ({ ...task })); // Map to Task type, ensuring required fields exist due to filter
    }, [newTasks, spilloverTasks]);
 
 
@@ -260,9 +266,12 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       }
 
       // No default empty row for spillover
-      if (isSprintCompleted && (loadedPlanning.spilloverTasks || []).length === 0) {
+       if (isSprintCompleted && (loadedPlanning.spilloverTasks || []).length === 0) {
           setSpilloverTasks([]);
-      }
+      } else if (!isSprintCompleted && (loadedPlanning.spilloverTasks || []).length === 0) {
+           setSpilloverTasks([]); // Also ensure it's empty if not completed but no spillover loaded
+       }
+
 
     } else if (!isCreatingNewSprint) {
         resetForms();
@@ -390,22 +399,20 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           const storyPointsRaw = row.storyPoints?.toString().trim();
           const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
           const devEstimatedTime = row.devEstimatedTime?.trim() || undefined;
-          const qaEstimatedTime = row.qaEstimatedTime?.trim() || undefined; // Use new field, default applied in createEmptyTaskRow
-          const bufferTime = row.bufferTime?.trim() || undefined; // Use new field, default applied
+          const qaEstimatedTime = row.qaEstimatedTime?.trim() || '2d'; // Ensure default if empty
+          const bufferTime = row.bufferTime?.trim() || '1d'; // Ensure default if empty
           const assignee = row.assignee?.trim() || undefined;
           const reviewer = row.reviewer?.trim() || undefined; // Added reviewer
           const status = row.status?.trim() as Task['status'];
           const startDate = row.startDate;
 
           if (!description) errors.push(`${taskPrefix}: Description is required.`);
-          if (!devEstimatedTime) errors.push(`${taskPrefix}: Dev Est. Time is required for timeline.`); // Check Dev time
-          if (!qaEstimatedTime) errors.push(`${taskPrefix}: QA Est. Time is required.`); // QA time required
-          if (!bufferTime) errors.push(`${taskPrefix}: Buffer Time is required.`); // Buffer time required
           if (!startDate) errors.push(`${taskPrefix}: Start Date is required for timeline.`);
 
           if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
                errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
           }
+           // Validate estimate formats
            if (devEstimatedTime && parseEstimatedTimeToDays(devEstimatedTime) === null) {
                 errors.push(`${taskPrefix}: Invalid Dev Est. Time. Use formats like '2d', '1w 3d', '5'.`);
            }
@@ -608,9 +615,9 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
             <div className="hidden md:grid grid-cols-[3fr_70px_100px_100px_100px_1fr_1fr_1fr_100px_40px] gap-x-2 items-center pb-2 border-b">
                 <Label className="text-xs font-medium text-muted-foreground">Description*</Label>
                 <Label className="text-xs font-medium text-muted-foreground text-right">Story Pts</Label>
-                <Label className="text-xs font-medium text-muted-foreground text-right">Dev Est*</Label>
-                <Label className="text-xs font-medium text-muted-foreground text-right">QA Est*</Label>
-                <Label className="text-xs font-medium text-muted-foreground text-right">Buffer*</Label>
+                <Label className="text-xs font-medium text-muted-foreground text-right">Dev Est</Label>
+                <Label className="text-xs font-medium text-muted-foreground text-right">QA Est</Label>
+                <Label className="text-xs font-medium text-muted-foreground text-right">Buffer</Label>
                 <Label className="text-xs font-medium text-muted-foreground">Assignee</Label>
                 <Label className="text-xs font-medium text-muted-foreground">Reviewer</Label>
                 <Label className="text-xs font-medium text-muted-foreground">Status</Label>
@@ -649,7 +656,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                     </div>
                      {/* Dev Estimated Time */}
                      <div className="md:col-span-1 col-span-1">
-                        <Label htmlFor={`devEstTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Dev Est*</Label>
+                        <Label htmlFor={`devEstTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Dev Est</Label>
                         <Input
                             id={`devEstTime-${type}-${row._internalId}`}
                             value={row.devEstimatedTime}
@@ -657,12 +664,11 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                             placeholder="e.g., 2d, 5"
                             className="h-9 text-right w-full"
                             disabled={disabled}
-                            required
                         />
                     </div>
                      {/* QA Estimated Time */}
                      <div className="md:col-span-1 col-span-1">
-                        <Label htmlFor={`qaEstTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">QA Est*</Label>
+                        <Label htmlFor={`qaEstTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">QA Est</Label>
                         <Input
                             id={`qaEstTime-${type}-${row._internalId}`}
                             value={row.qaEstimatedTime}
@@ -670,12 +676,11 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                             placeholder="e.g., 2d"
                             className="h-9 text-right w-full"
                             disabled={disabled}
-                            required
                         />
                     </div>
                       {/* Buffer Time */}
                       <div className="md:col-span-1 col-span-1">
-                        <Label htmlFor={`bufferTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Buffer*</Label>
+                        <Label htmlFor={`bufferTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Buffer</Label>
                         <Input
                             id={`bufferTime-${type}-${row._internalId}`}
                             value={row.bufferTime}
@@ -683,7 +688,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                             placeholder="e.g., 1d"
                             className="h-9 text-right w-full"
                             disabled={disabled}
-                            required
                         />
                     </div>
                      {/* Assignee */}
@@ -804,7 +808,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                  {renderTaskTable('new', newTasks, disabled)}
              </CardContent>
              <CardFooter>
-                <p className="text-xs text-muted-foreground">* Required fields for timeline: Description, Dev Est., QA Est., Buffer, Start Date.</p>
+                <p className="text-xs text-muted-foreground">* Required field: Description, Start Date. Other fields optional but recommended for planning/timeline.</p>
             </CardFooter>
          </Card>
 
@@ -816,7 +820,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                  {renderTaskTable('spillover', spilloverTasks, disabled)}
              </CardContent>
               <CardFooter>
-                <p className="text-xs text-muted-foreground">* Required fields for timeline: Description, Dev Est., QA Est., Buffer, Start Date.</p>
+                <p className="text-xs text-muted-foreground">* Required field: Description, Start Date.</p>
             </CardFooter>
          </Card>
 
@@ -847,7 +851,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
         <Card>
            <CardHeader>
                <CardTitle className="flex items-center gap-2"><GanttChartSquare className="h-5 w-5 text-muted-foreground" /> Sprint Timeline</CardTitle>
-               <CardDescription>Visualization of planned tasks based on Dev Estimate Time. Add start dates and dev estimates to see tasks here.</CardDescription>
+               <CardDescription>Visualization of planned tasks based on estimates. Add start dates and estimates to see tasks here.</CardDescription>
            </CardHeader>
            <CardContent className="min-h-[200px]">
                 {tasksForChart.length > 0 ? (
@@ -860,7 +864,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                 ) : (
                     <div className="flex items-center justify-center text-muted-foreground h-full p-4 text-center">
                         <Info className="mr-2 h-5 w-5" />
-                        Add tasks with Start Date and Dev Est. Time to visualize the timeline.
+                        Add tasks with Start Date and Estimates (Dev, QA, Buffer) to visualize the timeline.
                     </div>
                 )}
            </CardContent>
