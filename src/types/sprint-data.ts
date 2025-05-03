@@ -17,8 +17,8 @@ export interface Task {
   estimatedTime?: string; // Optional: e.g., "2d", "4h"
   assignee?: string; // Stores the Member's name
   status?: 'To Do' | 'In Progress' | 'Done' | 'Blocked'; // Added more specific statuses
-  startDate?: string; // Optional: YYYY-MM-DD for Gantt chart
-  endDate?: string;   // Optional: YYYY-MM-DD for Gantt chart
+  startDate?: string | undefined; // Optional: YYYY-MM-DD for Gantt chart
+  endDate?: string | undefined;   // Optional: YYYY-MM-DD for Gantt chart
   dependsOn?: string[]; // Optional: Array of task IDs this task depends on
 }
 
