@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -77,58 +76,93 @@ export default function Home() {
 
   // Effect to load data from localStorage on mount
   useEffect(() => {
-    const savedData = localStorage.getItem('appData');
-    if (savedData) {
-      try {
-        const parsedData: AppData = JSON.parse(savedData);
-        // Basic validation for the new structure including members, status, and holidayCalendars
-        if (Array.isArray(parsedData) && parsedData.every(p => p.id && p.name && p.sprintData && Array.isArray(p.sprintData.sprints) && Array.isArray(p.members))) {
-           // Ensure details, planning arrays, members, holidayCalendars, and status exist
-           const validatedData = parsedData.map(project => ({
-              ...project,
-              sprintData: {
-                 ...project.sprintData,
-                 sprints: project.sprintData.sprints.map(sprint => {
-                    let status: SprintStatus = sprint.status ?? 'Planned';
-                    // Automatically mark as Completed if end date is in the past
-                    if (sprint.endDate && clientNow && isPast(parseISO(sprint.endDate)) && status !== 'Completed') {
-                       status = 'Completed';
-                    }
-                    // Ensure only one active sprint (prefer existing active, else mark first future planned as active if applicable - this logic might need refinement)
-                    // For simplicity, we won't automatically mark one as active here, rely on user action via Planning tab.
+      const savedData = localStorage.getItem('appData');
+      if (savedData) {
+          try {
+              const parsedData: AppData = JSON.parse(savedData);
+              // Basic validation for the new structure including members, status, and holidayCalendars
+              if (Array.isArray(parsedData) && parsedData.every(p => p.id && p.name && p.sprintData && Array.isArray(p.sprintData.sprints) && Array.isArray(p.members))) {
+                  // Ensure details, planning arrays, members, holidayCalendars, and status exist
+                  const validatedData = parsedData.map(project => ({
+                      ...project,
+                      sprintData: {
+                          ...project.sprintData,
+                          sprints: project.sprintData.sprints.map(sprint => {
+                              let status: SprintStatus = sprint.status ?? 'Planned';
+                              // Automatically mark as Completed if end date is in the past
+                              if (sprint.endDate && clientNow && isPast(parseISO(sprint.endDate)) && status !== 'Completed') {
+                                  status = 'Completed';
+                              }
+                              // Ensure planning object and tasks arrays exist and have correct fields
+                              const planning: SprintPlanning = sprint.planning ?? initialSprintPlanning;
+                              const validatedPlanning: SprintPlanning = {
+                                  ...planning,
+                                  newTasks: (planning.newTasks || []).map(task => ({
+                                      ...task,
+                                      status: task.status || 'To Do',
+                                      devEstimatedTime: task.devEstimatedTime, // Ensure this is carried over
+                                      qaEstimatedTime: task.qaEstimatedTime ?? '2d',
+                                      bufferTime: task.bufferTime ?? '1d',
+                                      reviewer: task.reviewer,
+                                      startDate: task.startDate,
+                                      assignee: task.assignee,
+                                      // Ensure other fields are present or default
+                                      id: task.id || `task_load_${Date.now()}_${Math.random()}`,
+                                      description: task.description || '',
+                                      storyPoints: task.storyPoints ?? undefined,
+                                      ticketNumber: task.ticketNumber,
+                                      devTime: task.devTime,
+                                  })),
+                                  spilloverTasks: (planning.spilloverTasks || []).map(task => ({
+                                      ...task,
+                                      status: task.status || 'To Do',
+                                      devEstimatedTime: task.devEstimatedTime, // Ensure this is carried over
+                                      qaEstimatedTime: task.qaEstimatedTime ?? '2d',
+                                      bufferTime: task.bufferTime ?? '1d',
+                                      reviewer: task.reviewer,
+                                      startDate: task.startDate,
+                                      assignee: task.assignee,
+                                      // Ensure other fields are present or default
+                                       id: task.id || `task_load_${Date.now()}_${Math.random()}`,
+                                       description: task.description || '',
+                                       storyPoints: task.storyPoints ?? undefined,
+                                       ticketNumber: task.ticketNumber,
+                                       devTime: task.devTime,
+                                  })),
+                              };
 
-                    return {
-                       ...sprint,
-                       details: sprint.details ?? [], // Ensure details array exists
-                       planning: sprint.planning ?? initialSprintPlanning, // Ensure planning object exists
-                       status: status, // Set validated/updated status
-                    };
-                 }),
-              },
-              members: project.members?.map(m => ({ ...m, holidayCalendarId: m.holidayCalendarId ?? null })) ?? [], // Ensure members array exists and holidayCalendarId
-              holidayCalendars: project.holidayCalendars ?? [], // Ensure holidayCalendars array exists
-           }));
-          setProjects(validatedData);
-          setSelectedProjectId(validatedData.length > 0 ? validatedData[0].id : null);
-        } else {
-          console.warn("Invalid or outdated data found in localStorage.");
-          localStorage.removeItem('appData'); // Clear invalid data
-          setProjects([]);
-          setSelectedProjectId(null);
-        }
-      } catch (error) {
-        console.error("Failed to parse project data from localStorage:", error);
-        localStorage.removeItem('appData'); // Clear corrupted data
-        setProjects([]);
-        setSelectedProjectId(null);
+                              return {
+                                  ...sprint,
+                                  details: sprint.details ?? [], // Ensure details array exists
+                                  planning: validatedPlanning, // Use validated planning
+                                  status: status, // Set validated/updated status
+                              };
+                          }),
+                      },
+                      members: project.members?.map(m => ({ ...m, holidayCalendarId: m.holidayCalendarId ?? null })) ?? [], // Ensure members array exists and holidayCalendarId
+                      holidayCalendars: project.holidayCalendars ?? [], // Ensure holidayCalendars array exists
+                  }));
+                  setProjects(validatedData);
+                  setSelectedProjectId(validatedData.length > 0 ? validatedData[0].id : null);
+              } else {
+                  console.warn("Invalid or outdated data found in localStorage.");
+                  localStorage.removeItem('appData'); // Clear invalid data
+                  setProjects([]);
+                  setSelectedProjectId(null);
+              }
+          } catch (error) {
+              console.error("Failed to parse project data from localStorage:", error);
+              localStorage.removeItem('appData'); // Clear corrupted data
+              setProjects([]);
+              setSelectedProjectId(null);
+          }
       }
-    }
   }, [clientNow]); // Run only on mount, or when clientNow is set
 
 
   // Effect to save data to localStorage whenever projects change
   useEffect(() => {
-    if (projects && projects.length > 0) {
+    if (projects && projects.length >= 0) { // Allow saving empty array to clear storage
       try {
         const dataToSave = JSON.stringify(projects);
         localStorage.setItem('appData', dataToSave);
@@ -140,10 +174,10 @@ export default function Home() {
            description: "Could not save project data locally. Data might be too large or storage is unavailable.",
          });
       }
-    } else if (projects?.length === 0) {
-       localStorage.removeItem('appData');
     }
+    // Removed the else if to ensure saving an empty array works correctly to clear storage if needed
   }, [projects, toast]);
+
 
   // Find the currently selected project object
   const selectedProject = useMemo(() => {
@@ -349,7 +383,6 @@ export default function Home() {
      let statusUpdateMessage = '';
 
      setProjects(prevProjects => {
-        let wasStatusUpdated = false;
         const updatedProjects = prevProjects.map(p => {
           if (p.id === selectedProjectId) {
               let tempSprints = [...p.sprintData.sprints]; // Create a mutable copy
@@ -370,9 +403,26 @@ export default function Home() {
                       if (newStatus && newStatus !== s.status) {
                           finalStatus = newStatus;
                           statusUpdateMessage = ` Sprint ${sprintNumber} status updated to ${newStatus}.`;
-                          wasStatusUpdated = true;
                       }
-                      return { ...s, planning: planningData, status: finalStatus };
+                      // Ensure task IDs are present and correctly typed before saving
+                      const validatedPlanning: SprintPlanning = {
+                           ...planningData,
+                           newTasks: (planningData.newTasks || []).map(task => ({
+                              ...task,
+                              id: task.id || `task_save_${Date.now()}_${Math.random()}`,
+                              devEstimatedTime: task.devEstimatedTime, // Preserve this
+                              qaEstimatedTime: task.qaEstimatedTime ?? '2d',
+                              bufferTime: task.bufferTime ?? '1d',
+                           })),
+                           spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
+                              ...task,
+                              id: task.id || `task_save_${Date.now()}_${Math.random()}`,
+                              devEstimatedTime: task.devEstimatedTime, // Preserve this
+                              qaEstimatedTime: task.qaEstimatedTime ?? '2d',
+                              bufferTime: task.bufferTime ?? '1d',
+                           })),
+                      };
+                      return { ...s, planning: validatedPlanning, status: finalStatus };
                   }
                   return s;
               });
@@ -387,11 +437,12 @@ export default function Home() {
           }
           return p;
         });
-        // If status was updated, trigger save effect by returning new array
-        return wasStatusUpdated ? updatedProjects : prevProjects;
+        // Trigger save effect by returning a new array reference
+        return [...updatedProjects];
      });
      toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
    }, [selectedProjectId, toast, projects]);
+
 
   // Handler to create a new sprint and save its initial planning data (used by PlanningTab)
   const handleCreateAndPlanSprint = useCallback((
@@ -405,7 +456,8 @@ export default function Home() {
     let projectNameForToast = 'N/A';
 
     setProjects(prevProjects => {
-      return prevProjects.map(p => {
+       let projectUpdated = false;
+       const updatedProjects = prevProjects.map(p => {
         if (p.id === selectedProjectId) {
           projectNameForToast = p.name; // Assign name before potentially returning early
           // Check if sprint number already exists
@@ -414,17 +466,37 @@ export default function Home() {
              return p; // Return unchanged project if error
           }
 
+           // Ensure task IDs are present and correctly typed before saving
+            const validatedPlanning: SprintPlanning = {
+                ...planningData,
+                newTasks: (planningData.newTasks || []).map(task => ({
+                   ...task,
+                   id: task.id || `task_create_${Date.now()}_${Math.random()}`,
+                   devEstimatedTime: task.devEstimatedTime, // Preserve this
+                   qaEstimatedTime: task.qaEstimatedTime ?? '2d',
+                   bufferTime: task.bufferTime ?? '1d',
+                })),
+                spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
+                   ...task,
+                   id: task.id || `task_create_${Date.now()}_${Math.random()}`,
+                   devEstimatedTime: task.devEstimatedTime, // Preserve this
+                   qaEstimatedTime: task.qaEstimatedTime ?? '2d',
+                   bufferTime: task.bufferTime ?? '1d',
+                })),
+            };
+
           const newSprint: Sprint = {
               ...sprintDetails,
               committedPoints: 0, // Initialize commitment/delivered to 0 for new sprints
               completedPoints: 0,
               status: 'Planned', // New sprints always start as Planned
               details: [],
-              planning: planningData,
+              planning: validatedPlanning, // Use validated planning
           };
 
           const updatedSprints = [...p.sprintData.sprints, newSprint];
           updatedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber); // Keep sorted
+          projectUpdated = true;
 
           return {
             ...p,
@@ -438,14 +510,13 @@ export default function Home() {
         }
         return p;
       });
+       // Only show toast if the project was actually updated
+       if (projectUpdated) {
+          toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
+       }
+       return projectUpdated ? updatedProjects : prevProjects;
     });
 
-     // Check if the toast should actually be shown (i.e., if the project was actually updated)
-     // This requires checking if projectNameForToast was updated from 'N/A', which happens
-     // inside the map only if the project was found and modified.
-     if (projectNameForToast !== 'N/A') {
-        toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
-     }
   }, [selectedProjectId, toast, projects]);
 
 
@@ -611,21 +682,22 @@ export default function Home() {
                       'TestingStrategy': sprint.planning.testingStrategy,
                    });
                    // Helper function to map task to export row
-                   const mapTaskToRow = (task: Task, type: 'New' | 'Spillover') => ({
+                    const mapTaskToRow = (task: Task, type: 'New' | 'Spillover') => ({
                       'SprintNumber': sprint.sprintNumber,
                       'Type': type,
                       'TaskID': task.id,
                       'Description': task.description,
                       'StoryPoints': task.storyPoints,
-                      'DevEstTime': task.devEstimatedTime, // Updated field name
-                      'QAEstTime': task.qaEstimatedTime, // Added field
-                      'BufferTime': task.bufferTime, // Added field
+                      'DevEstTime': task.devEstimatedTime, // Corrected field name
+                      'QAEstTime': task.qaEstimatedTime,
+                      'BufferTime': task.bufferTime,
                       'Assignee': task.assignee,
-                      'Reviewer': task.reviewer, // Added field
+                      'Reviewer': task.reviewer,
                       'Status': task.status,
                       'StartDate': task.startDate,
-                      'TicketNumber': task.ticketNumber, // Include if exists (legacy)
-                   });
+                      'TicketNumber': task.ticketNumber,
+                    });
+
 
                    sprint.planning.newTasks.forEach(task => planningTasksData.push(mapTaskToRow(task, 'New')));
                    sprint.planning.spilloverTasks.forEach(task => planningTasksData.push(mapTaskToRow(task, 'Spillover')));
@@ -892,6 +964,9 @@ export default function Home() {
     </div>
   );
 }
+
+
+
 
 
     
