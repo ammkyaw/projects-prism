@@ -319,7 +319,8 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
              {/* Table Header - Visible only on medium screens and up */}
-              <div className="hidden md:grid grid-cols-[auto_minmax(130px,1fr)_minmax(130px,1fr)_auto_auto_minmax(150px,2fr)_auto] gap-x-3 items-center pb-2 border-b">
+              {/* Grid Definition: Adjust column sizes explicitly */}
+              <div className="hidden md:grid grid-cols-[80px_140px_140px_100px_100px_1fr_40px] gap-x-3 items-center pb-2 border-b">
                  <Label className="text-xs font-medium text-muted-foreground">Sprint #*</Label>
                  <Label className="text-xs font-medium text-muted-foreground">Start Date*</Label>
                  <Label className="text-xs font-medium text-muted-foreground">Duration*</Label>
@@ -333,7 +334,8 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
             <div className="space-y-4 md:space-y-2">
               {rows.map((row, index) => (
                  // Grid layout for each row - adapts for mobile and desktop
-                 <div key={row.id} className="grid grid-cols-2 md:grid-cols-[auto_minmax(130px,1fr)_minmax(130px,1fr)_auto_auto_minmax(150px,2fr)_auto] gap-x-3 gap-y-2 items-start">
+                 // Adjusted grid definition to match header
+                 <div key={row.id} className="grid grid-cols-2 md:grid-cols-[80px_140px_140px_100px_100px_1fr_40px] gap-x-3 gap-y-2 items-start">
                    {/* Sprint Number */}
                    <div className="md:col-span-1 col-span-1">
                      <Label htmlFor={`sprintNumber-${row.id}`} className="md:hidden text-xs font-medium">Sprint #*</Label>
@@ -400,3 +402,4 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
     </div>
   );
 }
+
