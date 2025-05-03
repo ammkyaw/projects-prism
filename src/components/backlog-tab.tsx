@@ -158,8 +158,10 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
   };
 
   const handleViewDetails = (task: BacklogRow) => {
-      setViewingTask(task);
-      setIsViewDialogOpen(true);
+      if (task.backlogId?.trim()) { // Only open if ID exists
+          setViewingTask(task);
+          setIsViewDialogOpen(true);
+      }
   };
 
    const handleOpenMoveDialog = (taskId: string) => {
@@ -303,18 +305,33 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                 {backlogRows.map((row) => (
                     <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[100px_1fr_120px_120px_120px_100px_100px_80px_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
                     {/* Backlog ID */}
-                    <div className="md:col-span-1 col-span-1">
-                        <Label htmlFor={`backlog-id-${row._internalId}`} className="md:hidden text-xs font-medium">Backlog ID*</Label>
-                        <Button variant="link" className="p-0 h-auto text-left justify-start font-normal" onClick={() => handleViewDetails(row)}>
-                             <Input
-                                 id={`backlog-id-${row._internalId}`}
-                                 value={row.backlogId ?? ''}
-                                 onChange={e => handleInputChange(row._internalId, 'backlogId', e.target.value)}
-                                 placeholder="ID-123"
-                                 className="h-9"
-                                 required
-                             />
-                         </Button>
+                    <div className="md:col-span-1 col-span-1 relative">
+                         <Label htmlFor={`backlog-id-${row._internalId}`} className="md:hidden text-xs font-medium">Backlog ID*</Label>
+                         <Input
+                             id={`backlog-id-${row._internalId}`}
+                             value={row.backlogId ?? ''}
+                             onChange={e => handleInputChange(row._internalId, 'backlogId', e.target.value)}
+                             placeholder="ID-123"
+                             className="h-9 pr-8" // Add padding for the button overlay
+                             required
+                         />
+                          {/* Transparent button overlay for triggering dialog */}
+                          {row.backlogId?.trim() && (
+                             <Button
+                                 variant="link"
+                                 className="absolute inset-0 z-10 h-full w-full opacity-0" // Makes button invisible but clickable
+                                 onClick={() => handleViewDetails(row)}
+                                 aria-label={`View details for ${row.backlogId}`}
+                             >
+                                 &nbsp; {/* Content needed for button to be rendered */}
+                             </Button>
+                          )}
+                          {/* Display ID as clickable link (visual only) */}
+                          {row.backlogId?.trim() && (
+                              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-sm font-medium text-primary underline cursor-pointer z-0" onClick={() => handleViewDetails(row)}>
+                                  {row.backlogId}
+                              </span>
+                          )}
                     </div>
                     {/* Title */}
                     <div className="md:col-span-1 col-span-2">
@@ -539,5 +556,6 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
     </>
   );
 }
+
 
 
