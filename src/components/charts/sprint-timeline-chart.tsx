@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Task, Member } from '@/types/sprint-data';
@@ -59,7 +60,7 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
        }
   }
 
-  return totalDays > 0 ? totalDays : null;
+  return totalDays > 0 ? totalDays : (timeString === '0' || timeString === '0d' ? 0 : null); // Allow 0 explicitly
 };
 
 const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number): Date => {
@@ -87,6 +88,7 @@ const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number):
       }
 
       // Only advance the date if we haven't reached the target number of working days yet
+      // Important: If it's the last working day, don't advance further
       if (workingDaysCounted < workingDays) {
           currentDate = addDays(currentDate, 1);
           // Skip subsequent weekends while advancing
@@ -141,7 +143,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             }
 
             const taskStartObj = parseISO(task.startDate!);
-            let currentEndDateObj = taskStartObj; // Tracks the end date of the last phase
+            let lastPhaseEndDateObj = taskStartObj; // Tracks the end date of the last valid phase for dependency
 
             // --- Development Phase ---
             const devWorkingDays = parseEstimatedTimeToDays(task.devEstimatedTime);
@@ -150,6 +152,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             let devEndDateObj = taskStartObj;
             let devStartDayIndex = -1;
             let devEndDayIndex = -1;
+            let devPhaseValid = false;
 
             if (devWorkingDays !== null && devWorkingDays >= 0) { // Allow 0 days
                  devStartDateObj = taskStartObj; // Use task's start date for dev
@@ -160,29 +163,35 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  devEndDateObj = calculateEndDateSkippingWeekends(devStartDateObj, devWorkingDays);
 
                  devStartDayIndex = differenceInDays(devStartDateObj, sprintStartObj);
+                 // End day index should be inclusive of the end date
                  devEndDayIndex = differenceInDays(devEndDateObj, sprintStartObj);
 
                  // Clamp indices to be within the sprint boundaries
                  devStartDayIndex = Math.max(0, devStartDayIndex);
-                 devEndDayIndex = Math.min(sprintLengthDays, devEndDayIndex); // End index should be within sprint days
+                 // Ensure end index is at least start index, and within sprint bounds
+                 devEndDayIndex = Math.min(sprintLengthDays, Math.max(devStartDayIndex, devEndDayIndex));
 
-                 currentEndDateObj = devEndDateObj; // Update the end date for the next phase
+                 lastPhaseEndDateObj = devEndDateObj; // Update the end date for the next phase
+                 devPhaseValid = true;
                  console.log(`Task ${index + 1}: Dev Phase - Start: ${format(devStartDateObj, 'yyyy-MM-dd')}, End: ${format(devEndDateObj, 'yyyy-MM-dd')}, Indices: [${devStartDayIndex}, ${devEndDayIndex}]`);
             } else {
                 console.warn(`Task ${index + 1}: Invalid Dev estimate.`);
+                 // If dev is invalid, QA/Buffer should still try starting from task start date
+                 lastPhaseEndDateObj = taskStartObj;
             }
 
 
             // --- QA Phase ---
             const qaWorkingDays = parseEstimatedTimeToDays(task.qaEstimatedTime);
             console.log(`Task ${index + 1}: QA days parsed: ${qaWorkingDays}`);
-            let qaStartDateObj = currentEndDateObj;
-            let qaEndDateObj = currentEndDateObj;
+            let qaStartDateObj = lastPhaseEndDateObj; // Start relative to the end of the previous valid phase
+            let qaEndDateObj = lastPhaseEndDateObj;
             let qaStartDayIndex = -1;
             let qaEndDayIndex = -1;
+            let qaPhaseValid = false;
 
-             if (qaWorkingDays !== null && qaWorkingDays >= 0 && devEndDayIndex >= -1) { // Allow QA even if Dev is 0 days, start immediately after Dev end (or task start if dev was 0)
-                 qaStartDateObj = getNextWorkingDay(currentEndDateObj); // QA starts the next working day
+             if (qaWorkingDays !== null && qaWorkingDays >= 0) {
+                 qaStartDateObj = getNextWorkingDay(lastPhaseEndDateObj); // QA starts the next working day
                  qaEndDateObj = calculateEndDateSkippingWeekends(qaStartDateObj, qaWorkingDays);
 
                  qaStartDayIndex = differenceInDays(qaStartDateObj, sprintStartObj);
@@ -190,25 +199,28 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                   // Clamp indices
                  qaStartDayIndex = Math.max(0, qaStartDayIndex);
-                 qaEndDayIndex = Math.min(sprintLengthDays, qaEndDayIndex);
+                 qaEndDayIndex = Math.min(sprintLengthDays, Math.max(qaStartDayIndex, qaEndDayIndex));
 
-                 currentEndDateObj = qaEndDateObj; // Update the end date for the next phase
+                 lastPhaseEndDateObj = qaEndDateObj; // Update the end date for the next phase
+                 qaPhaseValid = true;
                  console.log(`Task ${index + 1}: QA Phase - Start: ${format(qaStartDateObj, 'yyyy-MM-dd')}, End: ${format(qaEndDateObj, 'yyyy-MM-dd')}, Indices: [${qaStartDayIndex}, ${qaEndDayIndex}]`);
              } else {
-                 console.warn(`Task ${index + 1}: Invalid QA estimate or Dev phase missing/invalid.`);
+                 console.warn(`Task ${index + 1}: Invalid QA estimate.`);
+                 // If QA is invalid, buffer starts after the last valid phase (which might be Dev or the initial task start)
              }
 
 
             // --- Buffer Phase ---
             const bufferWorkingDays = parseEstimatedTimeToDays(task.bufferTime);
             console.log(`Task ${index + 1}: Buffer days parsed: ${bufferWorkingDays}`);
-            let bufferStartDateObj = currentEndDateObj;
-            let bufferEndDateObj = currentEndDateObj;
+            let bufferStartDateObj = lastPhaseEndDateObj; // Start relative to end of the last valid phase (Dev or QA)
+            let bufferEndDateObj = lastPhaseEndDateObj;
             let bufferStartDayIndex = -1;
             let bufferEndDayIndex = -1;
+            let bufferPhaseValid = false;
 
-            if (bufferWorkingDays !== null && bufferWorkingDays >= 0 && (qaEndDayIndex >= -1 || devEndDayIndex >= -1)) { // Buffer starts after QA or Dev if QA doesn't exist
-                bufferStartDateObj = getNextWorkingDay(currentEndDateObj); // Buffer starts the next working day
+            if (bufferWorkingDays !== null && bufferWorkingDays >= 0) {
+                bufferStartDateObj = getNextWorkingDay(lastPhaseEndDateObj); // Buffer starts the next working day
                 bufferEndDateObj = calculateEndDateSkippingWeekends(bufferStartDateObj, bufferWorkingDays);
 
                 bufferStartDayIndex = differenceInDays(bufferStartDateObj, sprintStartObj);
@@ -216,20 +228,21 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                 // Clamp indices
                 bufferStartDayIndex = Math.max(0, bufferStartDayIndex);
-                bufferEndDayIndex = Math.min(sprintLengthDays, bufferEndDayIndex);
+                bufferEndDayIndex = Math.min(sprintLengthDays, Math.max(bufferStartDayIndex, bufferEndDayIndex));
 
+                bufferPhaseValid = true;
                 console.log(`Task ${index + 1}: Buffer Phase - Start: ${format(bufferStartDateObj, 'yyyy-MM-dd')}, End: ${format(bufferEndDateObj, 'yyyy-MM-dd')}, Indices: [${bufferStartDayIndex}, ${bufferEndDayIndex}]`);
             } else {
-                console.warn(`Task ${index + 1}: Invalid Buffer estimate or preceding phase missing/invalid.`);
+                console.warn(`Task ${index + 1}: Invalid Buffer estimate.`);
             }
 
 
              // Tooltip to show more details
              const tooltipContent = [
                  `${task.description || 'Task'} (${task.status || 'N/A'})`,
-                 `Dev: ${task.devEstimatedTime || '?'} [${devStartDayIndex >= 0 ? format(devStartDateObj, 'MM/dd') + ' - ' + format(devEndDateObj, 'MM/dd') : 'N/A'}]`,
-                 `QA: ${task.qaEstimatedTime || '?'} [${qaStartDayIndex >= 0 ? format(qaStartDateObj, 'MM/dd') + ' - ' + format(qaEndDateObj, 'MM/dd') : 'N/A'}]`,
-                 `Buffer: ${task.bufferTime || '?'} [${bufferStartDayIndex >= 0 ? format(bufferStartDateObj, 'MM/dd') + ' - ' + format(bufferEndDateObj, 'MM/dd') : 'N/A'}]`,
+                 `Dev: ${task.devEstimatedTime || '?'} [${devPhaseValid ? format(devStartDateObj, 'MM/dd') + ' - ' + format(devEndDateObj, 'MM/dd') : 'N/A'}]`,
+                 `QA: ${task.qaEstimatedTime || '?'} [${qaPhaseValid ? format(qaStartDateObj, 'MM/dd') + ' - ' + format(qaEndDateObj, 'MM/dd') : 'N/A'}]`,
+                 `Buffer: ${task.bufferTime || '?'} [${bufferPhaseValid ? format(bufferStartDateObj, 'MM/dd') + ' - ' + format(bufferEndDateObj, 'MM/dd') : 'N/A'}]`,
                  task.assignee ? `Assignee: ${task.assignee}` : '',
                  task.reviewer ? `Reviewer: ${task.reviewer}` : '',
              ].filter(Boolean).join(' | ');
@@ -238,11 +251,11 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             const result = {
                 name: task.description || `Task ${task.id}`,
                 taskIndex: index,
-                // range is for the bar component, needs start and end+1
+                // range is for the bar component, needs start and end+1 (to cover the full end day)
                 // Ensure indices are valid and end >= start before creating range
-                devRange: devStartDayIndex >= 0 && devEndDayIndex >= devStartDayIndex ? [devStartDayIndex, devEndDayIndex + 1] : undefined,
-                qaRange: qaStartDayIndex >= 0 && qaEndDayIndex >= qaStartDayIndex ? [qaStartDayIndex, qaEndDayIndex + 1] : undefined,
-                bufferRange: bufferStartDayIndex >= 0 && bufferEndDayIndex >= bufferStartDayIndex ? [bufferStartDayIndex, bufferEndDayIndex + 1] : undefined,
+                devRange: devPhaseValid && devEndDayIndex >= devStartDayIndex ? [devStartDayIndex, devEndDayIndex + 1] : undefined,
+                qaRange: qaPhaseValid && qaEndDayIndex >= qaStartDayIndex ? [qaStartDayIndex, qaEndDayIndex + 1] : undefined,
+                bufferRange: bufferPhaseValid && bufferEndDayIndex >= bufferStartDayIndex ? [bufferStartDayIndex, bufferEndDayIndex + 1] : undefined,
                 tooltip: tooltipContent,
             };
              console.log(`Task ${index + 1}: Final Result`, result);
@@ -285,6 +298,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
    let sprintDays = 0;
    try {
+     // +1 because differenceInDays doesn't include the end date itself
      sprintDays = differenceInDays(parseISO(sprintEndDate!), parseISO(sprintStartDate!)) + 1;
    } catch (e) {
       console.error("Error calculating sprint days:", e);
@@ -346,7 +360,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  ifOverflow="extendDomain"
                  label={(props) => { // Use label to render the rect background
                      const { viewBox } = props;
-                     const dayWidth = viewBox && viewBox.width && sprintDays > 0 ? viewBox.width / sprintDays : 10; // Approx width
+                     // Calculate approx width based on total sprint days
+                     const dayWidth = viewBox && viewBox.width && sprintDays > 0 ? viewBox.width / sprintDays : 10;
                      return (
                        <rect
                          x={props.viewBox.x} // Use the calculated x position from ReferenceLine
@@ -397,3 +412,5 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     </ChartContainer>
   );
 }
+
+    
