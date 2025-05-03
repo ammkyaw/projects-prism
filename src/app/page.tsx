@@ -7,12 +7,14 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users } from 'lucide-react'; // Added Users for Members, NotebookPen for Planning
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2 } from 'lucide-react'; // Added Users, NotebookPen, Trash2
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Import AlertDialog components
+
 
 import HomeTab from '@/components/home-tab';
 import EntryTab from '@/components/entry-tab';
@@ -22,7 +24,7 @@ import MembersTab from '@/components/members-tab'; // Import MembersTab
 import AddMembersDialog from '@/components/add-members-dialog'; // Import AddMembersDialog
 
 
-import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus } from '@/types/sprint-data';
+import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task } from '@/types/sprint-data'; // Added Task type
 import { initialSprintData, initialSprintPlanning } from '@/types/sprint-data'; // Import initialSprintData and initialSprintPlanning
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -477,6 +479,36 @@ export default function Home() {
        setNewlyCreatedProjectId(null); // Reset the tracked ID
    }, [newlyCreatedProjectId, toast]);
 
+  // Handler to delete a sprint
+  const handleDeleteSprint = useCallback((sprintNumber: number) => {
+    if (!selectedProjectId) {
+      toast({ variant: "destructive", title: "Error", description: "No project selected." });
+      return;
+    }
+    let projectNameForToast = 'N/A';
+    setProjects(prevProjects => {
+      const updatedProjects = prevProjects.map(p => {
+        if (p.id === selectedProjectId) {
+           projectNameForToast = p.name;
+          const filteredSprints = p.sprintData.sprints.filter(s => s.sprintNumber !== sprintNumber);
+          return {
+            ...p,
+            sprintData: {
+              ...p.sprintData,
+              sprints: filteredSprints,
+              // Recalculate overall metrics if needed
+              totalStoryPoints: filteredSprints.reduce((sum, s) => sum + s.completedPoints, 0),
+              daysInSprint: filteredSprints.length > 0 ? Math.max(...filteredSprints.map(s => s.totalDays)) : 0,
+            },
+          };
+        }
+        return p;
+      });
+      return updatedProjects;
+    });
+    toast({ title: "Sprint Deleted", description: `Sprint ${sprintNumber} deleted from project '${projectNameForToast}'.` });
+  }, [selectedProjectId, toast]);
+
 
   // Export data for the currently selected project
   const handleExport = () => {
@@ -545,10 +577,12 @@ export default function Home() {
                       'TaskID': task.id,
                       'Description': 'description' in task ? task.description : '', // Handle both Task and potential legacy SprintDetailItem if needed
                       'StoryPoints': 'storyPoints' in task ? task.storyPoints : undefined,
+                      'Est. Time': 'estimatedTime' in task ? task.estimatedTime : undefined, // Export Est Time
                       'Assignee': 'assignee' in task ? task.assignee : ('developer' in task ? task.developer : undefined), // Handle assignee/developer
                       'Status': 'status' in task ? task.status : undefined,
+                      'Start Date': 'startDate' in task ? task.startDate : undefined, // Export Start Date
                       'TicketNumber': 'ticketNumber' in task ? task.ticketNumber : undefined, // Include if exists
-                      'DevelopmentTime': 'devTime' in task ? task.devTime : undefined, // Include if exists
+                      'DevelopmentTime': 'devTime' in task ? task.devTime : undefined, // Include if exists (legacy)
                    });
 
                    sprint.planning.newTasks.forEach(task => planningTasksData.push(mapTaskToRow(task, 'New')));
@@ -719,6 +753,7 @@ export default function Home() {
                      projectId={selectedProject.id}
                      sprintData={selectedProject.sprintData}
                      projectName={selectedProject.name}
+                     onDeleteSprint={handleDeleteSprint} // Pass delete handler
                  />
               </TabsContent>
 

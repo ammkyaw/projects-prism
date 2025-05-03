@@ -1,10 +1,12 @@
 
+
 import type { SprintData, Sprint } from '@/types/sprint-data'; // Import Sprint type
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge" // Import Badge
 import { Button } from '@/components/ui/button';
-import { Info, Edit, Circle } from 'lucide-react'; // Import Circle for status indicator
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Import AlertDialog components
+import { Info, Edit, Circle, Trash2 } from 'lucide-react'; // Import Circle for status indicator and Trash2 for delete
 import Link from 'next/link'; // Import Link
 import { cn } from '@/lib/utils'; // Import cn
 
@@ -12,9 +14,10 @@ interface HomeTabProps {
   sprintData: SprintData | null;
   projectName: string;
   projectId: string; // Add projectId prop
+  onDeleteSprint: (sprintNumber: number) => void; // Add delete callback prop
 }
 
-export default function HomeTab({ sprintData, projectName, projectId }: HomeTabProps) {
+export default function HomeTab({ sprintData, projectName, projectId, onDeleteSprint }: HomeTabProps) {
 
   const getStatusBadgeVariant = (status: Sprint['status']): "default" | "secondary" | "outline" | "destructive" | null | undefined => {
      switch (status) {
@@ -61,7 +64,7 @@ export default function HomeTab({ sprintData, projectName, projectId }: HomeTabP
                     <TableHead>Status</TableHead>{/* Add Status Header */}
                     <TableHead className="text-right">Commitment</TableHead>
                     <TableHead className="text-right">Delivered</TableHead>
-                    <TableHead className="w-[50px] text-center">Actions</TableHead>
+                    <TableHead className="w-[100px] text-center">Actions</TableHead> {/* Adjusted width for two icons */}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -80,8 +83,8 @@ export default function HomeTab({ sprintData, projectName, projectId }: HomeTabP
                        </TableCell>
                       <TableCell className="text-right">{sprint.committedPoints}</TableCell>
                       <TableCell className="text-right">{sprint.completedPoints}</TableCell>
-                       <TableCell className="text-center">
-                         {/* Link to the dynamic edit page, disable if completed */}
+                       <TableCell className="text-center space-x-1">
+                         {/* Edit Button */}
                          <Link
                            href={`/projects/${projectId}/sprints/${sprint.sprintNumber}/edit`}
                            passHref
@@ -95,12 +98,45 @@ export default function HomeTab({ sprintData, projectName, projectId }: HomeTabP
                               variant="ghost"
                               size="icon"
                               aria-label={`Edit Sprint ${sprint.sprintNumber}`}
+                              title="Edit Sprint Details"
                               disabled={sprint.status === 'Completed'}
-                              className={cn(sprint.status === 'Completed' && "cursor-not-allowed opacity-50")}
+                              className={cn("h-8 w-8", sprint.status === 'Completed' && "cursor-not-allowed opacity-50")} // Smaller icon button
                            >
                              <a><Edit className="h-4 w-4" /></a>
                            </Button>
                          </Link>
+
+                         {/* Delete Button with Confirmation */}
+                         <AlertDialog>
+                           <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Delete Sprint ${sprint.sprintNumber}`}
+                                title="Delete Sprint"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" // Smaller icon button, destructive color
+                                // Disable delete if sprint is active? Optional:
+                                // disabled={sprint.status === 'Active'}
+                                // className={cn("h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10", sprint.status === 'Active' && "cursor-not-allowed opacity-50")}
+                              >
+                               <Trash2 className="h-4 w-4" />
+                              </Button>
+                           </AlertDialogTrigger>
+                           <AlertDialogContent>
+                              <AlertDialogHeader>
+                                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                 <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete Sprint {sprint.sprintNumber} and all its associated data (details, planning, etc.).
+                                 </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                 <AlertDialogAction onClick={() => onDeleteSprint(sprint.sprintNumber)} className={cn(buttonVariants({ variant: "destructive" }))}>
+                                     Delete Sprint {sprint.sprintNumber}
+                                 </AlertDialogAction>
+                              </AlertDialogFooter>
+                           </AlertDialogContent>
+                         </AlertDialog>
                        </TableCell>
                     </TableRow>
                   ))}
@@ -112,7 +148,7 @@ export default function HomeTab({ sprintData, projectName, projectId }: HomeTabP
           <div className="flex flex-col items-center justify-center text-muted-foreground p-8 border border-dashed rounded-md min-h-[200px]">
             <Info className="mb-2 h-8 w-8" />
              <p className="text-center">No sprint data loaded for project '{projectName}'.</p>
-             <p className="text-center text-sm">Go to the 'Entry' tab to add data.</p>
+             <p className="text-center text-sm">Go to the 'Entry' or 'Planning' tab to add data.</p>
           </div>
         )}
       </CardContent>
