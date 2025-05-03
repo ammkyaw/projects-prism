@@ -720,7 +720,7 @@ export default function Home() {
          // Using setTimeout to ensure toast doesn't interfere with rendering updates
          setTimeout(() => {
               toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
-         }, 0);
+         }, 50); // Slightly increased timeout
      }
 
   }, [selectedProjectId, toast]);
@@ -943,67 +943,74 @@ export default function Home() {
         }
 
         let revertedTaskDetails: string | null = null;
+        let updatePerformed = false; // Track if an update actually happened
 
-        setProjects(prevProjects => {
-            const updatedProjects = prevProjects.map(p => {
-                if (p.id === selectedProjectId) {
-                    let foundAndRemoved = false;
-                    // Remove the task from the specified sprint's planning.newTasks
-                    const updatedSprints = p.sprintData.sprints.map(s => {
-                        if (s.sprintNumber === sprintNumber && s.planning) {
-                            const taskToRemove = s.planning.newTasks.find(t => t.id === taskId);
-                            if (taskToRemove) {
-                                revertedTaskDetails = `${taskToRemove.ticketNumber} (${taskToRemove.title || 'No Title'})`;
-                                foundAndRemoved = true;
-                                return {
-                                    ...s,
-                                    planning: {
-                                        ...s.planning,
-                                        newTasks: s.planning.newTasks.filter(task => task.id !== taskId),
-                                    }
-                                };
+        // Use setTimeout to defer state update, avoiding render-during-render issues
+        setTimeout(() => {
+            setProjects(prevProjects => {
+                const updatedProjects = prevProjects.map(p => {
+                    if (p.id === selectedProjectId) {
+                        let foundAndRemoved = false;
+                        // Remove the task from the specified sprint's planning.newTasks
+                        const updatedSprints = p.sprintData.sprints.map(s => {
+                            if (s.sprintNumber === sprintNumber && s.planning) {
+                                const taskToRemove = s.planning.newTasks.find(t => t.id === taskId);
+                                if (taskToRemove) {
+                                    revertedTaskDetails = `${taskToRemove.ticketNumber} (${taskToRemove.title || 'No Title'})`;
+                                    foundAndRemoved = true;
+                                    return {
+                                        ...s,
+                                        planning: {
+                                            ...s.planning,
+                                            newTasks: s.planning.newTasks.filter(task => task.id !== taskId),
+                                        }
+                                    };
+                                }
                             }
-                        }
-                        return s;
-                    });
+                            return s;
+                        });
 
-                    // If the task wasn't found in the sprint, no need to update backlog
-                    if (!foundAndRemoved) {
-                        console.warn(`Task ID ${taskId} not found in Sprint ${sprintNumber} planning.`);
-                        // Maybe show a warning toast?
-                        return p;
+                        // If the task wasn't found in the sprint, no need to update backlog
+                        if (!foundAndRemoved) {
+                            console.warn(`Task ID ${taskId} not found in Sprint ${sprintNumber} planning.`);
+                            return p; // Return original project state
+                        }
+
+                        // Find the corresponding item in the backlog and reset its 'movedToSprint' status
+                        const updatedBacklog = (p.backlog || []).map(item => {
+                            // Match primarily using taskBacklogId if available, as task.id is unique to the sprint instance
+                            const isMatch = taskBacklogId ? item.backlogId === taskBacklogId : false; // Only rely on backlogId
+                            if (isMatch && item.movedToSprint === sprintNumber) {
+                                updatePerformed = true; // Mark that we found and updated the backlog item
+                                return { ...item, movedToSprint: undefined }; // Reset movedToSprint
+                            }
+                            return item;
+                        });
+
+                        return {
+                            ...p,
+                            backlog: updatedBacklog,
+                            sprintData: {
+                                ...p.sprintData,
+                                sprints: updatedSprints,
+                            }
+                        };
                     }
+                    return p;
+                });
 
-                    // Find the corresponding item in the backlog and reset its 'movedToSprint' status
-                    const updatedBacklog = (p.backlog || []).map(item => {
-                        // Match primarily using taskBacklogId if available, as task.id is unique to the sprint instance
-                        const isMatch = taskBacklogId ? item.backlogId === taskBacklogId : false; // Only rely on backlogId
-                        if (isMatch && item.movedToSprint === sprintNumber) {
-                            return { ...item, movedToSprint: undefined }; // Reset movedToSprint
-                        }
-                        return item;
-                    });
+                 // Show toasts after potential state update
+                 if (revertedTaskDetails && updatePerformed) {
+                     toast({ title: "Task Reverted", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber} and returned to backlog.` });
+                 } else if (!updatePerformed) {
+                      // Only show warning if it wasn't found (means updatePerformed remained false)
+                      toast({ variant: "warning", title: "Task Not Found", description: `Could not find task ID ${taskId} in Sprint ${sprintNumber} planning or its corresponding backlog item.` });
+                 }
 
-                    return {
-                        ...p,
-                        backlog: updatedBacklog,
-                        sprintData: {
-                            ...p.sprintData,
-                            sprints: updatedSprints,
-                        }
-                    };
-                }
-                return p;
+                return updatedProjects; // Return the potentially updated projects
             });
-            return updatedProjects;
-        });
+        }, 0); // Defer with timeout 0
 
-        if (revertedTaskDetails) {
-            toast({ title: "Task Reverted", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber} and returned to backlog.` });
-        } else {
-             // Only show warning if it wasn't found (means foundAndRemoved remained false)
-             toast({ variant: "warning", title: "Task Not Found", description: `Could not find task ID ${taskId} in Sprint ${sprintNumber} planning.` });
-        }
     }, [selectedProjectId, toast]);
 
 
@@ -1611,5 +1618,7 @@ export default function Home() {
     </div>
   );
 }
+
+    
 
     
