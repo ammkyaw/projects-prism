@@ -27,7 +27,7 @@ import BacklogTab from '@/components/backlog-tab'; // Import BacklogTab
 import AddMembersDialog from '@/components/add-members-dialog';
 
 
-import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember } from '@/types/sprint-data'; // Added Task, HolidayCalendar, Team, TeamMember types
+import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember } from '@/types/sprint-data'; // Updated Task type reference
 import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam, initialBacklogTask } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -240,27 +240,34 @@ export default function Home() {
              const validatedBacklog: Task[] = [];
              if (Array.isArray(projectData.backlog)) {
                  projectData.backlog.forEach((taskData: any) => {
+                     // Basic validation: ID and backlogId/ticketNumber
                      if (
                          taskData && typeof taskData === 'object' &&
                          taskData.id && typeof taskData.id === 'string' &&
-                         taskData.ticketNumber && typeof taskData.ticketNumber === 'string' // Changed from description
+                         (taskData.backlogId || taskData.ticketNumber) // Must have one of these
                          // Other fields are optional or validated below
                      ) {
+                         const backlogId = typeof taskData.backlogId === 'string' ? taskData.backlogId : typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : taskData.id;
                          validatedBacklog.push({
                              id: taskData.id,
-                             ticketNumber: taskData.ticketNumber, // Use ticketNumber
+                             backlogId: backlogId,
+                             ticketNumber: typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : backlogId, // Default ticketNumber to backlogId if missing
                              title: typeof taskData.title === 'string' ? taskData.title : undefined,
                              description: typeof taskData.description === 'string' ? taskData.description : undefined,
                              storyPoints: (typeof taskData.storyPoints === 'number' || typeof taskData.storyPoints === 'string') ? taskData.storyPoints : undefined,
-                             devEstimatedTime: typeof taskData.devEstimatedTime === 'string' ? taskData.devEstimatedTime : undefined,
-                             qaEstimatedTime: typeof taskData.qaEstimatedTime === 'string' ? taskData.qaEstimatedTime : undefined,
-                             bufferTime: typeof taskData.bufferTime === 'string' ? taskData.bufferTime : undefined,
-                             assignee: typeof taskData.assignee === 'string' ? taskData.assignee : undefined,
-                             reviewer: typeof taskData.reviewer === 'string' ? taskData.reviewer : undefined,
-                             status: typeof taskData.status === 'string' && taskStatuses.includes(taskData.status as any) ? taskData.status : 'Backlog', // Default to Backlog
-                             startDate: typeof taskData.startDate === 'string' && isValid(parseISO(taskData.startDate)) ? taskData.startDate : undefined,
                              priority: typeof taskData.priority === 'string' ? taskData.priority as Task['priority'] : undefined,
+                             taskType: typeof taskData.taskType === 'string' ? taskData.taskType as Task['taskType'] : undefined,
+                             createdDate: typeof taskData.createdDate === 'string' && isValid(parseISO(taskData.createdDate)) ? taskData.createdDate : undefined,
+                             initiator: typeof taskData.initiator === 'string' ? taskData.initiator : undefined,
                              dependsOn: Array.isArray(taskData.dependsOn) ? taskData.dependsOn.filter((dep: any): dep is string => typeof dep === 'string') : undefined,
+                              // Sprint-specific fields should be undefined in backlog
+                             devEstimatedTime: undefined,
+                             qaEstimatedTime: undefined,
+                             bufferTime: undefined,
+                             assignee: undefined,
+                             reviewer: undefined,
+                             status: undefined, // No status in backlog context
+                             startDate: undefined,
                          });
                      } else {
                          console.warn(`Skipping invalid backlog task data in project ${projectData.id}:`, taskData);
@@ -292,15 +299,17 @@ export default function Home() {
                                    status = 'Completed';
                                }
 
-                                // Validate Planning Tasks (new and spillover)
+                                // Validate Planning Tasks (new and spillover) - Now these are sprint tasks
                                 const validateTasks = (tasks: any[] | undefined): Task[] => {
                                    if (!Array.isArray(tasks)) return [];
-                                   const emptyTask = createEmptyTaskRow();
+                                   const emptyTask = createEmptyTaskRow(); // Use sprint task defaults
                                    return tasks.map((taskData: any) => {
                                        if (!taskData || typeof taskData !== 'object') return null; // Skip invalid task data
+                                       const ticketNumber = typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : taskData.backlogId ?? `task_${Date.now()}`;
                                        return {
                                            id: typeof taskData.id === 'string' ? taskData.id : `task_load_${Date.now()}_${Math.random()}`,
-                                           ticketNumber: typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : emptyTask.ticketNumber, // Use ticketNumber
+                                           backlogId: typeof taskData.backlogId === 'string' ? taskData.backlogId : undefined, // Keep original backlog id if present
+                                           ticketNumber: ticketNumber,
                                            title: typeof taskData.title === 'string' ? taskData.title : undefined,
                                            description: typeof taskData.description === 'string' ? taskData.description : undefined,
                                            storyPoints: (typeof taskData.storyPoints === 'number' || typeof taskData.storyPoints === 'string') ? taskData.storyPoints : emptyTask.storyPoints,
@@ -313,6 +322,10 @@ export default function Home() {
                                            startDate: typeof taskData.startDate === 'string' && isValid(parseISO(taskData.startDate)) ? taskData.startDate : emptyTask.startDate,
                                            priority: typeof taskData.priority === 'string' ? taskData.priority as Task['priority'] : undefined,
                                            dependsOn: Array.isArray(taskData.dependsOn) ? taskData.dependsOn.filter((dep: any): dep is string => typeof dep === 'string') : undefined,
+                                           // Backlog specific fields should not be present in sprint tasks unless needed for context
+                                           taskType: undefined, // Not typically stored in sprint task
+                                           createdDate: undefined,
+                                           initiator: undefined,
                                            // Legacy fields - keep optional for compatibility
                                            devTime: typeof taskData.devTime === 'string' ? taskData.devTime : undefined,
                                        };
@@ -393,7 +406,7 @@ export default function Home() {
                members: validatedMembers.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
                holidayCalendars: validatedCalendars.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
                teams: validatedTeams.sort((a, b) => a.name.localeCompare(b.name)), // Add validated teams, sorted
-               backlog: validatedBacklog.sort((a, b) => (a.priority ?? '').localeCompare(b.priority ?? '') || a.ticketNumber.localeCompare(b.ticketNumber)), // Add validated backlog, sorted by priority then ticket #
+               backlog: validatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority) - taskPriorities.indexOf(b.priority)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')), // Add validated backlog, sorted by priority then backlogId
                sprintData: validatedSprintData,
              });
              console.log(`Successfully validated and added project: ${projectData.name}`);
@@ -970,7 +983,7 @@ export default function Home() {
                    const validatedBacklog = updatedBacklog.map(task => ({
                        ...task,
                        id: task.id || `backlog_save_${Date.now()}_${Math.random()}`, // Ensure ID
-                       status: task.status ?? 'Backlog', // Ensure status
+                       // Status is not saved for backlog items
                        priority: task.priority ?? 'Medium', // Ensure priority
                    }));
                    return { ...p, backlog: validatedBacklog };
@@ -980,6 +993,82 @@ export default function Home() {
            return updatedProjects;
        });
        toast({ title: "Success", description: `Backlog updated for project '${currentProjectName}'.` });
+   }, [selectedProjectId, toast, projects]);
+
+
+   // Handler to move a backlog item to a sprint
+   const handleMoveToSprint = useCallback((backlogItemId: string, targetSprintNumber: number) => {
+       if (!selectedProjectId) {
+           toast({ variant: "destructive", title: "Error", description: "No project selected." });
+           return;
+       }
+       const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+       let movedItemDetails: string | null = null;
+
+       setProjects(prevProjects => {
+           const updatedProjects = prevProjects.map(p => {
+               if (p.id === selectedProjectId) {
+                   const backlogItemIndex = (p.backlog ?? []).findIndex(item => item.id === backlogItemId);
+                   if (backlogItemIndex === -1) {
+                       console.error("Backlog item not found:", backlogItemId);
+                       // Don't show toast here, maybe already removed?
+                       return p; // Return unchanged project
+                   }
+
+                   const backlogItem = p.backlog![backlogItemIndex];
+                   movedItemDetails = `${backlogItem.backlogId} (${backlogItem.title || 'No Title'})`; // For toast message
+
+                   const targetSprintIndex = (p.sprintData.sprints ?? []).findIndex(s => s.sprintNumber === targetSprintNumber);
+                   if (targetSprintIndex === -1) {
+                        console.error("Target sprint not found:", targetSprintNumber);
+                        toast({ variant: "destructive", title: "Error", description: "Target sprint not found." });
+                        return p; // Return unchanged project
+                   }
+
+                   // Create the task for the sprint
+                   const sprintTask: Task = {
+                       ...backlogItem,
+                       id: `sprint_task_${Date.now()}_${Math.random()}`, // New ID for the sprint task instance
+                       status: 'To Do', // Set initial status for sprint
+                       startDate: undefined, // Sprint start date is set during planning
+                       devEstimatedTime: backlogItem.devEstimatedTime ?? '', // Carry over estimates if they exist, else empty
+                       qaEstimatedTime: backlogItem.qaEstimatedTime ?? '2d', // Default QA time
+                       bufferTime: backlogItem.bufferTime ?? '1d', // Default Buffer time
+                       // Carry over other relevant fields if needed (assignee, reviewer, etc.)
+                       assignee: backlogItem.assignee,
+                       reviewer: backlogItem.reviewer,
+                   };
+
+                   // Remove item from backlog
+                   const updatedBacklog = [...p.backlog!];
+                   updatedBacklog.splice(backlogItemIndex, 1);
+
+                   // Add item to the target sprint's newTasks
+                   const updatedSprints = [...p.sprintData.sprints];
+                   const targetSprint = updatedSprints[targetSprintIndex];
+                   const updatedPlanning = {
+                       ...(targetSprint.planning ?? initialSprintPlanning),
+                       newTasks: [...(targetSprint.planning?.newTasks ?? []), sprintTask],
+                   };
+                   updatedSprints[targetSprintIndex] = { ...targetSprint, planning: updatedPlanning };
+
+                   return {
+                       ...p,
+                       backlog: updatedBacklog,
+                       sprintData: {
+                           ...p.sprintData,
+                           sprints: updatedSprints,
+                       }
+                   };
+               }
+               return p;
+           });
+           return updatedProjects;
+       });
+
+       if (movedItemDetails) {
+         toast({ title: "Item Moved", description: `Backlog item '${movedItemDetails}' moved to Sprint ${targetSprintNumber}.` });
+       }
    }, [selectedProjectId, toast, projects]);
 
 
@@ -1103,6 +1192,7 @@ export default function Home() {
                       'Type': type,
                       'TaskID': task.id,
                       'TicketNumber': task.ticketNumber, // Use ticketNumber
+                      'BacklogID': task.backlogId, // Include backlog ID
                       'Title': task.title,
                       'Description': task.description,
                       'StoryPoints': task.storyPoints,
@@ -1136,19 +1226,17 @@ export default function Home() {
         // Backlog Sheet
         if (selectedProject.backlog && selectedProject.backlog.length > 0) {
             const backlogData = selectedProject.backlog.map(task => ({
-                'TaskID': task.id,
-                'TicketNumber': task.ticketNumber,
+                'BacklogItemID': task.id,
+                'BacklogID': task.backlogId,
                 'Title': task.title,
                 'Description': task.description,
-                'StoryPoints': task.storyPoints,
-                'DevEstTime': task.devEstimatedTime,
-                'QAEstTime': task.qaEstimatedTime,
-                'BufferTime': task.bufferTime,
-                'Assignee': task.assignee,
-                'Reviewer': task.reviewer,
-                'Status': task.status,
+                'TaskType': task.taskType,
                 'Priority': task.priority,
-                 // No start date for backlog items generally
+                'Initiator': task.initiator,
+                'CreatedDate': task.createdDate,
+                'StoryPoints': task.storyPoints,
+                'DependsOn': (task.dependsOn || []).join(', '), // Flatten dependency array
+                 // Other backlog specific fields if needed
             }));
             const wsBacklog = XLSX.utils.json_to_sheet(backlogData);
             XLSX.utils.book_append_sheet(wb, wsBacklog, 'Backlog');
@@ -1398,7 +1486,9 @@ export default function Home() {
                     projectName={selectedProject.name}
                     initialBacklog={selectedProject.backlog ?? []}
                     onSaveBacklog={handleSaveBacklog}
-                    members={selectedProject.members ?? []} // Pass members for assignee dropdown
+                    members={selectedProject.members ?? []} // Pass members for dropdowns
+                    sprints={selectedProject.sprintData.sprints ?? []} // Pass sprints for Move action
+                    onMoveToSprint={handleMoveToSprint} // Pass move handler
                   />
                </TabsContent>
 
@@ -1474,5 +1564,6 @@ export default function Home() {
     </div>
   );
 }
+
 
 
