@@ -14,11 +14,11 @@ export interface Task {
   id: string; // Unique ID for the task item
   description: string;
   storyPoints?: number | string; // Can be number or empty string from input
-  estimatedTime?: string; // Optional: e.g., "2d", "4h"
+  estimatedTime?: string; // Optional: e.g., "2d", "4h", "1w 2d"
   assignee?: string; // Stores the Member's name
   status?: 'To Do' | 'In Progress' | 'Done' | 'Blocked'; // Added more specific statuses
   startDate?: string | undefined; // Optional: YYYY-MM-DD for Gantt chart
-  endDate?: string | undefined;   // Optional: YYYY-MM-DD for Gantt chart
+  // endDate?: string | undefined; // Removed: Will be calculated from startDate + estimatedTime for display
   dependsOn?: string[]; // Optional: Array of task IDs this task depends on
 }
 
@@ -37,7 +37,7 @@ export interface SprintDetailItem {
   ticketNumber: string;
   developer: string; // Stores the Member's name
   storyPoints: number;
-  devTime: string; // e.g., "2d", "4h", "1w"
+  devTime: string; // e.g., "2d", "4h", "1w" // Kept for legacy details, but planning uses estimatedTime
 }
 
 export interface Sprint {
