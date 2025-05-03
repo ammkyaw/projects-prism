@@ -9,12 +9,12 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Trash2, UsersRound, UserCheck, UserX, UserCog } from 'lucide-react';
+import { PlusCircle, Trash2, UsersRound, UserCheck, UserX, UserCog, X } from 'lucide-react'; // Added X icon
 import type { Team, TeamMember, Member } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge'; // Import Badge
+import AddTeamMemberDialog from '@/components/add-team-member-dialog'; // Import the new dialog
 
 interface TeamsTabProps {
   projectId: string;
@@ -52,6 +52,8 @@ export default function TeamsTab({ projectId, projectName, initialTeams, allMemb
   const [teams, setTeams] = useState<EditableTeam[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const { toast } = useToast();
+  const [isAddMemberDialogOpen, setIsAddMemberDialogOpen] = useState(false);
+  const [editingTeamInternalId, setEditingTeamInternalId] = useState<string | null>(null);
 
   // Initialize or update teams based on initial prop
   useEffect(() => {
@@ -118,30 +120,50 @@ export default function TeamsTab({ projectId, projectName, initialTeams, allMemb
      );
    };
 
-   const handleMemberSelectionChange = (teamInternalId: string, memberId: string, isChecked: boolean) => {
+  // --- New Handlers for Dialog-based Member Management ---
+
+  const handleAddMemberClick = (teamInternalId: string) => {
+      setEditingTeamInternalId(teamInternalId);
+      setIsAddMemberDialogOpen(true);
+  };
+
+  const handleSaveNewTeamMembers = (newMemberIds: string[]) => {
+      if (!editingTeamInternalId) return;
+
+      setTeams(prev =>
+          prev.map(team => {
+              if (team._internalId === editingTeamInternalId) {
+                  const existingMemberIds = new Set(team.members.map(tm => tm.memberId));
+                  const membersToAdd = newMemberIds
+                      .filter(id => !existingMemberIds.has(id)) // Avoid duplicates
+                      .map(id => createEditableTeamMember(id));
+                  return { ...team, members: [...team.members, ...membersToAdd] };
+              }
+              return team;
+          })
+      );
+      setEditingTeamInternalId(null); // Reset editing team
+      setIsAddMemberDialogOpen(false); // Close dialog
+  };
+
+  const handleRemoveTeamMember = (teamInternalId: string, memberIdToRemove: string) => {
      setTeams(prev =>
-       prev.map(team => {
-         if (team._internalId === teamInternalId) {
-           let updatedMembers = [...team.members];
-           if (isChecked) {
-             // Add member if not already present
-             if (!updatedMembers.some(tm => tm.memberId === memberId)) {
-                updatedMembers.push(createEditableTeamMember(memberId));
+         prev.map(team => {
+             if (team._internalId === teamInternalId) {
+                 const updatedMembers = team.members.filter(tm => tm.memberId !== memberIdToRemove);
+                 // If the removed member was the lead, reset the lead
+                 if (team.leadMemberId === memberIdToRemove) {
+                      toast({ variant: "warning", title: "Lead Removed", description: `Team lead ${allMembers.find(m => m.id === memberIdToRemove)?.name} was removed. Please select a new lead.` });
+                      return { ...team, members: updatedMembers, leadMemberId: null };
+                 }
+                 return { ...team, members: updatedMembers };
              }
-           } else {
-             // Remove member
-             updatedMembers = updatedMembers.filter(tm => tm.memberId !== memberId);
-             // If the removed member was the lead, reset the lead
-             if (team.leadMemberId === memberId) {
-                return { ...team, members: updatedMembers, leadMemberId: null };
-             }
-           }
-           return { ...team, members: updatedMembers };
-         }
-         return team;
-       })
+             return team;
+         })
      );
-   };
+  };
+
+  // --- End New Handlers ---
 
 
   const handleSave = () => {
@@ -175,11 +197,13 @@ export default function TeamsTab({ projectId, projectName, initialTeams, allMemb
            hasErrors = true;
            return;
       }
+       // Check if lead is actually a member AFTER potentially removing members
        if (leadMemberId && !team.members.some(tm => tm.memberId === leadMemberId)) {
-           toast({ variant: "destructive", title: `Error in Team ${teamName}`, description: `Selected lead must also be a member of the team.` });
+           toast({ variant: "destructive", title: `Error in Team ${teamName}`, description: `Selected lead must be a member of the team.` });
            hasErrors = true;
            return;
        }
+
 
       const finalTeamMembers: TeamMember[] = team.members.map(tm => ({ memberId: tm.memberId }));
 
@@ -217,7 +241,15 @@ export default function TeamsTab({ projectId, projectName, initialTeams, allMemb
      }
   };
 
+   const getMemberName = (memberId: string): string => {
+       return allMembers.find(m => m.id === memberId)?.name ?? 'Unknown Member';
+   };
+
+   // Find the team being edited for the dialog
+   const teamBeingEdited = teams.find(t => t._internalId === editingTeamInternalId);
+
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex justify-between items-center">
@@ -285,27 +317,35 @@ export default function TeamsTab({ projectId, projectName, initialTeams, allMemb
               </div>
 
               <AccordionContent className="px-4 pt-4 pb-2">
-                 <Label className="text-base font-semibold mb-2 block">Team Members</Label>
+                 <div className="flex justify-between items-center mb-2">
+                     <Label className="text-base font-semibold">Team Members</Label>
+                     <Button variant="outline" size="sm" onClick={() => handleAddMemberClick(team._internalId)}>
+                         <PlusCircle className="mr-2 h-4 w-4" /> Add Members
+                     </Button>
+                 </div>
+
                   {allMembers.length === 0 ? (
-                      <p className="text-sm text-muted-foreground italic">No members added to the project yet. Add members in the 'Members' tab first.</p>
+                      <p className="text-sm text-muted-foreground italic py-4 text-center">No members added to the project yet. Add members in the 'Members' tab first.</p>
+                  ) : team.members.length === 0 ? (
+                      <p className="text-sm text-muted-foreground italic py-4 text-center">No members added to this team yet.</p>
                   ) : (
-                     <ScrollArea className="h-48 w-full rounded-md border p-4">
-                        <div className="space-y-2">
-                          {allMembers.map(member => (
-                            <div key={member.id} className="flex items-center justify-between">
-                               <Label htmlFor={`member-${team._internalId}-${member.id}`} className="flex items-center gap-2 text-sm font-normal cursor-pointer">
-                                 <Checkbox
-                                     id={`member-${team._internalId}-${member.id}`}
-                                     checked={team.members.some(tm => tm.memberId === member.id)}
-                                     onCheckedChange={(checked) => handleMemberSelectionChange(team._internalId, member.id, !!checked)}
-                                     aria-label={`Select ${member.name}`}
-                                 />
-                                  {member.name} <span className="text-xs text-muted-foreground">({member.role})</span>
-                               </Label>
-                            </div>
-                          ))}
-                        </div>
-                     </ScrollArea>
+                     <div className="space-y-1 mt-2">
+                        {team.members.map((teamMember) => (
+                           <div key={teamMember._internalId} className="flex items-center justify-between p-2 border rounded-md bg-secondary/50">
+                               <span className="text-sm">{getMemberName(teamMember.memberId)}</span>
+                               <Button
+                                   type="button"
+                                   variant="ghost"
+                                   size="icon"
+                                   onClick={() => handleRemoveTeamMember(team._internalId, teamMember.memberId)}
+                                   className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                   aria-label={`Remove ${getMemberName(teamMember.memberId)} from team`}
+                               >
+                                   <X className="h-4 w-4" />
+                               </Button>
+                           </div>
+                        ))}
+                     </div>
                   )}
               </AccordionContent>
             </AccordionItem>
@@ -323,5 +363,16 @@ export default function TeamsTab({ projectId, projectName, initialTeams, allMemb
         </Button>
       </CardFooter>
     </Card>
+
+    {/* Add Member Dialog */}
+     <AddTeamMemberDialog
+        isOpen={isAddMemberDialogOpen}
+        onOpenChange={setIsAddMemberDialogOpen}
+        onSaveMembers={handleSaveNewTeamMembers}
+        allMembers={allMembers}
+        currentTeamMembers={teamBeingEdited?.members.map(tm => tm.memberId) ?? []} // Pass IDs of members already in the team
+     />
+    </>
   );
 }
+

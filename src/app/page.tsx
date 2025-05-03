@@ -94,356 +94,377 @@ export default function Home() {
   useEffect(() => {
     console.log("Attempting to load data from localStorage...");
     setIsLoading(true); // Start loading
-    const savedData = localStorage.getItem('appData');
-    if (savedData) {
-      console.log("Found data in localStorage:", savedData.substring(0, 500) + '...'); // Log truncated data
-      let parsedData: any; // Use any initially for safe parsing
-      try {
-        parsedData = JSON.parse(savedData);
-        console.log("Successfully parsed localStorage data");
+    try {
+       const savedData = localStorage.getItem('appData');
+       if (savedData) {
+         console.log("Found data in localStorage:", savedData.substring(0, 500) + '...'); // Log truncated data
+         let parsedData: any; // Use any initially for safe parsing
+         try {
+           parsedData = JSON.parse(savedData);
+           console.log("Successfully parsed localStorage data");
 
-        // --- Robust Validation ---
-        if (!Array.isArray(parsedData)) {
-          console.error("Validation Error: Stored data is not an array. Data:", parsedData);
-          throw new Error("Stored data is not an array.");
-        }
-
-        const validatedProjects: Project[] = [];
-
-        for (const projectData of parsedData) {
-          // Validate basic project structure
-          if (
-            !projectData || typeof projectData !== 'object' ||
-            !projectData.id || typeof projectData.id !== 'string' ||
-            !projectData.name || typeof projectData.name !== 'string'
-          ) {
-            console.warn("Skipping invalid project data (basic structure):", projectData);
-            continue; // Skip this invalid project
-          }
-          console.log(`Validating project: ${projectData.name} (ID: ${projectData.id})`);
-
-          // --- Validate and Sanitize Members ---
-          const validatedMembers: Member[] = [];
-          if (Array.isArray(projectData.members)) {
-            projectData.members.forEach((memberData: any) => {
-              if (
-                memberData && typeof memberData === 'object' &&
-                memberData.id && typeof memberData.id === 'string' &&
-                memberData.name && typeof memberData.name === 'string' &&
-                memberData.role && typeof memberData.role === 'string'
-              ) {
-                validatedMembers.push({
-                  id: memberData.id,
-                  name: memberData.name,
-                  role: memberData.role,
-                  holidayCalendarId: typeof memberData.holidayCalendarId === 'string' || memberData.holidayCalendarId === null ? memberData.holidayCalendarId : null, // Allow null
-                });
-              } else {
-                console.warn(`Skipping invalid member data in project ${projectData.id}:`, memberData);
-              }
-            });
-          } else {
-             console.warn(`Project ${projectData.id} has invalid or missing 'members' array.`);
-          }
-
-          // --- Validate and Sanitize Holiday Calendars ---
-          const validatedCalendars: HolidayCalendar[] = [];
-          if (Array.isArray(projectData.holidayCalendars)) {
-            projectData.holidayCalendars.forEach((calData: any) => {
-              if (
-                calData && typeof calData === 'object' &&
-                calData.id && typeof calData.id === 'string' &&
-                calData.name && typeof calData.name === 'string' &&
-                Array.isArray(calData.holidays)
-              ) {
-                const validatedHolidays: PublicHoliday[] = [];
-                calData.holidays.forEach((holData: any) => {
-                  if (
-                    holData && typeof holData === 'object' &&
-                    holData.id && typeof holData.id === 'string' &&
-                    holData.name && typeof holData.name === 'string' &&
-                    holData.date && typeof holData.date === 'string' &&
-                    isValid(parseISO(holData.date)) // Validate date format
-                  ) {
-                    validatedHolidays.push({
-                      id: holData.id,
-                      name: holData.name,
-                      date: holData.date,
-                    });
-                  } else {
-                    console.warn(`Skipping invalid holiday data in calendar ${calData.id} (project ${projectData.id}):`, holData);
-                  }
-                });
-                validatedCalendars.push({
-                  id: calData.id,
-                  name: calData.name,
-                  countryCode: typeof calData.countryCode === 'string' ? calData.countryCode : undefined, // Accept string or undefined
-                  holidays: validatedHolidays,
-                });
-              } else {
-                console.warn(`Skipping invalid calendar data in project ${projectData.id}:`, calData);
-              }
-            });
-          } else {
-            // Allow missing holidayCalendars, default to empty array later
-            // console.warn(`Project ${projectData.id} has invalid or missing 'holidayCalendars' array.`);
-          }
-
-           // --- Validate and Sanitize Teams ---
-           const validatedTeams: Team[] = [];
-           if (Array.isArray(projectData.teams)) {
-             projectData.teams.forEach((teamData: any) => {
-               if (
-                 teamData && typeof teamData === 'object' &&
-                 teamData.id && typeof teamData.id === 'string' &&
-                 teamData.name && typeof teamData.name === 'string' &&
-                 Array.isArray(teamData.members)
-               ) {
-                 const validatedTeamMembers: TeamMember[] = [];
-                 teamData.members.forEach((tmData: any) => {
-                   if (tmData && typeof tmData === 'object' && tmData.memberId && typeof tmData.memberId === 'string') {
-                     // Check if memberId actually exists in the validatedMembers list
-                     if (validatedMembers.some(m => m.id === tmData.memberId)) {
-                       validatedTeamMembers.push({ memberId: tmData.memberId });
-                     } else {
-                        console.warn(`Skipping invalid team member reference (member ID ${tmData.memberId} not found) in team ${teamData.id} (project ${projectData.id}):`, tmData);
-                     }
-                   } else {
-                      console.warn(`Skipping invalid team member data in team ${teamData.id} (project ${projectData.id}):`, tmData);
-                   }
-                 });
-                 // Validate leadMemberId exists if present
-                 let leadMemberId = (typeof teamData.leadMemberId === 'string' || teamData.leadMemberId === null) ? teamData.leadMemberId : null;
-                 if (leadMemberId && !validatedMembers.some(m => m.id === leadMemberId)) {
-                      console.warn(`Invalid leadMemberId (${leadMemberId}) in team ${teamData.id} (project ${projectData.id}). Resetting to null.`);
-                      leadMemberId = null;
-                 }
-
-                 validatedTeams.push({
-                   id: teamData.id,
-                   name: teamData.name,
-                   members: validatedTeamMembers,
-                   leadMemberId: leadMemberId,
-                 });
-               } else {
-                  console.warn(`Skipping invalid team data in project ${projectData.id}:`, teamData);
-               }
-             });
-           } else {
-             // Allow missing teams, default to empty array later
+           // --- Robust Validation ---
+           if (!Array.isArray(parsedData)) {
+             console.error("Validation Error: Stored data is not an array. Data:", parsedData);
+             throw new Error("Stored data is not an array.");
            }
 
+           const validatedProjects: Project[] = [];
 
-          // --- Validate and Sanitize SprintData ---
-          let validatedSprintData: SprintData = { ...initialSprintData }; // Start with defaults
-          if (projectData.sprintData && typeof projectData.sprintData === 'object') {
-              if (Array.isArray(projectData.sprintData.sprints)) {
-                    const validatedSprints: Sprint[] = [];
-                    projectData.sprintData.sprints.forEach((sprintData: any) => {
-                        if (
-                            sprintData && typeof sprintData === 'object' &&
-                            typeof sprintData.sprintNumber === 'number' && !isNaN(sprintData.sprintNumber) &&
-                            typeof sprintData.startDate === 'string' && isValid(parseISO(sprintData.startDate)) &&
-                            typeof sprintData.duration === 'string'
-                            // Optional fields checked below
-                        ) {
-                            let status: SprintStatus = sprintData.status ?? 'Planned';
-                            const metrics = calculateSprintMetrics(sprintData.startDate, sprintData.duration);
+           for (const projectData of parsedData) {
+             // Validate basic project structure
+             if (
+               !projectData || typeof projectData !== 'object' ||
+               !projectData.id || typeof projectData.id !== 'string' ||
+               !projectData.name || typeof projectData.name !== 'string'
+             ) {
+               console.warn("Skipping invalid project data (basic structure):", projectData);
+               continue; // Skip this invalid project
+             }
+             console.log(`Validating project: ${projectData.name} (ID: ${projectData.id})`);
 
-                            // Auto-complete based on date if status is not already 'Completed'
-                            if (metrics.endDate !== 'N/A' && clientNow && isPast(parseISO(metrics.endDate)) && status !== 'Completed') {
-                                status = 'Completed';
-                            }
+             // --- Validate and Sanitize Members ---
+             const validatedMembers: Member[] = [];
+             if (Array.isArray(projectData.members)) {
+               projectData.members.forEach((memberData: any) => {
+                 if (
+                   memberData && typeof memberData === 'object' &&
+                   memberData.id && typeof memberData.id === 'string' &&
+                   memberData.name && typeof memberData.name === 'string' &&
+                   memberData.role && typeof memberData.role === 'string'
+                 ) {
+                   validatedMembers.push({
+                     id: memberData.id,
+                     name: memberData.name,
+                     role: memberData.role,
+                     holidayCalendarId: typeof memberData.holidayCalendarId === 'string' || memberData.holidayCalendarId === null ? memberData.holidayCalendarId : null, // Allow null
+                   });
+                 } else {
+                   console.warn(`Skipping invalid member data in project ${projectData.id}:`, memberData);
+                 }
+               });
+             } else {
+                console.warn(`Project ${projectData.id} has invalid or missing 'members' array.`);
+             }
 
-                             // Validate Planning Tasks (new and spillover)
-                             const validateTasks = (tasks: any[] | undefined): Task[] => {
-                                if (!Array.isArray(tasks)) return [];
-                                const emptyTask = createEmptyTaskRow();
-                                return tasks.map((taskData: any) => {
-                                    if (!taskData || typeof taskData !== 'object') return null; // Skip invalid task data
-                                    return {
-                                        id: typeof taskData.id === 'string' ? taskData.id : `task_load_${Date.now()}_${Math.random()}`,
-                                        description: typeof taskData.description === 'string' ? taskData.description : emptyTask.description,
-                                        storyPoints: (typeof taskData.storyPoints === 'number' || typeof taskData.storyPoints === 'string') ? taskData.storyPoints : emptyTask.storyPoints,
-                                        devEstimatedTime: typeof taskData.devEstimatedTime === 'string' ? taskData.devEstimatedTime : emptyTask.devEstimatedTime,
-                                        qaEstimatedTime: typeof taskData.qaEstimatedTime === 'string' ? taskData.qaEstimatedTime : emptyTask.qaEstimatedTime,
-                                        bufferTime: typeof taskData.bufferTime === 'string' ? taskData.bufferTime : emptyTask.bufferTime,
-                                        assignee: typeof taskData.assignee === 'string' ? taskData.assignee : emptyTask.assignee,
-                                        reviewer: typeof taskData.reviewer === 'string' ? taskData.reviewer : emptyTask.reviewer,
-                                        status: typeof taskData.status === 'string' && taskStatuses.includes(taskData.status as any) ? taskData.status : emptyTask.status,
-                                        startDate: typeof taskData.startDate === 'string' && isValid(parseISO(taskData.startDate)) ? taskData.startDate : emptyTask.startDate,
-                                        // Legacy fields - keep optional for compatibility
-                                        ticketNumber: typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : undefined,
-                                        devTime: typeof taskData.devTime === 'string' ? taskData.devTime : undefined,
-                                    };
-                                }).filter((task): task is Task => task !== null); // Filter out nulls
-                            };
+             // --- Validate and Sanitize Holiday Calendars ---
+             const validatedCalendars: HolidayCalendar[] = [];
+             if (Array.isArray(projectData.holidayCalendars)) {
+               projectData.holidayCalendars.forEach((calData: any) => {
+                 if (
+                   calData && typeof calData === 'object' &&
+                   calData.id && typeof calData.id === 'string' &&
+                   calData.name && typeof calData.name === 'string' &&
+                   Array.isArray(calData.holidays)
+                 ) {
+                   const validatedHolidays: PublicHoliday[] = [];
+                   calData.holidays.forEach((holData: any) => {
+                     if (
+                       holData && typeof holData === 'object' &&
+                       holData.id && typeof holData.id === 'string' &&
+                       holData.name && typeof holData.name === 'string' &&
+                       holData.date && typeof holData.date === 'string' &&
+                       isValid(parseISO(holData.date)) // Validate date format
+                     ) {
+                       validatedHolidays.push({
+                         id: holData.id,
+                         name: holData.name,
+                         date: holData.date,
+                       });
+                     } else {
+                       console.warn(`Skipping invalid holiday data in calendar ${calData.id} (project ${projectData.id}):`, holData);
+                     }
+                   });
+                   validatedCalendars.push({
+                     id: calData.id,
+                     name: calData.name,
+                     countryCode: typeof calData.countryCode === 'string' ? calData.countryCode : undefined, // Accept string or undefined
+                     holidays: validatedHolidays,
+                   });
+                 } else {
+                   console.warn(`Skipping invalid calendar data in project ${projectData.id}:`, calData);
+                 }
+               });
+             } else {
+               // Allow missing holidayCalendars, default to empty array later
+               // console.warn(`Project ${projectData.id} has invalid or missing 'holidayCalendars' array.`);
+             }
 
-
-                            // Validate planning object structure
-                            const loadedPlanning = sprintData.planning;
-                            const validatedPlanning: SprintPlanning = {
-                                goal: (loadedPlanning && typeof loadedPlanning.goal === 'string') ? loadedPlanning.goal : initialSprintPlanning.goal,
-                                newTasks: validateTasks(loadedPlanning?.newTasks),
-                                spilloverTasks: validateTasks(loadedPlanning?.spilloverTasks),
-                                definitionOfDone: (loadedPlanning && typeof loadedPlanning.definitionOfDone === 'string') ? loadedPlanning.definitionOfDone : initialSprintPlanning.definitionOfDone,
-                                testingStrategy: (loadedPlanning && typeof loadedPlanning.testingStrategy === 'string') ? loadedPlanning.testingStrategy : initialSprintPlanning.testingStrategy,
-                            };
-
-
-                            // Validate Sprint Details (legacy)
-                            const validatedDetails: SprintDetailItem[] = [];
-                            if (Array.isArray(sprintData.details)) {
-                                sprintData.details.forEach((detailData: any) => {
-                                    if (
-                                        detailData && typeof detailData === 'object' &&
-                                        typeof detailData.id === 'string' &&
-                                        typeof detailData.ticketNumber === 'string' &&
-                                        typeof detailData.developer === 'string' &&
-                                        typeof detailData.storyPoints === 'number' && !isNaN(detailData.storyPoints) &&
-                                        typeof detailData.devTime === 'string'
-                                    ) {
-                                        validatedDetails.push({
-                                            id: detailData.id,
-                                            ticketNumber: detailData.ticketNumber,
-                                            developer: detailData.developer,
-                                            storyPoints: detailData.storyPoints,
-                                            devTime: detailData.devTime,
-                                        });
-                                    } else {
-                                        console.warn(`Skipping invalid sprint detail in sprint ${sprintData.sprintNumber} (project ${projectData.id}):`, detailData);
-                                    }
-                                });
-                            }
-
-
-                            validatedSprints.push({
-                                sprintNumber: sprintData.sprintNumber,
-                                startDate: sprintData.startDate,
-                                endDate: metrics.endDate,
-                                duration: sprintData.duration,
-                                committedPoints: typeof sprintData.committedPoints === 'number' ? sprintData.committedPoints : 0,
-                                completedPoints: typeof sprintData.completedPoints === 'number' ? sprintData.completedPoints : 0,
-                                totalDays: metrics.totalDays,
-                                status: status,
-                                details: validatedDetails, // Use validated details
-                                planning: validatedPlanning, // Use validated planning
-                            });
+              // --- Validate and Sanitize Teams ---
+              const validatedTeams: Team[] = [];
+              if (Array.isArray(projectData.teams)) {
+                projectData.teams.forEach((teamData: any) => {
+                  if (
+                    teamData && typeof teamData === 'object' &&
+                    teamData.id && typeof teamData.id === 'string' &&
+                    teamData.name && typeof teamData.name === 'string' &&
+                    Array.isArray(teamData.members)
+                  ) {
+                    const validatedTeamMembers: TeamMember[] = [];
+                    teamData.members.forEach((tmData: any) => {
+                      if (tmData && typeof tmData === 'object' && tmData.memberId && typeof tmData.memberId === 'string') {
+                        // Check if memberId actually exists in the validatedMembers list
+                        if (validatedMembers.some(m => m.id === tmData.memberId)) {
+                          validatedTeamMembers.push({ memberId: tmData.memberId });
                         } else {
-                            console.warn(`Skipping invalid sprint data in project ${projectData.id}:`, sprintData);
+                           console.warn(`Skipping invalid team member reference (member ID ${tmData.memberId} not found) in team ${teamData.id} (project ${projectData.id}):`, tmData);
                         }
+                      } else {
+                         console.warn(`Skipping invalid team member data in team ${teamData.id} (project ${projectData.id}):`, tmData);
+                      }
                     });
+                    // Validate leadMemberId exists if present
+                    let leadMemberId = (typeof teamData.leadMemberId === 'string' || teamData.leadMemberId === null) ? teamData.leadMemberId : null;
+                    if (leadMemberId && !validatedMembers.some(m => m.id === leadMemberId)) {
+                         console.warn(`Invalid leadMemberId (${leadMemberId}) in team ${teamData.id} (project ${projectData.id}). Resetting to null.`);
+                         leadMemberId = null;
+                    }
 
-                     validatedSprintData = {
-                        sprints: validatedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber), // Keep sorted
-                        totalStoryPoints: validatedSprints.reduce((sum, s) => sum + s.completedPoints, 0),
-                        daysInSprint: validatedSprints.length > 0 ? Math.max(...validatedSprints.map(s => s.totalDays)) : 0,
-                     };
+                    validatedTeams.push({
+                      id: teamData.id,
+                      name: teamData.name,
+                      members: validatedTeamMembers,
+                      leadMemberId: leadMemberId,
+                    });
+                  } else {
+                     console.warn(`Skipping invalid team data in project ${projectData.id}:`, teamData);
+                  }
+                });
               } else {
-                   console.warn(`Invalid or missing 'sprints' array within sprintData for project ${projectData.id}:`, projectData.sprintData);
+                // Allow missing teams, default to empty array later
               }
-          } else {
-            console.warn(`Invalid or missing sprintData structure in project ${projectData.id}:`, projectData.sprintData);
-          }
 
-          // Add the validated project
-          validatedProjects.push({
-            id: projectData.id,
-            name: projectData.name,
-            members: validatedMembers.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
-            holidayCalendars: validatedCalendars.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
-            teams: validatedTeams.sort((a, b) => a.name.localeCompare(b.name)), // Add validated teams, sorted
-            sprintData: validatedSprintData,
-          });
-          console.log(`Successfully validated and added project: ${projectData.name}`);
-        }
 
-        // --- End Robust Validation ---
+             // --- Validate and Sanitize SprintData ---
+             let validatedSprintData: SprintData = { ...initialSprintData }; // Start with defaults
+             if (projectData.sprintData && typeof projectData.sprintData === 'object') {
+                 if (Array.isArray(projectData.sprintData.sprints)) {
+                       const validatedSprints: Sprint[] = [];
+                       projectData.sprintData.sprints.forEach((sprintData: any) => {
+                           if (
+                               sprintData && typeof sprintData === 'object' &&
+                               typeof sprintData.sprintNumber === 'number' && !isNaN(sprintData.sprintNumber) &&
+                               typeof sprintData.startDate === 'string' && isValid(parseISO(sprintData.startDate)) &&
+                               typeof sprintData.duration === 'string'
+                               // Optional fields checked below
+                           ) {
+                               let status: SprintStatus = sprintData.status ?? 'Planned';
+                               const metrics = calculateSprintMetrics(sprintData.startDate, sprintData.duration);
 
-        console.log("Validation complete. Final projects:", validatedProjects);
-        setProjects(validatedProjects);
+                               // Auto-complete based on date if status is not already 'Completed'
+                               if (metrics.endDate !== 'N/A' && clientNow && isPast(parseISO(metrics.endDate)) && status !== 'Completed') {
+                                   status = 'Completed';
+                               }
 
-        // Set selected project ID: prioritize last viewed, then first project, then null
-        const lastProjectId = localStorage.getItem('selectedProjectId');
-        console.log("Last selected project ID from localStorage:", lastProjectId);
-        if (lastProjectId && validatedProjects.some(p => p.id === lastProjectId)) {
-          console.log(`Setting selected project ID to last viewed: ${lastProjectId}`);
-          setSelectedProjectId(lastProjectId);
-        } else if (validatedProjects.length > 0) {
-          console.log(`Setting selected project ID to first project: ${validatedProjects[0].id}`);
-          setSelectedProjectId(validatedProjects[0].id);
-        } else {
-          console.log("No valid projects found or last selected invalid. Setting selected project ID to null.");
-          setSelectedProjectId(null);
-        }
+                                // Validate Planning Tasks (new and spillover)
+                                const validateTasks = (tasks: any[] | undefined): Task[] => {
+                                   if (!Array.isArray(tasks)) return [];
+                                   const emptyTask = createEmptyTaskRow();
+                                   return tasks.map((taskData: any) => {
+                                       if (!taskData || typeof taskData !== 'object') return null; // Skip invalid task data
+                                       return {
+                                           id: typeof taskData.id === 'string' ? taskData.id : `task_load_${Date.now()}_${Math.random()}`,
+                                           description: typeof taskData.description === 'string' ? taskData.description : emptyTask.description,
+                                           storyPoints: (typeof taskData.storyPoints === 'number' || typeof taskData.storyPoints === 'string') ? taskData.storyPoints : emptyTask.storyPoints,
+                                           devEstimatedTime: typeof taskData.devEstimatedTime === 'string' ? taskData.devEstimatedTime : emptyTask.devEstimatedTime,
+                                           qaEstimatedTime: typeof taskData.qaEstimatedTime === 'string' ? taskData.qaEstimatedTime : emptyTask.qaEstimatedTime,
+                                           bufferTime: typeof taskData.bufferTime === 'string' ? taskData.bufferTime : emptyTask.bufferTime,
+                                           assignee: typeof taskData.assignee === 'string' ? taskData.assignee : emptyTask.assignee,
+                                           reviewer: typeof taskData.reviewer === 'string' ? taskData.reviewer : emptyTask.reviewer,
+                                           status: typeof taskData.status === 'string' && taskStatuses.includes(taskData.status as any) ? taskData.status : emptyTask.status,
+                                           startDate: typeof taskData.startDate === 'string' && isValid(parseISO(taskData.startDate)) ? taskData.startDate : emptyTask.startDate,
+                                           // Legacy fields - keep optional for compatibility
+                                           ticketNumber: typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : undefined,
+                                           devTime: typeof taskData.devTime === 'string' ? taskData.devTime : undefined,
+                                       };
+                                   }).filter((task): task is Task => task !== null); // Filter out nulls
+                               };
 
-      } catch (error: any) {
-          console.error("CRITICAL: Failed to parse or validate project data from localStorage. Error:", error.message, error.stack);
-          // Avoid clearing localStorage immediately unless the data is truly unrecoverable/malformed JSON
-          if (error instanceof SyntaxError) {
-             console.warn("SyntaxError encountered. Clearing corrupted localStorage data.");
-             localStorage.removeItem('appData');
-             localStorage.removeItem('selectedProjectId');
-          } else {
-             console.warn("Validation error encountered. Data might be partially invalid. Retaining localStorage data for inspection.");
-          }
-          setProjects([]);
-          setSelectedProjectId(null);
-          toast({
-            variant: "destructive",
-            title: "Data Load Error",
-            description: "Could not load project data. Storage might contain invalid data. Please check console for details.",
-          });
-      } finally {
-           console.log("Finished loading data attempt.");
-           setIsLoading(false); // End loading
-      }
-    } else {
-      console.log("No data found in localStorage ('appData'). Initializing empty state.");
-      setProjects([]);
-      setSelectedProjectId(null);
-      setIsLoading(false); // End loading
+
+                               // Validate planning object structure
+                               const loadedPlanning = sprintData.planning;
+                               const validatedPlanning: SprintPlanning = {
+                                   goal: (loadedPlanning && typeof loadedPlanning.goal === 'string') ? loadedPlanning.goal : initialSprintPlanning.goal,
+                                   newTasks: validateTasks(loadedPlanning?.newTasks),
+                                   spilloverTasks: validateTasks(loadedPlanning?.spilloverTasks),
+                                   definitionOfDone: (loadedPlanning && typeof loadedPlanning.definitionOfDone === 'string') ? loadedPlanning.definitionOfDone : initialSprintPlanning.definitionOfDone,
+                                   testingStrategy: (loadedPlanning && typeof loadedPlanning.testingStrategy === 'string') ? loadedPlanning.testingStrategy : initialSprintPlanning.testingStrategy,
+                               };
+
+
+                               // Validate Sprint Details (legacy)
+                               const validatedDetails: SprintDetailItem[] = [];
+                               if (Array.isArray(sprintData.details)) {
+                                   sprintData.details.forEach((detailData: any) => {
+                                       if (
+                                           detailData && typeof detailData === 'object' &&
+                                           typeof detailData.id === 'string' &&
+                                           typeof detailData.ticketNumber === 'string' &&
+                                           typeof detailData.developer === 'string' &&
+                                           typeof detailData.storyPoints === 'number' && !isNaN(detailData.storyPoints) &&
+                                           typeof detailData.devTime === 'string'
+                                       ) {
+                                           validatedDetails.push({
+                                               id: detailData.id,
+                                               ticketNumber: detailData.ticketNumber,
+                                               developer: detailData.developer,
+                                               storyPoints: detailData.storyPoints,
+                                               devTime: detailData.devTime,
+                                           });
+                                       } else {
+                                           console.warn(`Skipping invalid sprint detail in sprint ${sprintData.sprintNumber} (project ${projectData.id}):`, detailData);
+                                       }
+                                   });
+                               }
+
+
+                               validatedSprints.push({
+                                   sprintNumber: sprintData.sprintNumber,
+                                   startDate: sprintData.startDate,
+                                   endDate: metrics.endDate,
+                                   duration: sprintData.duration,
+                                   committedPoints: typeof sprintData.committedPoints === 'number' ? sprintData.committedPoints : 0,
+                                   completedPoints: typeof sprintData.completedPoints === 'number' ? sprintData.completedPoints : 0,
+                                   totalDays: metrics.totalDays,
+                                   status: status,
+                                   details: validatedDetails, // Use validated details
+                                   planning: validatedPlanning, // Use validated planning
+                               });
+                           } else {
+                               console.warn(`Skipping invalid sprint data in project ${projectData.id}:`, sprintData);
+                           }
+                       });
+
+                        validatedSprintData = {
+                           sprints: validatedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber), // Keep sorted
+                           totalStoryPoints: validatedSprints.reduce((sum, s) => sum + s.completedPoints, 0),
+                           daysInSprint: validatedSprints.length > 0 ? Math.max(...validatedSprints.map(s => s.totalDays)) : 0,
+                        };
+                 } else {
+                      console.warn(`Invalid or missing 'sprints' array within sprintData for project ${projectData.id}:`, projectData.sprintData);
+                 }
+             } else {
+               console.warn(`Invalid or missing sprintData structure in project ${projectData.id}:`, projectData.sprintData);
+             }
+
+             // Add the validated project
+             validatedProjects.push({
+               id: projectData.id,
+               name: projectData.name,
+               members: validatedMembers.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
+               holidayCalendars: validatedCalendars.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
+               teams: validatedTeams.sort((a, b) => a.name.localeCompare(b.name)), // Add validated teams, sorted
+               sprintData: validatedSprintData,
+             });
+             console.log(`Successfully validated and added project: ${projectData.name}`);
+           }
+
+           // --- End Robust Validation ---
+
+           console.log("Validation complete. Final projects:", validatedProjects);
+           setProjects(validatedProjects);
+
+           // Set selected project ID: prioritize last viewed, then first project, then null
+           const lastProjectId = localStorage.getItem('selectedProjectId');
+           console.log("Last selected project ID from localStorage:", lastProjectId);
+           if (lastProjectId && validatedProjects.some(p => p.id === lastProjectId)) {
+             console.log(`Setting selected project ID to last viewed: ${lastProjectId}`);
+             setSelectedProjectId(lastProjectId);
+           } else if (validatedProjects.length > 0) {
+             console.log(`Setting selected project ID to first project: ${validatedProjects[0].id}`);
+             setSelectedProjectId(validatedProjects[0].id);
+           } else {
+             console.log("No valid projects found or last selected invalid. Setting selected project ID to null.");
+             setSelectedProjectId(null);
+           }
+
+         } catch (error: any) {
+             console.error("CRITICAL: Failed to parse or validate project data from localStorage. Error:", error.message, error.stack);
+             // Avoid clearing localStorage immediately unless the data is truly unrecoverable/malformed JSON
+             if (error instanceof SyntaxError) {
+                console.warn("SyntaxError encountered. Clearing corrupted localStorage data.");
+                localStorage.removeItem('appData');
+                localStorage.removeItem('selectedProjectId');
+             } else {
+                console.warn("Validation error encountered. Data might be partially invalid. Retaining localStorage data for inspection.");
+             }
+             setProjects([]);
+             setSelectedProjectId(null);
+             toast({
+               variant: "destructive",
+               title: "Data Load Error",
+               description: "Could not load project data. Storage might contain invalid data. Please check console for details.",
+             });
+         } finally {
+              console.log("Finished loading data attempt.");
+              setIsLoading(false); // End loading
+         }
+       } else {
+         console.log("No data found in localStorage ('appData'). Initializing empty state.");
+         setProjects([]);
+         setSelectedProjectId(null);
+         setIsLoading(false); // End loading
+       }
+    } catch (err) {
+       console.error("Error accessing localStorage:", err);
+       toast({
+         variant: "destructive",
+         title: "Storage Error",
+         description: "Could not access local storage. Data cannot be loaded or saved.",
+       });
+       setProjects([]);
+       setSelectedProjectId(null);
+       setIsLoading(false);
     }
   }, [clientNow, toast]); // Dependency on clientNow ensures it runs after mount, toast for notifications
 
-   // Effect to save data to localStorage whenever projects change
-   useEffect(() => {
-       // Only run save logic after initial load is complete
-       if (!isLoading) {
-          console.log("Projects state changed, attempting to save to localStorage...");
-           try {
-               const dataToSave = JSON.stringify(projects);
-               console.log("Stringified data to save:", dataToSave.substring(0, 500) + '...'); // Log truncated data
-               localStorage.setItem('appData', dataToSave);
-               console.log("Successfully saved project data to localStorage.");
-           } catch (error: any) {
-               console.error("CRITICAL: Failed to save project data to localStorage. Error:", error.message, error.stack);
-               toast({
-                   variant: "destructive",
-                   title: "Save Error",
-                   description: "Could not save project data locally. Data might be too large or storage is unavailable.",
-               });
-           }
-       } else {
-         console.log("Skipping save to localStorage during initial load.");
-       }
-   }, [projects, isLoading, toast]); // Add isLoading dependency
+    // Effect to save data to localStorage whenever projects change
+    useEffect(() => {
+        // Only run save logic after initial load is complete
+        if (!isLoading) {
+            console.log("Projects state changed, attempting to save to localStorage...");
+            try {
+                const dataToSave = JSON.stringify(projects);
+                console.log("Stringified data to save:", dataToSave.substring(0, 500) + '...'); // Log truncated data
+                localStorage.setItem('appData', dataToSave);
+                console.log("Successfully saved project data to localStorage.");
+            } catch (error: any) {
+                console.error("CRITICAL: Failed to save project data to localStorage. Error:", error.message, error.stack);
+                toast({
+                    variant: "destructive",
+                    title: "Save Error",
+                    description: "Could not save project data locally. Data might be too large or storage is unavailable.",
+                });
+            }
+        } else {
+            console.log("Skipping save to localStorage during initial load.");
+        }
+    }, [projects, isLoading, toast]); // Add isLoading dependency
 
-   // Effect to save the selected project ID
-   useEffect(() => {
-      if (!isLoading) { // Only save after initial load
-         if (selectedProjectId) {
-            console.log(`Saving selected project ID to localStorage: ${selectedProjectId}`);
-            localStorage.setItem('selectedProjectId', selectedProjectId);
-         } else {
-            console.log("No project selected, removing selectedProjectId from localStorage.");
-            // Remove if no project is selected to avoid stale references
-            localStorage.removeItem('selectedProjectId');
-         }
-      } else {
-         console.log("Skipping saving selected project ID during initial load.");
-      }
-   }, [selectedProjectId, isLoading]);
+    // Effect to save the selected project ID
+    useEffect(() => {
+        if (!isLoading) { // Only save after initial load
+            try {
+                if (selectedProjectId) {
+                    console.log(`Saving selected project ID to localStorage: ${selectedProjectId}`);
+                    localStorage.setItem('selectedProjectId', selectedProjectId);
+                } else {
+                    console.log("No project selected, removing selectedProjectId from localStorage.");
+                    // Remove if no project is selected to avoid stale references
+                    localStorage.removeItem('selectedProjectId');
+                }
+            } catch (err) {
+                console.error("Error accessing localStorage for selectedProjectId:", err);
+                 toast({
+                   variant: "destructive",
+                   title: "Storage Error",
+                   description: "Could not save selected project.",
+                 });
+            }
+        } else {
+            console.log("Skipping saving selected project ID during initial load.");
+        }
+    }, [selectedProjectId, isLoading, toast]);
 
 
   // Find the currently selected project object
