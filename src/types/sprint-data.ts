@@ -52,6 +52,7 @@ export interface Task {
   ticketNumber?: string; // Primary identifier for tasks *within* a sprint (e.g., JIRA key), can be same as backlogId initially
   title?: string; // Optional: A more descriptive title for the task
   description?: string; // Optional: Detailed description of the task
+  acceptanceCriteria?: string; // Optional: Acceptance criteria for the task
   storyPoints?: number | string; // Can be number or empty string from input
   devEstimatedTime?: string; // Optional: e.g., "2d", "4h", "1w 2d"
   qaEstimatedTime?: string; // Optional: Defaults to "2d"
@@ -172,6 +173,7 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     ticketNumber: '', // Keep ticketNumber separate for when it moves to sprint
     title: '',
     description: '',
+    acceptanceCriteria: undefined, // Added acceptance criteria
     storyPoints: undefined,
     priority: 'Medium',
     taskType: 'New Feature', // Default task type
