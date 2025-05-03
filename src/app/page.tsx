@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit } from 'lucide-react'; // Added Edit
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound } from 'lucide-react'; // Added UsersRound
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -20,12 +20,13 @@ import EntryTab from '@/components/entry-tab';
 import ReportsTab from '@/components/reports-tab';
 import PlanningTab from '@/components/planning-tab';
 import MembersTab from '@/components/members-tab';
-import HolidaysTab from '@/components/holidays-tab'; // Import HolidaysTab
+import HolidaysTab from '@/components/holidays-tab';
+import TeamsTab from '@/components/teams-tab'; // Import TeamsTab
 import AddMembersDialog from '@/components/add-members-dialog';
 
 
-import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday } from '@/types/sprint-data'; // Added Task, HolidayCalendar types
-import { initialSprintData, initialSprintPlanning, taskStatuses } from '@/types/sprint-data';
+import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember } from '@/types/sprint-data'; // Added Task, HolidayCalendar, Team, TeamMember types
+import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isPast, isValid } from 'date-fns';
@@ -135,7 +136,7 @@ export default function Home() {
                   id: memberData.id,
                   name: memberData.name,
                   role: memberData.role,
-                  holidayCalendarId: typeof memberData.holidayCalendarId === 'string' ? memberData.holidayCalendarId : null, // Default to null if missing/invalid
+                  holidayCalendarId: typeof memberData.holidayCalendarId === 'string' || memberData.holidayCalendarId === null ? memberData.holidayCalendarId : null, // Allow null
                 });
               } else {
                 console.warn(`Skipping invalid member data in project ${projectData.id}:`, memberData);
@@ -184,8 +185,53 @@ export default function Home() {
               }
             });
           } else {
-            console.warn(`Project ${projectData.id} has invalid or missing 'holidayCalendars' array.`);
+            // Allow missing holidayCalendars, default to empty array later
+            // console.warn(`Project ${projectData.id} has invalid or missing 'holidayCalendars' array.`);
           }
+
+           // --- Validate and Sanitize Teams ---
+           const validatedTeams: Team[] = [];
+           if (Array.isArray(projectData.teams)) {
+             projectData.teams.forEach((teamData: any) => {
+               if (
+                 teamData && typeof teamData === 'object' &&
+                 teamData.id && typeof teamData.id === 'string' &&
+                 teamData.name && typeof teamData.name === 'string' &&
+                 Array.isArray(teamData.members)
+               ) {
+                 const validatedTeamMembers: TeamMember[] = [];
+                 teamData.members.forEach((tmData: any) => {
+                   if (tmData && typeof tmData === 'object' && tmData.memberId && typeof tmData.memberId === 'string') {
+                     // Check if memberId actually exists in the validatedMembers list
+                     if (validatedMembers.some(m => m.id === tmData.memberId)) {
+                       validatedTeamMembers.push({ memberId: tmData.memberId });
+                     } else {
+                        console.warn(`Skipping invalid team member reference (member ID ${tmData.memberId} not found) in team ${teamData.id} (project ${projectData.id}):`, tmData);
+                     }
+                   } else {
+                      console.warn(`Skipping invalid team member data in team ${teamData.id} (project ${projectData.id}):`, tmData);
+                   }
+                 });
+                 // Validate leadMemberId exists if present
+                 let leadMemberId = (typeof teamData.leadMemberId === 'string' || teamData.leadMemberId === null) ? teamData.leadMemberId : null;
+                 if (leadMemberId && !validatedMembers.some(m => m.id === leadMemberId)) {
+                      console.warn(`Invalid leadMemberId (${leadMemberId}) in team ${teamData.id} (project ${projectData.id}). Resetting to null.`);
+                      leadMemberId = null;
+                 }
+
+                 validatedTeams.push({
+                   id: teamData.id,
+                   name: teamData.name,
+                   members: validatedTeamMembers,
+                   leadMemberId: leadMemberId,
+                 });
+               } else {
+                  console.warn(`Skipping invalid team data in project ${projectData.id}:`, teamData);
+               }
+             });
+           } else {
+             // Allow missing teams, default to empty array later
+           }
 
 
           // --- Validate and Sanitize SprintData ---
@@ -306,6 +352,7 @@ export default function Home() {
             name: projectData.name,
             members: validatedMembers.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
             holidayCalendars: validatedCalendars.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
+            teams: validatedTeams.sort((a, b) => a.name.localeCompare(b.name)), // Add validated teams, sorted
             sprintData: validatedSprintData,
           });
           console.log(`Successfully validated and added project: ${projectData.name}`);
@@ -537,7 +584,7 @@ export default function Home() {
     setProjects(prevProjects => {
       const updatedProjects = prevProjects.map(p => {
          if (p.id === selectedProjectId) {
-           const mergedSprints = [...p.sprintData.sprints]; // Start with existing sprints
+           const mergedSprints = [...(p.sprintData.sprints ?? [])]; // Start with existing sprints (handle null/undefined)
 
             newSprintData.sprints.forEach(newSprint => {
                 const existingIndex = mergedSprints.findIndex(oldSprint => oldSprint.sprintNumber === newSprint.sprintNumber);
@@ -579,7 +626,7 @@ export default function Home() {
               sprintData: {
                  sprints: finalSprints,
                  totalStoryPoints: finalSprints.reduce((sum, s) => sum + s.completedPoints, 0),
-                 daysInSprint: Math.max(...finalSprints.map(s => s.totalDays), p.sprintData.daysInSprint || 0), // Recalculate max days
+                 daysInSprint: Math.max(...finalSprints.map(s => s.totalDays), p.sprintData?.daysInSprint || 0), // Recalculate max days (handle null/undefined)
               },
            };
          }
@@ -606,7 +653,7 @@ export default function Home() {
      setProjects(prevProjects => {
         const updatedProjects = prevProjects.map(p => {
           if (p.id === selectedProjectId) {
-              let tempSprints = [...p.sprintData.sprints]; // Create a mutable copy
+              let tempSprints = [...(p.sprintData.sprints ?? [])]; // Create a mutable copy (handle null/undefined)
 
               // First pass: Deactivate other sprints if the target is becoming active
               if (newStatus === 'Active') {
@@ -652,7 +699,7 @@ export default function Home() {
               return {
                   ...p,
                   sprintData: {
-                      ...p.sprintData,
+                      ...(p.sprintData ?? initialSprintData), // Use initialSprintData if sprintData is null/undefined
                       sprints: updatedSprints,
                   },
               };
@@ -682,7 +729,7 @@ export default function Home() {
        const updatedProjects = prevProjects.map(p => {
         if (p.id === selectedProjectId) {
             projectNameForToast = p.name;
-            if (p.sprintData.sprints.some(s => s.sprintNumber === sprintDetails.sprintNumber)) {
+            if ((p.sprintData.sprints ?? []).some(s => s.sprintNumber === sprintDetails.sprintNumber)) { // Handle null/undefined
                 console.error(`Sprint number ${sprintDetails.sprintNumber} already exists for project ${p.name}.`);
                 // Error handled by returning original 'p'
                 return p;
@@ -717,16 +764,16 @@ export default function Home() {
                 planning: validatedPlanning,
             };
 
-            const updatedSprints = [...p.sprintData.sprints, newSprint];
+            const updatedSprints = [...(p.sprintData.sprints ?? []), newSprint]; // Handle null/undefined
             updatedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber);
             projectWasUpdated = true; // Mark that an update occurred
 
             return {
                 ...p,
                 sprintData: {
-                    ...p.sprintData,
+                    ...(p.sprintData ?? initialSprintData), // Use initialSprintData if sprintData is null/undefined
                     sprints: updatedSprints,
-                    daysInSprint: Math.max(p.sprintData.daysInSprint || 0, newSprint.totalDays),
+                    daysInSprint: Math.max(p.sprintData?.daysInSprint || 0, newSprint.totalDays), // Handle null/undefined
                 },
             };
         }
@@ -816,6 +863,35 @@ export default function Home() {
 
  }, [selectedProjectId, toast, projects]);
 
+   // Handler to save teams for the *selected* project
+   const handleSaveTeams = useCallback((updatedTeams: Team[]) => {
+     if (!selectedProjectId) {
+         toast({ variant: "destructive", title: "Error", description: "No project selected." });
+         return;
+     }
+     const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+     setProjects(prevProjects => {
+         const updatedProjects = prevProjects.map(p => {
+             if (p.id === selectedProjectId) {
+                 // Optionally, add validation here to ensure team members and leads still exist
+                 const validTeams = updatedTeams.map(team => {
+                     const validMembers = team.members.filter(tm => (p.members || []).some(m => m.id === tm.memberId));
+                     let validLead = team.leadMemberId;
+                     if (validLead && !(p.members || []).some(m => m.id === validLead)) {
+                          console.warn(`Lead member ID ${validLead} for team ${team.name} not found. Resetting.`);
+                          validLead = null;
+                     }
+                     return { ...team, members: validMembers, leadMemberId: validLead };
+                 });
+                 return { ...p, teams: validTeams };
+             }
+             return p;
+         });
+         return updatedProjects;
+     });
+     toast({ title: "Success", description: `Teams updated for project '${currentProjectName}'.` });
+   }, [selectedProjectId, toast, projects]);
+
 
   // Handler to add members to the *newly created* project (from dialog)
    const handleAddMembersToNewProject = useCallback((addedMembers: Member[]) => {
@@ -849,11 +925,11 @@ export default function Home() {
     setProjects(prevProjects => {
       const updatedProjects = prevProjects.map(p => {
         if (p.id === selectedProjectId) {
-          const filteredSprints = p.sprintData.sprints.filter(s => s.sprintNumber !== sprintNumber);
+          const filteredSprints = (p.sprintData.sprints ?? []).filter(s => s.sprintNumber !== sprintNumber); // Handle null/undefined
           return {
             ...p,
             sprintData: {
-              ...p.sprintData,
+              ...(p.sprintData ?? initialSprintData), // Use initialSprintData if sprintData is null/undefined
               sprints: filteredSprints,
               // Recalculate overall metrics if needed
               totalStoryPoints: filteredSprints.reduce((sum, s) => sum + s.completedPoints, 0),
@@ -871,7 +947,7 @@ export default function Home() {
 
   // Export data for the currently selected project
   const handleExport = () => {
-    if (!selectedProject || (!selectedProject.sprintData.sprints.length && !selectedProject.members.length && !selectedProject.holidayCalendars?.length)) {
+    if (!selectedProject || (!selectedProject.sprintData?.sprints?.length && !selectedProject.members?.length && !selectedProject.holidayCalendars?.length && !selectedProject.teams?.length)) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -919,7 +995,7 @@ export default function Home() {
        }
 
        // Planning Sheets (Summary and Tasks)
-       const planningExists = selectedProject.sprintData?.sprints?.some(s => s.planning && (s.planning.goal || s.planning.newTasks.length > 0 || s.planning.spilloverTasks.length > 0 || s.planning.definitionOfDone || s.planning.testingStrategy));
+       const planningExists = selectedProject.sprintData?.sprints?.some(s => s.planning && (s.planning.goal || s.planning.newTasks?.length > 0 || s.planning.spilloverTasks?.length > 0 || s.planning.definitionOfDone || s.planning.testingStrategy));
        if (planningExists) {
            const planningSummaryData: any[] = [];
            const planningTasksData: any[] = [];
@@ -938,7 +1014,7 @@ export default function Home() {
                       'TaskID': task.id,
                       'Description': task.description,
                       'StoryPoints': task.storyPoints,
-                      'DevEstTime': task.devEstimatedTime, // Corrected field name
+                      'DevEstTime': task.devEstimatedTime,
                       'QAEstTime': task.qaEstimatedTime,
                       'BufferTime': task.bufferTime,
                       'Assignee': task.assignee,
@@ -1007,6 +1083,32 @@ export default function Home() {
             XLSX.utils.book_append_sheet(wb, wsHolidays, 'Holiday Calendars');
        }
 
+        // Teams Sheet
+        if (selectedProject.teams && selectedProject.teams.length > 0) {
+            const teamsData: any[] = [];
+            selectedProject.teams.forEach(team => {
+                team.members.forEach(tm => {
+                    teamsData.push({
+                        'TeamID': team.id,
+                        'TeamName': team.name,
+                        'LeadMemberID': team.leadMemberId,
+                        'MemberID': tm.memberId,
+                    });
+                });
+                 // Add row for team itself if it has no members
+                 if (team.members.length === 0) {
+                    teamsData.push({
+                        'TeamID': team.id,
+                        'TeamName': team.name,
+                        'LeadMemberID': team.leadMemberId,
+                        'MemberID': '',
+                    });
+                 }
+            });
+            const wsTeams = XLSX.utils.json_to_sheet(teamsData);
+            XLSX.utils.book_append_sheet(wb, wsTeams, 'Teams');
+        }
+
 
       const projectNameSlug = selectedProject.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       XLSX.writeFile(wb, `sprint_stats_${projectNameSlug}_report.xlsx`);
@@ -1039,6 +1141,7 @@ export default function Home() {
       sprintData: initialSprintData,
       members: [], // Initialize with empty members array
       holidayCalendars: [], // Initialize with empty holiday calendars
+      teams: [], // Initialize with empty teams array
     };
 
     // Update projects state first
@@ -1052,7 +1155,7 @@ export default function Home() {
      setTimeout(() => {
         toast({ title: "Project Created", description: `Project "${trimmedName}" created successfully.` });
         setIsAddMembersDialogOpen(true); // Open the dialog AFTER state update
-    }, 0);
+    }, 10); // Increased timeout slightly
   };
 
 
@@ -1126,7 +1229,7 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-4">
-          {selectedProject && (selectedProject.sprintData.sprints.length > 0 || selectedProject.members.length > 0 || selectedProject.holidayCalendars?.length > 0) && (
+          {selectedProject && (selectedProject.sprintData?.sprints?.length > 0 || selectedProject.members?.length > 0 || selectedProject.holidayCalendars?.length > 0 || selectedProject.teams?.length > 0) && (
             <Button onClick={handleExport} variant="outline" size="sm">
               <Download className="mr-2 h-4 w-4" />
               Export Project Data
@@ -1155,81 +1258,93 @@ export default function Home() {
              </Card>
          ) : selectedProject ? (
              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-6 mb-6"> {/* Updated grid-cols to 6 */}
-                <TabsTrigger value="home"><HomeIcon className="mr-2 h-4 w-4" />Home</TabsTrigger>
-                <TabsTrigger value="entry"><ListPlus className="mr-2 h-4 w-4" />Entry (Legacy)</TabsTrigger>
-                <TabsTrigger value="planning"><NotebookPen className="mr-2 h-4 w-4" />Planning</TabsTrigger>
-                <TabsTrigger value="members"><Users className="mr-2 h-4 w-4" />Members</TabsTrigger>
-                <TabsTrigger value="holidays"><CalendarDays className="mr-2 h-4 w-4" />Holidays</TabsTrigger> {/* Added Holidays Trigger */}
-                <TabsTrigger value="reports"><BarChart className="mr-2 h-4 w-4" />Reports</TabsTrigger>
-              </TabsList>
+               <TabsList className="grid w-full grid-cols-7 mb-6"> {/* Updated grid-cols to 7 */}
+                 <TabsTrigger value="home"><HomeIcon className="mr-2 h-4 w-4" />Home</TabsTrigger>
+                 <TabsTrigger value="entry"><ListPlus className="mr-2 h-4 w-4" />Entry (Legacy)</TabsTrigger>
+                 <TabsTrigger value="planning"><NotebookPen className="mr-2 h-4 w-4" />Planning</TabsTrigger>
+                 <TabsTrigger value="members"><Users className="mr-2 h-4 w-4" />Members</TabsTrigger>
+                 <TabsTrigger value="teams"><UsersRound className="mr-2 h-4 w-4" />Teams</TabsTrigger> {/* Added Teams Trigger */}
+                 <TabsTrigger value="holidays"><CalendarDays className="mr-2 h-4 w-4" />Holidays</TabsTrigger>
+                 <TabsTrigger value="reports"><BarChart className="mr-2 h-4 w-4" />Reports</TabsTrigger>
+               </TabsList>
 
-              <TabsContent value="home">
-                 <HomeTab
-                     projectId={selectedProject.id}
-                     sprintData={selectedProject.sprintData}
-                     projectName={selectedProject.name}
-                     onDeleteSprint={handleDeleteSprint} // Pass delete handler
-                 />
-              </TabsContent>
-
-              <TabsContent value="entry">
-                <EntryTab
-                    key={resetManualFormKey}
-                    onSaveSprints={handleSaveLegacySprints} // Use the legacy save handler
-                    initialSprintData={selectedProject.sprintData}
-                    parseSprintData={parseSprintData}
-                    projectName={selectedProject.name}
-                />
-              </TabsContent>
-
-              <TabsContent value="planning">
-                  <PlanningTab
-                    sprints={selectedProject.sprintData.sprints}
-                    onSavePlanning={handleSavePlanningAndUpdateStatus}
-                    onCreateAndPlanSprint={handleCreateAndPlanSprint}
-                    projectName={selectedProject.name}
-                    members={selectedProject.members}
-                    holidayCalendars={selectedProject.holidayCalendars ?? []} // Pass holiday calendars
+               <TabsContent value="home">
+                  <HomeTab
+                      projectId={selectedProject.id}
+                      sprintData={selectedProject.sprintData}
+                      projectName={selectedProject.name}
+                      onDeleteSprint={handleDeleteSprint} // Pass delete handler
                   />
                </TabsContent>
 
-               <TabsContent value="members">
-                 <MembersTab
-                   projectId={selectedProject.id}
-                   projectName={selectedProject.name}
-                   initialMembers={selectedProject.members}
-                   onSaveMembers={handleSaveMembers}
-                   holidayCalendars={selectedProject.holidayCalendars ?? []} // Pass holiday calendars
+               <TabsContent value="entry">
+                 <EntryTab
+                     key={resetManualFormKey}
+                     onSaveSprints={handleSaveLegacySprints} // Use the legacy save handler
+                     initialSprintData={selectedProject.sprintData}
+                     parseSprintData={parseSprintData}
+                     projectName={selectedProject.name}
                  />
                </TabsContent>
 
-               <TabsContent value="holidays">
-                 <HolidaysTab
-                   projectId={selectedProject.id}
-                   projectName={selectedProject.name}
-                   initialCalendars={selectedProject.holidayCalendars ?? []}
-                   onSaveCalendars={handleSaveHolidayCalendars}
-                 />
-               </TabsContent>
+               <TabsContent value="planning">
+                   <PlanningTab
+                     sprints={selectedProject.sprintData.sprints ?? []}
+                     onSavePlanning={handleSavePlanningAndUpdateStatus}
+                     onCreateAndPlanSprint={handleCreateAndPlanSprint}
+                     projectName={selectedProject.name}
+                     members={selectedProject.members ?? []}
+                     holidayCalendars={selectedProject.holidayCalendars ?? []}
+                   />
+                </TabsContent>
 
-              <TabsContent value="reports">
-                 <ReportsTab sprintData={selectedProject.sprintData} projectName={selectedProject.name} />
-              </TabsContent>
-            </Tabs>
-         ) : (
-            <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
-              <CardHeader className="text-center">
-                <CardTitle>No Project Selected</CardTitle>
-                <CardDescription>Please select a project from the dropdown above, or create a new one.</CardDescription>
-              </CardHeader>
-            </Card>
-         )}
+                <TabsContent value="members">
+                  <MembersTab
+                    projectId={selectedProject.id}
+                    projectName={selectedProject.name}
+                    initialMembers={selectedProject.members ?? []}
+                    onSaveMembers={handleSaveMembers}
+                    holidayCalendars={selectedProject.holidayCalendars ?? []}
+                  />
+                </TabsContent>
+
+                 <TabsContent value="teams">
+                    <TeamsTab
+                        projectId={selectedProject.id}
+                        projectName={selectedProject.name}
+                        initialTeams={selectedProject.teams ?? []}
+                        allMembers={selectedProject.members ?? []}
+                        onSaveTeams={handleSaveTeams}
+                    />
+                </TabsContent>
+
+                <TabsContent value="holidays">
+                  <HolidaysTab
+                    projectId={selectedProject.id}
+                    projectName={selectedProject.name}
+                    initialCalendars={selectedProject.holidayCalendars ?? []}
+                    onSaveCalendars={handleSaveHolidayCalendars}
+                  />
+                </TabsContent>
+
+               <TabsContent value="reports">
+                  <ReportsTab sprintData={selectedProject.sprintData} projectName={selectedProject.name} />
+               </TabsContent>
+             </Tabs>
+          ) : (
+             <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
+               <CardHeader className="text-center">
+                 <CardTitle>No Project Selected</CardTitle>
+                 <CardDescription>Please select a project from the dropdown above, or create a new one.</CardDescription>
+               </CardHeader>
+             </Card>
+          )}
       </main>
 
       <footer className="text-center p-4 text-xs text-muted-foreground border-t">
-         Sprint Stats - Agile Reporting Made Easy
+          Sprint Stats - Agile Reporting Made Easy
       </footer>
     </div>
   );
 }
+

@@ -26,6 +26,21 @@ export interface Member {
   holidayCalendarId?: string | null; // Optional: ID of the assigned HolidayCalendar
 }
 
+// Represents a member linked within a team, potentially with a specific role in that team
+export interface TeamMember {
+  memberId: string; // Corresponds to the Member's id
+  // teamRole?: string; // Optional: Role specific to this team (e.g., Lead) - Future enhancement
+}
+
+// Represents a team within a project
+export interface Team {
+  id: string; // Unique ID for the team
+  name: string; // e.g., "Frontend Team", "QA Team Alpha"
+  members: TeamMember[]; // Array of members belonging to this team
+  leadMemberId?: string | null; // Optional: ID of the member designated as team lead
+}
+
+
 // Represents a single task within a sprint plan
 export interface Task {
   id: string; // Unique ID for the task item
@@ -89,6 +104,7 @@ export interface Project {
     sprintData: SprintData;
     members: Member[]; // Array of team members associated with the project
     holidayCalendars?: HolidayCalendar[]; // Optional: Array of holiday calendars specific to this project
+    teams?: Team[]; // Optional: Array of teams within the project
 }
 
 // The top-level data structure stored will be an array of Project objects
@@ -125,3 +141,10 @@ export const predefinedRoles = [
 
 // Predefined Task Statuses - Added 'In Review' and 'QA'
 export const taskStatuses: Array<Task['status']> = ['To Do', 'In Progress', 'In Review', 'QA', 'Done', 'Blocked'];
+
+// Initial empty state for a new Team
+export const initialTeam: Omit<Team, 'id'> = {
+    name: '',
+    members: [],
+    leadMemberId: null,
+};
