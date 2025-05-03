@@ -81,6 +81,7 @@ export default function Home() {
   const { toast } = useToast();
   const [resetManualFormKey, setResetManualFormKey] = useState(0); // State to trigger form reset
   const [clientNow, setClientNow] = useState<Date | null>(null); // For client-side date comparison
+  const [isLoading, setIsLoading] = useState(true); // Add loading state
 
   // Get current date on client mount to avoid hydration issues
   useEffect(() => {
@@ -88,275 +89,319 @@ export default function Home() {
   }, []);
 
 
-  // Effect to load data from localStorage on mount with improved validation
+  // Effect to load data from localStorage on mount with improved validation and logging
   useEffect(() => {
-      const savedData = localStorage.getItem('appData');
-      if (savedData) {
-          let parsedData: any; // Use any initially for safe parsing
-          try {
-              parsedData = JSON.parse(savedData);
+    console.log("Attempting to load data from localStorage...");
+    setIsLoading(true); // Start loading
+    const savedData = localStorage.getItem('appData');
+    if (savedData) {
+      console.log("Found data in localStorage:", savedData);
+      let parsedData: any; // Use any initially for safe parsing
+      try {
+        parsedData = JSON.parse(savedData);
+        console.log("Successfully parsed localStorage data:", parsedData);
 
-              // --- Robust Validation ---
-              if (!Array.isArray(parsedData)) {
-                  throw new Error("Stored data is not an array.");
+        // --- Robust Validation ---
+        if (!Array.isArray(parsedData)) {
+          console.error("Validation Error: Stored data is not an array. Data:", parsedData);
+          throw new Error("Stored data is not an array.");
+        }
+
+        const validatedProjects: Project[] = [];
+
+        for (const projectData of parsedData) {
+          // Validate basic project structure
+          if (
+            !projectData || typeof projectData !== 'object' ||
+            !projectData.id || typeof projectData.id !== 'string' ||
+            !projectData.name || typeof projectData.name !== 'string'
+          ) {
+            console.warn("Skipping invalid project data (basic structure):", projectData);
+            continue; // Skip this invalid project
+          }
+          console.log(`Validating project: ${projectData.name} (ID: ${projectData.id})`);
+
+          // --- Validate and Sanitize Members ---
+          const validatedMembers: Member[] = [];
+          if (Array.isArray(projectData.members)) {
+            projectData.members.forEach((memberData: any) => {
+              if (
+                memberData && typeof memberData === 'object' &&
+                memberData.id && typeof memberData.id === 'string' &&
+                memberData.name && typeof memberData.name === 'string' &&
+                memberData.role && typeof memberData.role === 'string'
+              ) {
+                validatedMembers.push({
+                  id: memberData.id,
+                  name: memberData.name,
+                  role: memberData.role,
+                  holidayCalendarId: typeof memberData.holidayCalendarId === 'string' ? memberData.holidayCalendarId : null, // Default to null if missing/invalid
+                });
+              } else {
+                console.warn(`Skipping invalid member data in project ${projectData.id}:`, memberData);
               }
+            });
+          } else {
+             console.warn(`Project ${projectData.id} has invalid or missing 'members' array.`);
+          }
 
-              const validatedProjects: Project[] = [];
-
-              for (const projectData of parsedData) {
-                   // Validate basic project structure
+          // --- Validate and Sanitize Holiday Calendars ---
+          const validatedCalendars: HolidayCalendar[] = [];
+          if (Array.isArray(projectData.holidayCalendars)) {
+            projectData.holidayCalendars.forEach((calData: any) => {
+              if (
+                calData && typeof calData === 'object' &&
+                calData.id && typeof calData.id === 'string' &&
+                calData.name && typeof calData.name === 'string' &&
+                Array.isArray(calData.holidays)
+              ) {
+                const validatedHolidays: PublicHoliday[] = [];
+                calData.holidays.forEach((holData: any) => {
                   if (
-                      !projectData || typeof projectData !== 'object' ||
-                      !projectData.id || typeof projectData.id !== 'string' ||
-                      !projectData.name || typeof projectData.name !== 'string'
+                    holData && typeof holData === 'object' &&
+                    holData.id && typeof holData.id === 'string' &&
+                    holData.name && typeof holData.name === 'string' &&
+                    holData.date && typeof holData.date === 'string' &&
+                    isValid(parseISO(holData.date)) // Validate date format
                   ) {
-                      console.warn("Skipping invalid project data:", projectData);
-                      continue; // Skip this invalid project
+                    validatedHolidays.push({
+                      id: holData.id,
+                      name: holData.name,
+                      date: holData.date,
+                    });
+                  } else {
+                    console.warn(`Skipping invalid holiday data in calendar ${calData.id} (project ${projectData.id}):`, holData);
                   }
+                });
+                validatedCalendars.push({
+                  id: calData.id,
+                  name: calData.name,
+                  countryCode: typeof calData.countryCode === 'string' ? calData.countryCode : undefined, // Accept string or undefined
+                  holidays: validatedHolidays,
+                });
+              } else {
+                console.warn(`Skipping invalid calendar data in project ${projectData.id}:`, calData);
+              }
+            });
+          } else {
+            console.warn(`Project ${projectData.id} has invalid or missing 'holidayCalendars' array.`);
+          }
 
-                   // --- Validate and Sanitize Members ---
-                   const validatedMembers: Member[] = [];
-                   if (Array.isArray(projectData.members)) {
-                       projectData.members.forEach((memberData: any) => {
-                           if (
-                               memberData && typeof memberData === 'object' &&
-                               memberData.id && typeof memberData.id === 'string' &&
-                               memberData.name && typeof memberData.name === 'string' &&
-                               memberData.role && typeof memberData.role === 'string'
-                           ) {
-                               validatedMembers.push({
-                                   id: memberData.id,
-                                   name: memberData.name,
-                                   role: memberData.role,
-                                   holidayCalendarId: typeof memberData.holidayCalendarId === 'string' ? memberData.holidayCalendarId : null, // Default to null if missing/invalid
-                               });
-                           } else {
-                               console.warn(`Skipping invalid member data in project ${projectData.id}:`, memberData);
-                           }
-                       });
-                   }
 
-                   // --- Validate and Sanitize Holiday Calendars ---
-                   const validatedCalendars: HolidayCalendar[] = [];
-                   if (Array.isArray(projectData.holidayCalendars)) {
-                       projectData.holidayCalendars.forEach((calData: any) => {
-                            if (
-                                calData && typeof calData === 'object' &&
-                                calData.id && typeof calData.id === 'string' &&
-                                calData.name && typeof calData.name === 'string' &&
-                                Array.isArray(calData.holidays)
-                            ) {
-                                const validatedHolidays: PublicHoliday[] = [];
-                                calData.holidays.forEach((holData: any) => {
+          // --- Validate and Sanitize SprintData ---
+          let validatedSprintData: SprintData = { ...initialSprintData }; // Start with defaults
+          if (projectData.sprintData && typeof projectData.sprintData === 'object') {
+              if (Array.isArray(projectData.sprintData.sprints)) {
+                    const validatedSprints: Sprint[] = [];
+                    projectData.sprintData.sprints.forEach((sprintData: any) => {
+                        if (
+                            sprintData && typeof sprintData === 'object' &&
+                            typeof sprintData.sprintNumber === 'number' && !isNaN(sprintData.sprintNumber) &&
+                            typeof sprintData.startDate === 'string' && isValid(parseISO(sprintData.startDate)) &&
+                            typeof sprintData.duration === 'string'
+                            // Optional fields checked below
+                        ) {
+                            let status: SprintStatus = sprintData.status ?? 'Planned';
+                            const metrics = calculateSprintMetrics(sprintData.startDate, sprintData.duration);
+
+                            // Auto-complete based on date if status is not already 'Completed'
+                            if (metrics.endDate !== 'N/A' && clientNow && isPast(parseISO(metrics.endDate)) && status !== 'Completed') {
+                                status = 'Completed';
+                            }
+
+                            // Validate Planning Tasks (new and spillover)
+                            const validateTasks = (tasks: any[] | undefined): Task[] => {
+                                if (!Array.isArray(tasks)) return [];
+                                const emptyTask = createEmptyTaskRow();
+                                return tasks.map((taskData: any) => {
+                                    if (!taskData || typeof taskData !== 'object') return null; // Skip invalid task data
+                                    return {
+                                        id: typeof taskData.id === 'string' ? taskData.id : `task_load_${Date.now()}_${Math.random()}`,
+                                        description: typeof taskData.description === 'string' ? taskData.description : emptyTask.description,
+                                        storyPoints: (typeof taskData.storyPoints === 'number' || typeof taskData.storyPoints === 'string') ? taskData.storyPoints : emptyTask.storyPoints,
+                                        devEstimatedTime: typeof taskData.devEstimatedTime === 'string' ? taskData.devEstimatedTime : emptyTask.devEstimatedTime,
+                                        qaEstimatedTime: typeof taskData.qaEstimatedTime === 'string' ? taskData.qaEstimatedTime : emptyTask.qaEstimatedTime,
+                                        bufferTime: typeof taskData.bufferTime === 'string' ? taskData.bufferTime : emptyTask.bufferTime,
+                                        assignee: typeof taskData.assignee === 'string' ? taskData.assignee : emptyTask.assignee,
+                                        reviewer: typeof taskData.reviewer === 'string' ? taskData.reviewer : emptyTask.reviewer,
+                                        status: typeof taskData.status === 'string' && taskStatuses.includes(taskData.status as any) ? taskData.status : emptyTask.status,
+                                        startDate: typeof taskData.startDate === 'string' && isValid(parseISO(taskData.startDate)) ? taskData.startDate : emptyTask.startDate,
+                                        ticketNumber: typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : emptyTask.ticketNumber, // Legacy field
+                                        devTime: typeof taskData.devTime === 'string' ? taskData.devTime : emptyTask.devTime, // Legacy field
+                                    };
+                                }).filter((task): task is Task => task !== null); // Filter out nulls
+                            };
+
+
+                            // Validate planning object structure
+                            const loadedPlanning = sprintData.planning;
+                            const validatedPlanning: SprintPlanning = {
+                                goal: (loadedPlanning && typeof loadedPlanning.goal === 'string') ? loadedPlanning.goal : initialSprintPlanning.goal,
+                                newTasks: validateTasks(loadedPlanning?.newTasks),
+                                spilloverTasks: validateTasks(loadedPlanning?.spilloverTasks),
+                                definitionOfDone: (loadedPlanning && typeof loadedPlanning.definitionOfDone === 'string') ? loadedPlanning.definitionOfDone : initialSprintPlanning.definitionOfDone,
+                                testingStrategy: (loadedPlanning && typeof loadedPlanning.testingStrategy === 'string') ? loadedPlanning.testingStrategy : initialSprintPlanning.testingStrategy,
+                            };
+
+                            // Validate Sprint Details
+                            const validatedDetails: SprintDetailItem[] = [];
+                            if (Array.isArray(sprintData.details)) {
+                                sprintData.details.forEach((detailData: any) => {
                                     if (
-                                        holData && typeof holData === 'object' &&
-                                        holData.id && typeof holData.id === 'string' &&
-                                        holData.name && typeof holData.name === 'string' &&
-                                        holData.date && typeof holData.date === 'string' &&
-                                        isValid(parseISO(holData.date)) // Validate date format
+                                        detailData && typeof detailData === 'object' &&
+                                        typeof detailData.id === 'string' &&
+                                        typeof detailData.ticketNumber === 'string' &&
+                                        typeof detailData.developer === 'string' &&
+                                        typeof detailData.storyPoints === 'number' && !isNaN(detailData.storyPoints) &&
+                                        typeof detailData.devTime === 'string'
                                     ) {
-                                        validatedHolidays.push({
-                                            id: holData.id,
-                                            name: holData.name,
-                                            date: holData.date,
+                                        validatedDetails.push({
+                                            id: detailData.id,
+                                            ticketNumber: detailData.ticketNumber,
+                                            developer: detailData.developer,
+                                            storyPoints: detailData.storyPoints,
+                                            devTime: detailData.devTime,
                                         });
                                     } else {
-                                       console.warn(`Skipping invalid holiday data in calendar ${calData.id} (project ${projectData.id}):`, holData);
+                                        console.warn(`Skipping invalid sprint detail in sprint ${sprintData.sprintNumber} (project ${projectData.id}):`, detailData);
                                     }
                                 });
-                                validatedCalendars.push({
-                                    id: calData.id,
-                                    name: calData.name,
-                                    countryCode: typeof calData.countryCode === 'string' ? calData.countryCode : undefined, // Accept string or undefined
-                                    holidays: validatedHolidays,
-                                });
-                            } else {
-                                console.warn(`Skipping invalid calendar data in project ${projectData.id}:`, calData);
                             }
-                       });
-                   }
 
 
-                   // --- Validate and Sanitize SprintData ---
-                   let validatedSprintData: SprintData = { ...initialSprintData }; // Start with defaults
-                   if (projectData.sprintData && typeof projectData.sprintData === 'object' && Array.isArray(projectData.sprintData.sprints)) {
-                        const validatedSprints: Sprint[] = [];
-                        projectData.sprintData.sprints.forEach((sprintData: any) => {
-                            if (
-                                sprintData && typeof sprintData === 'object' &&
-                                typeof sprintData.sprintNumber === 'number' && !isNaN(sprintData.sprintNumber) &&
-                                typeof sprintData.startDate === 'string' && isValid(parseISO(sprintData.startDate)) &&
-                                typeof sprintData.duration === 'string'
-                                // Optional fields checked below
-                            ) {
-                                let status: SprintStatus = sprintData.status ?? 'Planned';
-                                const metrics = calculateSprintMetrics(sprintData.startDate, sprintData.duration);
+                            validatedSprints.push({
+                                sprintNumber: sprintData.sprintNumber,
+                                startDate: sprintData.startDate,
+                                endDate: metrics.endDate,
+                                duration: sprintData.duration,
+                                committedPoints: typeof sprintData.committedPoints === 'number' ? sprintData.committedPoints : 0,
+                                completedPoints: typeof sprintData.completedPoints === 'number' ? sprintData.completedPoints : 0,
+                                totalDays: metrics.totalDays,
+                                status: status,
+                                details: validatedDetails, // Use validated details
+                                planning: validatedPlanning, // Use validated planning
+                            });
+                        } else {
+                            console.warn(`Skipping invalid sprint data in project ${projectData.id}:`, sprintData);
+                        }
+                    });
 
-                                // Auto-complete based on date if status is not already 'Completed'
-                                if (metrics.endDate !== 'N/A' && clientNow && isPast(parseISO(metrics.endDate)) && status !== 'Completed') {
-                                    status = 'Completed';
-                                }
-
-                                 // Validate Planning Tasks (new and spillover)
-                                const validateTasks = (tasks: any[] | undefined): Task[] => {
-                                     if (!Array.isArray(tasks)) return [];
-                                     const emptyTask = createEmptyTaskRow();
-                                     return tasks.map((taskData: any) => {
-                                         if (!taskData || typeof taskData !== 'object') return null; // Skip invalid task data
-                                         return {
-                                             id: typeof taskData.id === 'string' ? taskData.id : `task_load_${Date.now()}_${Math.random()}`,
-                                             description: typeof taskData.description === 'string' ? taskData.description : emptyTask.description,
-                                             storyPoints: (typeof taskData.storyPoints === 'number' || typeof taskData.storyPoints === 'string') ? taskData.storyPoints : emptyTask.storyPoints,
-                                             devEstimatedTime: typeof taskData.devEstimatedTime === 'string' ? taskData.devEstimatedTime : emptyTask.devEstimatedTime,
-                                             qaEstimatedTime: typeof taskData.qaEstimatedTime === 'string' ? taskData.qaEstimatedTime : emptyTask.qaEstimatedTime,
-                                             bufferTime: typeof taskData.bufferTime === 'string' ? taskData.bufferTime : emptyTask.bufferTime,
-                                             assignee: typeof taskData.assignee === 'string' ? taskData.assignee : emptyTask.assignee,
-                                             reviewer: typeof taskData.reviewer === 'string' ? taskData.reviewer : emptyTask.reviewer,
-                                             status: typeof taskData.status === 'string' && taskStatuses.includes(taskData.status as any) ? taskData.status : emptyTask.status,
-                                             startDate: typeof taskData.startDate === 'string' && isValid(parseISO(taskData.startDate)) ? taskData.startDate : emptyTask.startDate,
-                                             ticketNumber: typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : emptyTask.ticketNumber, // Legacy field
-                                             devTime: typeof taskData.devTime === 'string' ? taskData.devTime : emptyTask.devTime, // Legacy field
-                                         };
-                                     }).filter((task): task is Task => task !== null); // Filter out nulls
-                                 };
-
-
-                                // Validate planning object structure
-                                const loadedPlanning = sprintData.planning;
-                                const validatedPlanning: SprintPlanning = {
-                                    goal: (loadedPlanning && typeof loadedPlanning.goal === 'string') ? loadedPlanning.goal : initialSprintPlanning.goal,
-                                    newTasks: validateTasks(loadedPlanning?.newTasks),
-                                    spilloverTasks: validateTasks(loadedPlanning?.spilloverTasks),
-                                    definitionOfDone: (loadedPlanning && typeof loadedPlanning.definitionOfDone === 'string') ? loadedPlanning.definitionOfDone : initialSprintPlanning.definitionOfDone,
-                                    testingStrategy: (loadedPlanning && typeof loadedPlanning.testingStrategy === 'string') ? loadedPlanning.testingStrategy : initialSprintPlanning.testingStrategy,
-                                };
-
-                                // Validate Sprint Details
-                                const validatedDetails: SprintDetailItem[] = [];
-                                if (Array.isArray(sprintData.details)) {
-                                   sprintData.details.forEach((detailData: any) => {
-                                       if (
-                                           detailData && typeof detailData === 'object' &&
-                                           typeof detailData.id === 'string' &&
-                                           typeof detailData.ticketNumber === 'string' &&
-                                           typeof detailData.developer === 'string' &&
-                                           typeof detailData.storyPoints === 'number' && !isNaN(detailData.storyPoints) &&
-                                           typeof detailData.devTime === 'string'
-                                       ) {
-                                           validatedDetails.push({
-                                              id: detailData.id,
-                                              ticketNumber: detailData.ticketNumber,
-                                              developer: detailData.developer,
-                                              storyPoints: detailData.storyPoints,
-                                              devTime: detailData.devTime,
-                                           });
-                                       } else {
-                                          console.warn(`Skipping invalid sprint detail in sprint ${sprintData.sprintNumber} (project ${projectData.id}):`, detailData);
-                                       }
-                                   });
-                                }
-
-
-                                validatedSprints.push({
-                                    sprintNumber: sprintData.sprintNumber,
-                                    startDate: sprintData.startDate,
-                                    endDate: metrics.endDate,
-                                    duration: sprintData.duration,
-                                    committedPoints: typeof sprintData.committedPoints === 'number' ? sprintData.committedPoints : 0,
-                                    completedPoints: typeof sprintData.completedPoints === 'number' ? sprintData.completedPoints : 0,
-                                    totalDays: metrics.totalDays,
-                                    status: status,
-                                    details: validatedDetails, // Use validated details
-                                    planning: validatedPlanning, // Use validated planning
-                                });
-                            } else {
-                                console.warn(`Skipping invalid sprint data in project ${projectData.id}:`, sprintData);
-                            }
-                        });
-
-                        validatedSprintData = {
-                            sprints: validatedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber), // Keep sorted
-                            totalStoryPoints: validatedSprints.reduce((sum, s) => sum + s.completedPoints, 0),
-                            daysInSprint: validatedSprints.length > 0 ? Math.max(...validatedSprints.map(s => s.totalDays)) : 0,
-                        };
-                    } else {
-                         console.warn(`Invalid or missing sprintData structure in project ${projectData.id}:`, projectData.sprintData);
-                    }
-
-                   // Add the validated project
-                   validatedProjects.push({
-                       id: projectData.id,
-                       name: projectData.name,
-                       members: validatedMembers.sort((a,b) => a.name.localeCompare(b.name)), // Keep sorted
-                       holidayCalendars: validatedCalendars.sort((a,b) => a.name.localeCompare(b.name)), // Keep sorted
-                       sprintData: validatedSprintData,
-                   });
-              }
-
-              // --- End Robust Validation ---
-
-              setProjects(validatedProjects);
-              // Set selected project ID: prioritize last viewed, then first project, then null
-              const lastProjectId = localStorage.getItem('selectedProjectId');
-              if (lastProjectId && validatedProjects.some(p => p.id === lastProjectId)) {
-                 setSelectedProjectId(lastProjectId);
-              } else if (validatedProjects.length > 0) {
-                 setSelectedProjectId(validatedProjects[0].id);
+                     validatedSprintData = {
+                        sprints: validatedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber), // Keep sorted
+                        totalStoryPoints: validatedSprints.reduce((sum, s) => sum + s.completedPoints, 0),
+                        daysInSprint: validatedSprints.length > 0 ? Math.max(...validatedSprints.map(s => s.totalDays)) : 0,
+                     };
               } else {
-                 setSelectedProjectId(null);
+                   console.warn(`Invalid or missing 'sprints' array within sprintData for project ${projectData.id}:`, projectData.sprintData);
               }
-
-          } catch (error) {
-              console.error("Failed to parse or validate project data from localStorage:", error);
-              localStorage.removeItem('appData'); // Clear potentially corrupted data
-              localStorage.removeItem('selectedProjectId');
-              setProjects([]);
-              setSelectedProjectId(null);
-              toast({
-                 variant: "destructive",
-                 title: "Data Load Error",
-                 description: "Could not load project data. Storage might be corrupted. Please refresh.",
-              });
+          } else {
+            console.warn(`Invalid or missing sprintData structure in project ${projectData.id}:`, projectData.sprintData);
           }
-      } else {
-         // No data in localStorage, initialize empty
-         setProjects([]);
-         setSelectedProjectId(null);
-      }
-  }, [clientNow, toast]); // Add toast dependency
 
+          // Add the validated project
+          validatedProjects.push({
+            id: projectData.id,
+            name: projectData.name,
+            members: validatedMembers.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
+            holidayCalendars: validatedCalendars.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
+            sprintData: validatedSprintData,
+          });
+          console.log(`Successfully validated and added project: ${projectData.name}`);
+        }
 
-  // Effect to save data to localStorage whenever projects change
-  useEffect(() => {
-    if (projects) { // Always try to save, even if empty array (to clear storage)
-      try {
-        const dataToSave = JSON.stringify(projects);
-        localStorage.setItem('appData', dataToSave);
-      } catch (error) {
-         console.error("Failed to save project data to localStorage:", error);
-         toast({
-           variant: "destructive",
-           title: "Save Error",
-           description: "Could not save project data locally. Data might be too large or storage is unavailable.",
-         });
+        // --- End Robust Validation ---
+
+        console.log("Validation complete. Final projects:", validatedProjects);
+        setProjects(validatedProjects);
+
+        // Set selected project ID: prioritize last viewed, then first project, then null
+        const lastProjectId = localStorage.getItem('selectedProjectId');
+        console.log("Last selected project ID from localStorage:", lastProjectId);
+        if (lastProjectId && validatedProjects.some(p => p.id === lastProjectId)) {
+          console.log(`Setting selected project ID to last viewed: ${lastProjectId}`);
+          setSelectedProjectId(lastProjectId);
+        } else if (validatedProjects.length > 0) {
+          console.log(`Setting selected project ID to first project: ${validatedProjects[0].id}`);
+          setSelectedProjectId(validatedProjects[0].id);
+        } else {
+          console.log("No valid projects found or last selected invalid. Setting selected project ID to null.");
+          setSelectedProjectId(null);
+        }
+
+      } catch (error: any) {
+          console.error("CRITICAL: Failed to parse or validate project data from localStorage. Error:", error.message, error.stack);
+          // Avoid clearing localStorage immediately unless the data is truly unrecoverable/malformed JSON
+          if (error instanceof SyntaxError) {
+             console.warn("SyntaxError encountered. Clearing corrupted localStorage data.");
+             localStorage.removeItem('appData');
+             localStorage.removeItem('selectedProjectId');
+          } else {
+             console.warn("Validation error encountered. Data might be partially invalid. Retaining localStorage data for inspection.");
+          }
+          setProjects([]);
+          setSelectedProjectId(null);
+          toast({
+            variant: "destructive",
+            title: "Data Load Error",
+            description: "Could not load project data. Storage might contain invalid data. Please check console for details.",
+          });
+      } finally {
+           console.log("Finished loading data attempt.");
+           setIsLoading(false); // End loading
       }
+    } else {
+      console.log("No data found in localStorage ('appData'). Initializing empty state.");
+      setProjects([]);
+      setSelectedProjectId(null);
+      setIsLoading(false); // End loading
     }
-  }, [projects, toast]);
+  }, [clientNow, toast]); // Dependency on clientNow ensures it runs after mount, toast for notifications
+
+   // Effect to save data to localStorage whenever projects change
+   useEffect(() => {
+       // Only run save logic after initial load is complete
+       if (!isLoading) {
+          console.log("Projects state changed, attempting to save to localStorage:", projects);
+           try {
+               const dataToSave = JSON.stringify(projects);
+               console.log("Stringified data to save:", dataToSave);
+               localStorage.setItem('appData', dataToSave);
+               console.log("Successfully saved project data to localStorage.");
+           } catch (error: any) {
+               console.error("CRITICAL: Failed to save project data to localStorage. Error:", error.message, error.stack);
+               toast({
+                   variant: "destructive",
+                   title: "Save Error",
+                   description: "Could not save project data locally. Data might be too large or storage is unavailable.",
+               });
+           }
+       } else {
+         console.log("Skipping save to localStorage during initial load.");
+       }
+   }, [projects, isLoading, toast]); // Add isLoading dependency
 
    // Effect to save the selected project ID
    useEffect(() => {
-       if (selectedProjectId) {
-           localStorage.setItem('selectedProjectId', selectedProjectId);
-       } else {
-           // Optionally remove if no project is selected
-           // localStorage.removeItem('selectedProjectId');
-       }
-   }, [selectedProjectId]);
+      if (!isLoading) { // Only save after initial load
+         if (selectedProjectId) {
+            console.log(`Saving selected project ID to localStorage: ${selectedProjectId}`);
+            localStorage.setItem('selectedProjectId', selectedProjectId);
+         } else {
+            console.log("No project selected, potentially removing selectedProjectId from localStorage.");
+            // Optionally remove if no project is selected
+            // localStorage.removeItem('selectedProjectId');
+         }
+      } else {
+         console.log("Skipping saving selected project ID during initial load.");
+      }
+   }, [selectedProjectId, isLoading]);
 
 
   // Find the currently selected project object
   const selectedProject = useMemo(() => {
-    return projects.find(p => p.id === selectedProjectId) ?? null;
+    const project = projects.find(p => p.id === selectedProjectId) ?? null;
+    console.log("Selected project determined:", project?.name ?? 'None');
+    return project;
   }, [projects, selectedProjectId]);
 
   // Parser for sprint data (from Entry tab - paste/manual legacy)
@@ -985,24 +1030,31 @@ export default function Home() {
              <Select
                value={selectedProjectId ?? undefined}
                onValueChange={(value) => {
+                  if (value === 'loading') return; // Prevent selecting the loading indicator
+                   console.log(`Project selected: ${value}`);
                    setSelectedProjectId(value);
                    setActiveTab("home"); // Go to home tab on project change
                    setResetManualFormKey(prevKey => prevKey + 1);
                }}
-               disabled={projects.length === 0}
+               disabled={isLoading || projects.length === 0} // Disable while loading or if no projects
              >
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Select a project" />
+                  <SelectValue placeholder={isLoading ? "Loading..." : "Select a project"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
                     <SelectLabel>Projects</SelectLabel>
-                    {projects.map(project => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                     {projects.length === 0 && <SelectItem value="no-projects" disabled>No projects yet</SelectItem>}
+                     {isLoading ? (
+                       <SelectItem value="loading" disabled>Loading projects...</SelectItem>
+                     ) : projects.length > 0 ? (
+                        projects.map(project => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.name}
+                          </SelectItem>
+                        ))
+                     ) : (
+                       <SelectItem value="no-projects" disabled>No projects yet</SelectItem>
+                     )}
                   </SelectGroup>
                 </SelectContent>
              </Select>
@@ -1060,7 +1112,14 @@ export default function Home() {
 
 
       <main className="flex-1 p-6">
-         {selectedProject ? (
+         {isLoading ? (
+             <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
+                 <CardHeader className="text-center">
+                     <CardTitle>Loading Project Data...</CardTitle>
+                     <CardDescription>Please wait while the application loads.</CardDescription>
+                 </CardHeader>
+             </Card>
+         ) : selectedProject ? (
              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-6 mb-6"> {/* Updated grid-cols to 6 */}
                 <TabsTrigger value="home"><HomeIcon className="mr-2 h-4 w-4" />Home</TabsTrigger>
@@ -1140,3 +1199,6 @@ export default function Home() {
     </div>
   );
 }
+
+
+    
