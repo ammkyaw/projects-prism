@@ -145,7 +145,7 @@ export default function Home() {
     return projects.find(p => p.id === selectedProjectId) ?? null;
   }, [projects, selectedProjectId]);
 
-  // Parser for sprint data (remains largely the same, adds initial 'Planned' status)
+  // Parser for sprint data (from Entry tab - paste/manual legacy)
   const parseSprintData = (jsonData: any[]): SprintData => {
      const requiredColumns = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered'];
     if (!jsonData || jsonData.length === 0) {
@@ -181,11 +181,13 @@ export default function Home() {
          if (typeof startDateValue === 'number') {
              if (startDateValue > 0) {
                  try {
-                     const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+                     // Excel dates are tricky, might need adjustment based on source system
+                     const excelEpoch = new Date(Date.UTC(1899, 11, 30)); // Common Excel epoch start
                      const date = new Date(excelEpoch.getTime() + startDateValue * 86400000);
+                     if (isNaN(date.getTime())) throw new Error('Invalid date calculation');
                      startDateStr = date.toISOString().split('T')[0];
                  } catch (e) {
-                     console.warn(`Skipping row ${rowIndex + 2}: Invalid date format for value ${startDateValue}.`);
+                     console.warn(`Skipping row ${rowIndex + 2}: Invalid date format for Excel value ${startDateValue}.`, e);
                      return;
                  }
              } else {
@@ -193,16 +195,21 @@ export default function Home() {
                  return;
              }
          } else if (typeof startDateValue === 'string') {
-             const potentialDate = new Date(startDateValue);
-             if (!isNaN(potentialDate.getTime())) {
-                 if (potentialDate.getFullYear() > 1900 && potentialDate.toISOString().includes('-')) {
-                    startDateStr = potentialDate.toISOString().split('T')[0];
+             try {
+                const potentialDate = parseISO(startDateValue); // Prefer ISO format
+                 if (!isNaN(potentialDate.getTime())) {
+                     startDateStr = format(potentialDate, 'yyyy-MM-dd');
                  } else {
-                     console.warn(`Skipping row ${rowIndex + 2}: Invalid date string format ${startDateValue}. Expected YYYY-MM-DD.`);
-                    return;
+                      // Try parsing common date formats (less reliable)
+                     const commonParsed = new Date(startDateValue);
+                     if (!isNaN(commonParsed.getTime())) {
+                         startDateStr = format(commonParsed, 'yyyy-MM-dd');
+                     } else {
+                        throw new Error('Unparseable date string');
+                     }
                  }
-             } else {
-                 console.warn(`Skipping row ${rowIndex + 2}: Invalid date string format ${startDateValue}. Expected YYYY-MM-DD.`);
+             } catch (e) {
+                 console.warn(`Skipping row ${rowIndex + 2}: Invalid date string format ${startDateValue}. Expected YYYY-MM-DD or parseable format.`, e);
                  return;
              }
          } else {
@@ -220,23 +227,16 @@ export default function Home() {
              maxTotalDays = totalDays;
          }
 
-         // Determine initial status based on date (on client side for consistency)
          let initialStatus: SprintStatus = 'Planned';
          if (clientNow) {
-             const start = parseISO(startDateStr);
-             const end = parseISO(endDate);
-             if (isPast(end)) {
-                 initialStatus = 'Completed';
-             } else if (!isPast(start)) {
-                 // Future or current sprint, initially planned
-                 initialStatus = 'Planned';
-             } else {
-                  // Start date is past, but end date isn't - potentially active, but default to Planned
-                  // Active status should be explicitly set by user action.
-                  initialStatus = 'Planned';
-             }
+             try {
+               const start = parseISO(startDateStr);
+               const end = parseISO(endDate);
+               if (isPast(end)) {
+                   initialStatus = 'Completed';
+               }
+             } catch(e) { /* Ignore date parsing error here, handled above */ }
          }
-
 
         sprints.push({
             sprintNumber,
@@ -245,9 +245,9 @@ export default function Home() {
             duration,
             committedPoints: commitment,
             completedPoints: delivered,
-            status: initialStatus, // Add initial status
-            details: [],
-            planning: initialSprintPlanning,
+            status: initialStatus,
+            details: [], // Details added separately
+            planning: initialSprintPlanning, // Planning added separately
             totalDays,
         });
     });
@@ -265,8 +265,8 @@ export default function Home() {
     };
   };
 
-  // Handler to save processed sprint data to the *selected* project
-  const handleSaveSprints = useCallback((newSprintData: SprintData) => {
+  // Handler to save legacy sprint data (from Entry tab) to the *selected* project
+  const handleSaveLegacySprints = useCallback((newSprintData: SprintData) => {
     if (!selectedProjectId) {
        toast({ variant: "destructive", title: "Error", description: "No project selected." });
        return;
@@ -276,37 +276,49 @@ export default function Home() {
       const updatedProjects = prevProjects.map(p => {
          if (p.id === selectedProjectId) {
            projectNameForToast = p.name;
-           const updatedSprints = newSprintData.sprints.map(newSprint => {
-             const existingSprint = p.sprintData.sprints.find(
-               oldSprint => oldSprint.sprintNumber === newSprint.sprintNumber
-             );
-             // Preserve existing details, planning, and potentially status if already set
-             return {
-               ...newSprint,
-               details: existingSprint?.details ?? [],
-               planning: existingSprint?.planning ?? initialSprintPlanning,
-               status: existingSprint?.status ?? newSprint.status ?? 'Planned', // Prioritize existing status
-             };
-           });
+           const mergedSprints = [...p.sprintData.sprints]; // Start with existing sprints
 
-           // Ensure only one sprint is Active
+            newSprintData.sprints.forEach(newSprint => {
+                const existingIndex = mergedSprints.findIndex(oldSprint => oldSprint.sprintNumber === newSprint.sprintNumber);
+                if (existingIndex !== -1) {
+                    // Update existing sprint: Merge basic data, keep existing details/planning/status
+                    mergedSprints[existingIndex] = {
+                        ...newSprint, // Takes new basic data (dates, points from entry)
+                        details: mergedSprints[existingIndex].details ?? [], // Keep existing details
+                        planning: mergedSprints[existingIndex].planning ?? initialSprintPlanning, // Keep existing planning
+                        status: mergedSprints[existingIndex].status ?? newSprint.status ?? 'Planned', // Keep existing status
+                    };
+                } else {
+                    // Add new sprint
+                    mergedSprints.push({
+                       ...newSprint,
+                       details: [], // Initialize empty details
+                       planning: initialSprintPlanning, // Initialize empty planning
+                       status: newSprint.status ?? 'Planned', // Use parsed or default status
+                    });
+                }
+            });
+
+
+           // Sort final list and ensure only one active
+           mergedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber);
            let activeFound = false;
-           const finalSprints = updatedSprints.map(s => {
+           const finalSprints = mergedSprints.map(s => {
                if (s.status === 'Active') {
                    if (activeFound) {
-                       return { ...s, status: 'Planned' as SprintStatus }; // Demote extra active sprints
+                       return { ...s, status: 'Planned' as SprintStatus };
                    }
                    activeFound = true;
                }
                return s;
            });
 
-
            return {
               ...p,
               sprintData: {
-                 ...newSprintData,
                  sprints: finalSprints,
+                 totalStoryPoints: finalSprints.reduce((sum, s) => sum + s.completedPoints, 0),
+                 daysInSprint: Math.max(...finalSprints.map(s => s.totalDays), p.sprintData.daysInSprint || 0), // Recalculate max days
               },
            };
          }
@@ -317,11 +329,11 @@ export default function Home() {
 
     toast({ title: "Success", description: `Sprint data saved to project '${projectNameForToast}'.` });
     setActiveTab("home");
-    setResetManualFormKey(prevKey => prevKey + 1);
+    setResetManualFormKey(prevKey => prevKey + 1); // Reset Entry form
   }, [selectedProjectId, toast]);
 
 
-  // Handler to save planning data AND potentially update sprint status
+  // Handler to save planning data AND potentially update sprint status (used by PlanningTab)
    const handleSavePlanningAndUpdateStatus = useCallback((sprintNumber: number, planningData: SprintPlanning, newStatus?: SprintStatus) => {
      if (!selectedProjectId) {
         toast({ variant: "destructive", title: "Error", description: "No project selected." });
@@ -331,59 +343,101 @@ export default function Home() {
      let statusUpdateMessage = '';
 
      setProjects(prevProjects => {
-       return prevProjects.map(p => {
-         if (p.id === selectedProjectId) {
-           projectNameForToast = p.name;
-           let updatedSprints = p.sprintData.sprints.map(s => {
-             if (s.sprintNumber === sprintNumber) {
-                let finalStatus = s.status;
-                // If a new status is provided (e.g., 'Active' from Start Sprint)
-                if (newStatus && newStatus !== s.status) {
-                   finalStatus = newStatus;
-                   if (newStatus === 'Active') {
-                       // Deactivate any other active sprint
-                       updatedSprints = updatedSprints.map(otherS =>
-                         otherS.sprintNumber !== sprintNumber && otherS.status === 'Active'
-                           ? { ...otherS, status: 'Planned' }
-                           : otherS
-                       );
-                       statusUpdateMessage = ` Sprint ${sprintNumber} is now Active.`;
-                   } else {
-                      statusUpdateMessage = ` Sprint ${sprintNumber} status updated to ${newStatus}.`;
-                   }
-                }
-                return { ...s, planning: planningData, status: finalStatus };
-             }
-             return s;
-           });
+        let wasStatusUpdated = false;
+        const updatedProjects = prevProjects.map(p => {
+          if (p.id === selectedProjectId) {
+              projectNameForToast = p.name;
+              let tempSprints = [...p.sprintData.sprints]; // Create a mutable copy
 
-             // Re-apply the map to ensure status changes are captured if modified above
-             updatedSprints = updatedSprints.map(s => {
-                 if (s.sprintNumber === sprintNumber) {
-                     const targetSprint = updatedSprints.find(us => us.sprintNumber === sprintNumber);
-                     return targetSprint || s; // Should always find it, but fallback just in case
-                 }
-                  // Ensure other sprints are not active if the target sprint became active
-                 if (newStatus === 'Active' && s.sprintNumber !== sprintNumber && s.status === 'Active') {
-                    return { ...s, status: 'Planned' };
-                 }
-                 return s;
-             });
+              // First pass: Deactivate other sprints if the target is becoming active
+              if (newStatus === 'Active') {
+                  tempSprints = tempSprints.map(otherS =>
+                      otherS.sprintNumber !== sprintNumber && otherS.status === 'Active'
+                          ? { ...otherS, status: 'Planned' }
+                          : otherS
+                  );
+              }
 
+              // Second pass: Update the target sprint's planning and status
+              const updatedSprints = tempSprints.map(s => {
+                  if (s.sprintNumber === sprintNumber) {
+                      let finalStatus = s.status;
+                      if (newStatus && newStatus !== s.status) {
+                          finalStatus = newStatus;
+                          statusUpdateMessage = ` Sprint ${sprintNumber} status updated to ${newStatus}.`;
+                          wasStatusUpdated = true;
+                      }
+                      return { ...s, planning: planningData, status: finalStatus };
+                  }
+                  return s;
+              });
 
-           return {
-             ...p,
-             sprintData: {
-               ...p.sprintData,
-               sprints: updatedSprints,
-             },
-           };
-         }
-         return p;
-       });
+              return {
+                  ...p,
+                  sprintData: {
+                      ...p.sprintData,
+                      sprints: updatedSprints,
+                  },
+              };
+          }
+          return p;
+        });
+        // If status was updated, trigger save effect by returning new array
+        return wasStatusUpdated ? updatedProjects : prevProjects;
      });
-      toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage}` });
+     toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage}` });
    }, [selectedProjectId, toast]);
+
+  // Handler to create a new sprint and save its initial planning data (used by PlanningTab)
+  const handleCreateAndPlanSprint = useCallback((
+    sprintDetails: Omit<Sprint, 'details' | 'planning' | 'status' | 'committedPoints' | 'completedPoints'>,
+    planningData: SprintPlanning
+  ) => {
+    if (!selectedProjectId) {
+      toast({ variant: "destructive", title: "Error", description: "No project selected." });
+      return;
+    }
+    let projectNameForToast = 'N/A';
+
+    setProjects(prevProjects => {
+      return prevProjects.map(p => {
+        if (p.id === selectedProjectId) {
+          projectNameForToast = p.name;
+          // Check if sprint number already exists
+          if (p.sprintData.sprints.some(s => s.sprintNumber === sprintDetails.sprintNumber)) {
+             toast({ variant: "destructive", title: "Error", description: `Sprint number ${sprintDetails.sprintNumber} already exists.` });
+             return p; // Return unchanged project if error
+          }
+
+          const newSprint: Sprint = {
+              ...sprintDetails,
+              committedPoints: 0, // Initialize commitment/delivered to 0 for new sprints
+              completedPoints: 0,
+              status: 'Planned', // New sprints always start as Planned
+              details: [],
+              planning: planningData,
+          };
+
+          const updatedSprints = [...p.sprintData.sprints, newSprint];
+          updatedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber); // Keep sorted
+
+          return {
+            ...p,
+            sprintData: {
+              ...p.sprintData,
+              sprints: updatedSprints,
+               // Optionally recalculate overall metrics if needed
+               daysInSprint: Math.max(p.sprintData.daysInSprint || 0, newSprint.totalDays),
+            },
+          };
+        }
+        return p;
+      });
+    });
+
+     toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
+  }, [selectedProjectId, toast]);
+
 
   // Handler to save members for the *selected* project
   const handleSaveMembers = useCallback((updatedMembers: Member[]) => {
@@ -459,7 +513,7 @@ export default function Home() {
                    allDetails.push({
                        'SprintNumber': sprint.sprintNumber,
                        'TicketNumber': detail.ticketNumber,
-                       'Developer': detail.developer,
+                       'Developer': detail.developer, // This is member name
                        'StoryPoints': detail.storyPoints,
                        'DevelopmentTime': detail.devTime,
                    });
@@ -484,24 +538,21 @@ export default function Home() {
                       'DefinitionOfDone': sprint.planning.definitionOfDone,
                       'TestingStrategy': sprint.planning.testingStrategy,
                    });
-                   sprint.planning.newTasks.forEach(task => planningTasksData.push({
+                   // Helper function to map task to export row
+                   const mapTaskToRow = (task: SprintDetailItem | Task, type: 'New' | 'Spillover') => ({
                       'SprintNumber': sprint.sprintNumber,
-                      'Type': 'New',
+                      'Type': type,
                       'TaskID': task.id,
-                      'Description': task.description,
-                      'StoryPoints': task.storyPoints,
-                      'Assignee': task.assignee,
-                      'Status': task.status,
-                   }));
-                    sprint.planning.spilloverTasks.forEach(task => planningTasksData.push({
-                      'SprintNumber': sprint.sprintNumber,
-                      'Type': 'Spillover',
-                      'TaskID': task.id,
-                      'Description': task.description,
-                      'StoryPoints': task.storyPoints,
-                      'Assignee': task.assignee,
-                      'Status': task.status,
-                   }));
+                      'Description': 'description' in task ? task.description : '', // Handle both Task and potential legacy SprintDetailItem if needed
+                      'StoryPoints': 'storyPoints' in task ? task.storyPoints : undefined,
+                      'Assignee': 'assignee' in task ? task.assignee : ('developer' in task ? task.developer : undefined), // Handle assignee/developer
+                      'Status': 'status' in task ? task.status : undefined,
+                      'TicketNumber': 'ticketNumber' in task ? task.ticketNumber : undefined, // Include if exists
+                      'DevelopmentTime': 'devTime' in task ? task.devTime : undefined, // Include if exists
+                   });
+
+                   sprint.planning.newTasks.forEach(task => planningTasksData.push(mapTaskToRow(task, 'New')));
+                   sprint.planning.spilloverTasks.forEach(task => planningTasksData.push(mapTaskToRow(task, 'Spillover')));
                }
            });
             if (planningSummaryData.length > 0) {
@@ -579,7 +630,7 @@ export default function Home() {
                value={selectedProjectId ?? undefined}
                onValueChange={(value) => {
                    setSelectedProjectId(value);
-                   setActiveTab("home");
+                   setActiveTab("home"); // Go to home tab on project change
                    setResetManualFormKey(prevKey => prevKey + 1);
                }}
                disabled={projects.length === 0}
@@ -657,7 +708,7 @@ export default function Home() {
              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-5 mb-6"> {/* Updated grid-cols to 5 */}
                 <TabsTrigger value="home"><HomeIcon className="mr-2 h-4 w-4" />Home</TabsTrigger>
-                <TabsTrigger value="entry"><ListPlus className="mr-2 h-4 w-4" />Entry</TabsTrigger>
+                <TabsTrigger value="entry"><ListPlus className="mr-2 h-4 w-4" />Entry (Legacy)</TabsTrigger>
                 <TabsTrigger value="planning"><NotebookPen className="mr-2 h-4 w-4" />Planning</TabsTrigger>
                 <TabsTrigger value="members"><Users className="mr-2 h-4 w-4" />Members</TabsTrigger> {/* Added Members Trigger */}
                 <TabsTrigger value="reports"><BarChart className="mr-2 h-4 w-4" />Reports</TabsTrigger>
@@ -674,7 +725,7 @@ export default function Home() {
               <TabsContent value="entry">
                 <EntryTab
                     key={resetManualFormKey}
-                    onSaveSprints={handleSaveSprints}
+                    onSaveSprints={handleSaveLegacySprints} // Use the legacy save handler
                     initialSprintData={selectedProject.sprintData}
                     parseSprintData={parseSprintData}
                     projectName={selectedProject.name}
@@ -684,9 +735,10 @@ export default function Home() {
               <TabsContent value="planning">
                   <PlanningTab
                     sprints={selectedProject.sprintData.sprints}
-                    onSavePlanning={handleSavePlanningAndUpdateStatus} // Use updated handler
+                    onSavePlanning={handleSavePlanningAndUpdateStatus}
+                    onCreateAndPlanSprint={handleCreateAndPlanSprint} // Pass new handler
                     projectName={selectedProject.name}
-                    members={selectedProject.members} // Pass members for assignee dropdown
+                    members={selectedProject.members}
                   />
                </TabsContent>
 
@@ -695,7 +747,7 @@ export default function Home() {
                    projectId={selectedProject.id}
                    projectName={selectedProject.name}
                    initialMembers={selectedProject.members}
-                   onSaveMembers={handleSaveMembers} // Pass the save handler
+                   onSaveMembers={handleSaveMembers}
                  />
                </TabsContent>
 

@@ -16,8 +16,8 @@ import { cn } from "@/lib/utils";
 
 interface EntryTabProps {
   key?: number; // Add key prop for resetting
-  onSaveSprints: (data: SprintData) => void; // Renamed callback for clarity
-  initialSprintData: SprintData | null; // Add prop for initial data
+  onSaveSprints: (data: SprintData) => void; // Callback to save parsed/manual legacy data
+  initialSprintData: SprintData | null; // Add prop for initial data (to populate form)
   parseSprintData: (jsonData: any[]) => SprintData; // Keep parser for paste functionality
   projectName: string; // Add project name prop
 }
@@ -36,18 +36,20 @@ export default function EntryTab({ key, onSaveSprints, initialSprintData, parseS
        <Card>
           <CardHeader>
              {/* Display Project Name */}
-             <CardTitle>Data Entry for Project: {projectName}</CardTitle>
+             <CardTitle>Legacy Data Entry for Project: {projectName}</CardTitle>
              <CardDescription>
-                Enter or paste sprint data for the selected project. Click 'Save' when done.
-                Required columns: SprintNumber, StartDate (YYYY-MM-DD), Duration (e.g., '2 Weeks'), TotalCommitment, TotalDelivered.
+                Use this tab to enter or paste historical sprint data (Sprint #, Start Date, Duration, Commitment, Delivered).
+                For planning and creating <span className="font-semibold">new</span> sprints, use the 'Planning' tab.
+                Required columns for paste: SprintNumber, StartDate (YYYY-MM-DD), Duration (e.g., '2 Weeks'), TotalCommitment, TotalDelivered.
              </CardDescription>
           </CardHeader>
           <CardContent>
-             {/* Pass initial data, the renamed submit handler, and the key */}
+             {/* Pass initial data, the submit handler, and the key */}
              <ManualInputForm
                 key={key} // Pass the key here
                 onSubmit={handleManualDataSubmit}
                 initialData={initialSprintData?.sprints ?? []}
+                parseSprintData={parseSprintData} // Pass parser for paste functionality
              />
           </CardContent>
            {/* <CardFooter>

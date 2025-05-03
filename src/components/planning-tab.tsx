@@ -2,63 +2,119 @@
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
-import { PlusCircle, Trash2, PlayCircle } from 'lucide-react'; // Added PlayCircle icon
-import type { Sprint, SprintPlanning, Task, Member, SprintStatus } from '@/types/sprint-data'; // Import Member, SprintStatus
-import { initialSprintPlanning, taskStatuses } from '@/types/sprint-data'; // Import taskStatuses
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon, XCircle } from 'lucide-react'; // Added icons
+import type { Sprint, SprintPlanning, Task, Member, SprintStatus } from '@/types/sprint-data';
+import { initialSprintPlanning, taskStatuses, predefinedRoles } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { addDays, format, parseISO, isValid } from 'date-fns';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+
+const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
+
+// Helper to calculate working days and end date (moved inside or imported if needed elsewhere)
+const calculateSprintMetrics = (startDateStr: string, duration: string): { totalDays: number, endDate: string } => {
+    let totalDays = 0;
+    let calendarDaysToAdd = 0;
+
+    switch (duration) {
+        case "1 Week": totalDays = 5; calendarDaysToAdd = 6; break;
+        case "2 Weeks": totalDays = 10; calendarDaysToAdd = 13; break;
+        case "3 Weeks": totalDays = 15; calendarDaysToAdd = 20; break;
+        case "4 Weeks": totalDays = 20; calendarDaysToAdd = 27; break;
+        default: totalDays = 0; calendarDaysToAdd = -1;
+    }
+
+    if (!startDateStr || calendarDaysToAdd < 0 || !isValid(parseISO(startDateStr))) {
+        return { totalDays: 0, endDate: 'N/A' };
+    }
+
+    try {
+        const startDate = parseISO(startDateStr);
+        const endDate = addDays(startDate, calendarDaysToAdd);
+        return { totalDays, endDate: format(endDate, 'yyyy-MM-dd') };
+    } catch (e) {
+        console.error("Error calculating end date:", e);
+        return { totalDays: 0, endDate: 'N/A' };
+    }
+};
+
 
 interface PlanningTabProps {
   sprints: Sprint[];
-  onSavePlanning: (sprintNumber: number, data: SprintPlanning, newStatus?: SprintStatus) => void; // Updated signature
+  onSavePlanning: (sprintNumber: number, data: SprintPlanning, newStatus?: SprintStatus) => void;
+  onCreateAndPlanSprint: (sprintDetails: Omit<Sprint, 'details' | 'planning' | 'status' | 'committedPoints' | 'completedPoints'>, planningData: SprintPlanning) => void; // New handler
   projectName: string;
-  members: Member[]; // Add members prop
+  members: Member[];
 }
 
-// Internal state structure for task rows
 interface TaskRow extends Task {
-  _internalId: string; // For React key management
+  _internalId: string;
+}
+
+interface NewSprintFormState {
+    sprintNumber: string;
+    startDate: Date | undefined;
+    duration: string;
 }
 
 const createEmptyTaskRow = (): TaskRow => ({
   _internalId: `task_${Date.now()}_${Math.random()}`,
-  id: '', // Will be assigned based on internal ID or existing ID
+  id: '',
   description: '',
-  storyPoints: '', // Use string initially for easier input handling
-  assignee: '', // Initialize assignee as empty string (member name)
-  status: 'To Do', // Default status
+  storyPoints: '',
+  assignee: '',
+  status: 'To Do',
 });
 
-export default function PlanningTab({ sprints, onSavePlanning, projectName, members }: PlanningTabProps) {
+export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members }: PlanningTabProps) {
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | null>(null);
   const [planningData, setPlanningData] = useState<SprintPlanning>(initialSprintPlanning);
   const [newTasks, setNewTasks] = useState<TaskRow[]>([]);
   const [spilloverTasks, setSpilloverTasks] = useState<TaskRow[]>([]);
+  const [isCreatingNewSprint, setIsCreatingNewSprint] = useState(false);
+  const [newSprintForm, setNewSprintForm] = useState<NewSprintFormState>({ sprintNumber: '', startDate: undefined, duration: '' });
   const { toast } = useToast();
 
-  const selectedSprint = sprints.find(s => s.sprintNumber === selectedSprintNumber);
+  const selectedSprint = useMemo(() => sprints.find(s => s.sprintNumber === selectedSprintNumber), [sprints, selectedSprintNumber]);
   const isSprintCompleted = selectedSprint?.status === 'Completed';
   const isSprintActive = selectedSprint?.status === 'Active';
   const isSprintPlanned = selectedSprint?.status === 'Planned';
 
-  // Load planning data when a sprint is selected
+  const nextSprintNumber = useMemo(() => {
+    if (sprints.length === 0) return '1';
+    const maxNumber = Math.max(...sprints.map(s => s.sprintNumber));
+    return (maxNumber + 1).toString();
+  }, [sprints]);
+
+  // Reset forms when switching modes or sprints
+  const resetForms = useCallback(() => {
+      setPlanningData(initialSprintPlanning);
+      setNewTasks([createEmptyTaskRow()]);
+      setSpilloverTasks([createEmptyTaskRow()]);
+  }, []);
+
+  // Effect to load planning data when an existing sprint is selected
   useEffect(() => {
-    if (selectedSprint) {
+    if (selectedSprint && !isCreatingNewSprint) {
       const loadedPlanning = selectedSprint.planning ?? initialSprintPlanning;
       setPlanningData(loadedPlanning);
       setNewTasks(
         (loadedPlanning.newTasks || []).map((task, index) => ({
           ...task,
           storyPoints: task.storyPoints?.toString() ?? '',
-          assignee: task.assignee ?? '', // Use member name
-          status: task.status ?? 'To Do', // Default status
+          assignee: task.assignee ?? '',
+          status: task.status ?? 'To Do',
           _internalId: task.id || `initial_new_${index}_${Date.now()}`,
         }))
       );
@@ -66,55 +122,65 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName, memb
          (loadedPlanning.spilloverTasks || []).map((task, index) => ({
           ...task,
           storyPoints: task.storyPoints?.toString() ?? '',
-          assignee: task.assignee ?? '', // Use member name
-          status: task.status ?? 'To Do', // Default status
+          assignee: task.assignee ?? '',
+          status: task.status ?? 'To Do',
           _internalId: task.id || `initial_spill_${index}_${Date.now()}`,
         }))
       );
-       // Add an empty row if no tasks exist for easier entry, unless completed
-        if (!isSprintCompleted && (loadedPlanning.newTasks || []).length === 0) {
-            setNewTasks([createEmptyTaskRow()]);
-        }
-        if (!isSprintCompleted && (loadedPlanning.spilloverTasks || []).length === 0) {
-            setSpilloverTasks([createEmptyTaskRow()]);
-        }
-
+      if (!isSprintCompleted) {
+        if ((loadedPlanning.newTasks || []).length === 0) setNewTasks([createEmptyTaskRow()]);
+        if ((loadedPlanning.spilloverTasks || []).length === 0) setSpilloverTasks([createEmptyTaskRow()]);
+      }
     } else {
-      // Reset form if no sprint is selected
-      setPlanningData(initialSprintPlanning);
-      setNewTasks([createEmptyTaskRow()]);
-      setSpilloverTasks([createEmptyTaskRow()]);
+        resetForms();
     }
-  }, [selectedSprint, isSprintCompleted]); // Rerun if selected sprint or its completion status changes
+  }, [selectedSprint, isCreatingNewSprint, isSprintCompleted, resetForms]);
 
-  const handleSprintSelect = (value: string) => {
-    const sprintNum = parseInt(value, 10);
-    setSelectedSprintNumber(isNaN(sprintNum) ? null : sprintNum);
+  // Effect to reset planning form when switching to create mode
+  useEffect(() => {
+    if (isCreatingNewSprint) {
+        setSelectedSprintNumber(null); // Deselect any existing sprint
+        resetForms();
+        setNewSprintForm({ sprintNumber: nextSprintNumber, startDate: undefined, duration: '' });
+    } else {
+        setNewSprintForm({ sprintNumber: '', startDate: undefined, duration: '' }); // Clear new sprint form if switching back
+    }
+  }, [isCreatingNewSprint, nextSprintNumber, resetForms]);
+
+  const handleSelectExistingSprint = (sprintNum: number) => {
+      setIsCreatingNewSprint(false);
+      setSelectedSprintNumber(sprintNum);
   };
 
+  const handlePlanNewSprintClick = () => {
+      setIsCreatingNewSprint(true);
+  };
+
+  const handleCancelNewSprint = () => {
+      setIsCreatingNewSprint(false);
+  };
+
+
   const handleInputChange = (field: keyof Omit<SprintPlanning, 'newTasks' | 'spilloverTasks'>, value: string) => {
-      if (isSprintCompleted) return; // Prevent editing completed sprints
+      if (isSprintCompleted && !isCreatingNewSprint) return;
       setPlanningData(prev => ({ ...prev, [field]: value }));
   };
 
-
-  // --- Task Row Management ---
+  const handleNewSprintFormChange = (field: keyof NewSprintFormState, value: string | Date | undefined) => {
+      setNewSprintForm(prev => ({ ...prev, [field]: value }));
+  };
 
   const addTaskRow = (type: 'new' | 'spillover') => {
-     if (isSprintCompleted) return;
-    if (type === 'new') {
-      setNewTasks(prev => [...prev, createEmptyTaskRow()]);
-    } else {
-      setSpilloverTasks(prev => [...prev, createEmptyTaskRow()]);
-    }
+     if (isSprintCompleted && !isCreatingNewSprint) return;
+    const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
+    updater(prev => [...prev, createEmptyTaskRow()]);
   };
 
   const removeTaskRow = (type: 'new' | 'spillover', internalId: string) => {
-     if (isSprintCompleted) return;
+     if (isSprintCompleted && !isCreatingNewSprint) return;
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     updater(prevRows => {
         const newRows = prevRows.filter(row => row._internalId !== internalId);
-        // Keep at least one empty row if all are removed
         return newRows.length > 0 ? newRows : [createEmptyTaskRow()];
     });
   };
@@ -123,124 +189,193 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName, memb
     type: 'new' | 'spillover',
     internalId: string,
     field: keyof Omit<Task, 'id'>,
-    value: string | number | undefined // Allow undefined for assignee clearing
+    value: string | number | undefined
   ) => {
-     if (isSprintCompleted) return;
+     if (isSprintCompleted && !isCreatingNewSprint) return;
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     updater(rows =>
       rows.map(row =>
-        row._internalId === internalId ? { ...row, [field]: value ?? '' } : row // Set to empty string if value is undefined/null
+        row._internalId === internalId ? { ...row, [field]: value ?? '' } : row
       )
     );
   };
 
-  // --- Save Handler ---
+  const finalizeTasks = (taskRows: TaskRow[]): { tasks: Task[], errors: string[] } => {
+      const finalTasks: Task[] = [];
+      const errors: string[] = [];
+      taskRows.forEach((row, index) => {
+          if (!row.description && !row.storyPoints && !row.assignee && row.status === 'To Do') {
+               if (!row.description && !row.storyPoints && !row.assignee) return;
+          }
+          const description = row.description?.trim();
+          const storyPointsRaw = row.storyPoints?.toString().trim();
+          const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
+          const assignee = row.assignee?.trim() || undefined;
+          const status = row.status?.trim() as Task['status'];
 
-  const handleSave = (newStatus?: SprintStatus) => {
-    if (selectedSprintNumber === null) {
-      toast({ variant: "destructive", title: "Error", description: "Please select a sprint first." });
-      return;
-    }
-     if (isSprintCompleted && !newStatus) { // Allow status changes maybe, but not regular saves
-        toast({ variant: "destructive", title: "Error", description: "Cannot save planning for a completed sprint." });
-        return;
-    }
-
-    let hasErrors = false;
-
-    const finalizeTasks = (taskRows: TaskRow[]): Task[] => {
-        const finalTasks: Task[] = [];
-        taskRows.forEach((row, index) => {
-            // Skip completely empty rows silently
-            if (!row.description && !row.storyPoints && !row.assignee && row.status === 'To Do') {
-                 // More lenient skip: only skip if all fields are empty/default
-                 if (!row.description && !row.storyPoints && !row.assignee) return;
-            }
-
-
-            const description = row.description?.trim();
-            const storyPointsRaw = row.storyPoints?.toString().trim();
-            const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
-            const assignee = row.assignee?.trim() || undefined; // Store member name or undefined
-            const status = row.status?.trim() as Task['status']; // Cast to Task['status']
-
-            if (!description) {
-                 toast({ variant: "destructive", title: "Task Error", description: `Task description is required (Row ${index + 1}).`});
-                 hasErrors = true;
-                 return;
-            }
-            if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
-                 toast({ variant: "destructive", title: "Task Error", description: `Invalid Story Points for task "${description}". Must be a non-negative number.`});
-                 hasErrors = true;
-                 return;
-            }
-             if (!status || !taskStatuses.includes(status)) {
-                toast({ variant: "destructive", title: "Task Error", description: `Invalid status for task "${description}".`});
-                hasErrors = true;
-                return;
-             }
-
-            finalTasks.push({
-                id: row.id || `task_${selectedSprintNumber}_${type === 'new' ? 'n' : 's'}_${Date.now()}_${index}`, // Ensure unique ID
-                description,
-                storyPoints: storyPoints,
-                assignee: assignee, // Store member name
-                status: status,
-            });
-        });
-        return finalTasks;
-    };
-
-    const finalNewTasks = finalizeTasks(newTasks);
-    const finalSpilloverTasks = finalizeTasks(spilloverTasks);
-
-    if (hasErrors) return;
-
-    const finalPlanningData: SprintPlanning = {
-        goal: planningData.goal.trim(),
-        newTasks: finalNewTasks,
-        spilloverTasks: finalSpilloverTasks,
-        definitionOfDone: planningData.definitionOfDone.trim(),
-        testingStrategy: planningData.testingStrategy.trim(),
-    };
-
-    onSavePlanning(selectedSprintNumber, finalPlanningData, newStatus); // Pass newStatus if provided
+          if (!description) errors.push(`Task description is required (Row ${index + 1}).`);
+          if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
+               errors.push(`Invalid Story Points for task "${description || `Row ${index + 1}`}". Must be a non-negative number.`);
+          }
+           if (!status || !taskStatuses.includes(status)) {
+              errors.push(`Invalid status for task "${description || `Row ${index + 1}`}".`);
+           }
+          finalTasks.push({
+              id: row.id || `task_${selectedSprintNumber ?? 'new'}_${type === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
+              description: description || '',
+              storyPoints: storyPoints,
+              assignee: assignee,
+              status: status,
+          });
+      });
+      return { tasks: finalTasks, errors };
   };
 
-   // Handler for starting the sprint
+ const handleSaveExistingSprintPlanning = () => {
+     if (!selectedSprintNumber) {
+        toast({ variant: "destructive", title: "Error", description: "No sprint selected." });
+        return;
+     }
+      if (isSprintCompleted) {
+         toast({ variant: "destructive", title: "Error", description: "Cannot save planning for a completed sprint." });
+         return;
+     }
+
+     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks);
+     const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks);
+     const allErrors = [...newErrors, ...spillErrors];
+
+     if (allErrors.length > 0) {
+         toast({ variant: "destructive", title: "Validation Error", description: allErrors.join(" ") });
+         return;
+     }
+
+     const finalPlanningData: SprintPlanning = {
+         goal: planningData.goal.trim(),
+         newTasks: finalNewTasks,
+         spilloverTasks: finalSpilloverTasks,
+         definitionOfDone: planningData.definitionOfDone.trim(),
+         testingStrategy: planningData.testingStrategy.trim(),
+     };
+
+     onSavePlanning(selectedSprintNumber, finalPlanningData); // Save only planning, status change is separate
+ };
+
+  const handleCreateAndSaveNewSprint = () => {
+      const sprintNumInt = parseInt(newSprintForm.sprintNumber, 10);
+      const startDateStr = newSprintForm.startDate ? format(newSprintForm.startDate, 'yyyy-MM-dd') : '';
+      const duration = newSprintForm.duration;
+
+      let formErrors: string[] = [];
+      if (isNaN(sprintNumInt) || sprintNumInt <= 0) formErrors.push("Invalid Sprint Number.");
+      if (sprints.some(s => s.sprintNumber === sprintNumInt)) formErrors.push(`Sprint Number ${sprintNumInt} already exists.`);
+      if (!startDateStr || !isValid(parseISO(startDateStr))) formErrors.push("Valid Start Date is required.");
+      if (!duration || !DURATION_OPTIONS.includes(duration)) formErrors.push("Valid Duration is required.");
+
+      const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks);
+      const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks);
+      const taskErrors = [...newErrors, ...spillErrors];
+
+      if (formErrors.length > 0 || taskErrors.length > 0) {
+          toast({ variant: "destructive", title: "Validation Error", description: [...formErrors, ...taskErrors].join(" ") });
+          return;
+      }
+
+      const { totalDays, endDate } = calculateSprintMetrics(startDateStr, duration);
+      if (totalDays <= 0 || endDate === 'N/A') {
+          toast({ variant: "destructive", title: "Error", description: "Could not calculate sprint end date." });
+          return;
+      }
+
+      const newSprintDetails: Omit<Sprint, 'details' | 'planning' | 'status' | 'committedPoints' | 'completedPoints'> = {
+          sprintNumber: sprintNumInt,
+          startDate: startDateStr,
+          endDate: endDate,
+          duration: duration,
+          totalDays: totalDays,
+      };
+
+      const finalPlanningData: SprintPlanning = {
+          goal: planningData.goal.trim(),
+          newTasks: finalNewTasks,
+          spilloverTasks: finalSpilloverTasks,
+          definitionOfDone: planningData.definitionOfDone.trim(),
+          testingStrategy: planningData.testingStrategy.trim(),
+      };
+
+      onCreateAndPlanSprint(newSprintDetails, finalPlanningData);
+      setIsCreatingNewSprint(false); // Switch back to viewing existing sprints
+      // Select the newly created sprint? Or leave it unselected? Let's leave unselected for now.
+      // setSelectedSprintNumber(sprintNumInt);
+  };
+
+
    const handleStartSprint = () => {
        if (!selectedSprint || !isSprintPlanned) {
            toast({ variant: "destructive", title: "Error", description: "Only 'Planned' sprints can be started." });
            return;
        }
-       // Check if another sprint is already active
        const alreadyActiveSprint = sprints.find(s => s.status === 'Active');
        if (alreadyActiveSprint) {
            toast({ variant: "destructive", title: "Error", description: `Sprint ${alreadyActiveSprint.sprintNumber} is already active. Complete or replan it first.` });
            return;
        }
 
-       handleSave('Active'); // Call save with the new status 'Active'
+       // Save current planning state *before* changing status
+       const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks);
+       const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks);
+       const allErrors = [...newErrors, ...spillErrors];
+
+       if (allErrors.length > 0) {
+           toast({ variant: "destructive", title: "Validation Error Before Starting", description: `Please fix planning errors before starting: ${allErrors.join(" ")}` });
+           return;
+       }
+
+        const finalPlanningData: SprintPlanning = {
+            goal: planningData.goal.trim(),
+            newTasks: finalNewTasks,
+            spilloverTasks: finalSpilloverTasks,
+            definitionOfDone: planningData.definitionOfDone.trim(),
+            testingStrategy: planningData.testingStrategy.trim(),
+        };
+
+
+       onSavePlanning(selectedSprint.sprintNumber, finalPlanningData, 'Active'); // Pass new status 'Active'
+       // State will update via props, no need to manually set here
    };
+
+   const getStatusBadgeVariant = (status: Sprint['status']): "default" | "secondary" | "outline" | "destructive" | null | undefined => {
+        switch (status) {
+           case 'Active': return 'default';
+           case 'Planned': return 'secondary';
+           case 'Completed': return 'outline';
+           default: return 'secondary';
+        }
+     };
+
+      const getStatusColorClass = (status: Sprint['status']): string => {
+        switch (status) {
+          case 'Active': return 'text-primary';
+          case 'Planned': return 'text-muted-foreground';
+          case 'Completed': return 'text-green-600';
+          default: return 'text-muted-foreground';
+        }
+      };
 
 
    // Helper to render task rows
-   const renderTaskTable = (type: 'new' | 'spillover', tasks: TaskRow[]) => (
+   const renderTaskTable = (type: 'new' | 'spillover', tasks: TaskRow[], disabled: boolean) => (
      <div className="space-y-4">
-        {/* Table Header for larger screens */}
         <div className="hidden md:grid grid-cols-[2fr_100px_1fr_1fr_40px] gap-x-3 items-center pb-2 border-b">
             <Label className="text-xs font-medium text-muted-foreground">Description*</Label>
             <Label className="text-xs font-medium text-muted-foreground text-right">Story Pts</Label>
             <Label className="text-xs font-medium text-muted-foreground">Assignee</Label>
             <Label className="text-xs font-medium text-muted-foreground">Status</Label>
-            <div /> {/* Placeholder for delete */}
+            <div />
         </div>
-
-        {/* Task Rows */}
         <div className="space-y-4 md:space-y-2">
             {tasks.map((row) => (
             <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[2fr_100px_1fr_1fr_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
-                {/* Description */}
                 <div className="md:col-span-1 col-span-2">
                     <Label htmlFor={`desc-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Description*</Label>
                     <Input
@@ -249,10 +384,9 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName, memb
                         onChange={e => handleTaskInputChange(type, row._internalId, 'description', e.target.value)}
                         placeholder="Task description"
                         className="h-9"
-                        disabled={isSprintCompleted}
+                        disabled={disabled}
                     />
                 </div>
-                {/* Story Points */}
                 <div className="md:col-span-1 col-span-1">
                     <Label htmlFor={`sp-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Story Pts</Label>
                     <Input
@@ -263,16 +397,15 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName, memb
                         placeholder="Pts"
                         className="h-9 text-right"
                         min="0"
-                         disabled={isSprintCompleted}
+                         disabled={disabled}
                     />
                 </div>
-                {/* Assignee */}
                  <div className="md:col-span-1 col-span-1">
                     <Label htmlFor={`assignee-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Assignee</Label>
                      <Select
-                         value={row.assignee ?? ''} // Use member name
-                         onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'assignee', value === 'unassigned' ? undefined : value)} // Set undefined if 'unassigned' is chosen
-                         disabled={isSprintCompleted}
+                         value={row.assignee ?? ''}
+                         onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'assignee', value === 'unassigned' ? undefined : value)}
+                         disabled={disabled || members.length === 0}
                      >
                         <SelectTrigger id={`assignee-${type}-${row._internalId}`} className="h-9">
                           <SelectValue placeholder="Select Assignee" />
@@ -286,13 +419,12 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName, memb
                         </SelectContent>
                      </Select>
                 </div>
-                {/* Status */}
                 <div className="md:col-span-1 col-span-1">
                     <Label htmlFor={`status-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Status</Label>
                      <Select
                        value={row.status}
                        onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'status', value)}
-                        disabled={isSprintCompleted}
+                        disabled={disabled}
                      >
                         <SelectTrigger id={`status-${type}-${row._internalId}`} className="h-9">
                           <SelectValue placeholder="Select Status" />
@@ -304,7 +436,6 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName, memb
                         </SelectContent>
                      </Select>
                 </div>
-                {/* Delete Button */}
                 <div className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
                     <Button
                         type="button"
@@ -313,7 +444,7 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName, memb
                         onClick={() => removeTaskRow(type, row._internalId)}
                         className="h-9 w-9 text-muted-foreground hover:text-destructive"
                         aria-label={`Remove ${type} task row`}
-                         disabled={isSprintCompleted}
+                         disabled={disabled}
                     >
                         <Trash2 className="h-4 w-4" />
                     </Button>
@@ -327,7 +458,7 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName, memb
           variant="outline"
           size="sm"
           className="mt-4"
-          disabled={isSprintCompleted}
+          disabled={disabled}
          >
             <PlusCircle className="mr-2 h-4 w-4" />
             Add {type === 'new' ? 'New' : 'Spillover'} Task
@@ -335,131 +466,257 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName, memb
     </div>
   );
 
+  const renderPlanningForm = (disabled: boolean) => (
+     <>
+        {/* Sprint Goal */}
+        <div className="space-y-2">
+          <Label htmlFor="sprint-goal" className="text-base font-semibold">Sprint Goal</Label>
+          <Textarea
+            id="sprint-goal"
+            placeholder="Define the primary objective for this sprint..."
+            value={planningData.goal}
+            onChange={(e) => handleInputChange('goal', e.target.value)}
+            rows={3}
+            disabled={disabled}
+          />
+        </div>
+
+         {/* New Tasks Table */}
+         <Card>
+             <CardHeader>
+                 <CardTitle>New Tasks</CardTitle>
+             </CardHeader>
+             <CardContent>
+                 {renderTaskTable('new', newTasks, disabled)}
+             </CardContent>
+             <CardFooter>
+                <p className="text-xs text-muted-foreground">* Description required.</p>
+            </CardFooter>
+         </Card>
+
+          {/* Spillover Tasks Table */}
+         <Card>
+             <CardHeader>
+                 <CardTitle>Spillover Tasks</CardTitle>
+             </CardHeader>
+             <CardContent>
+                 {renderTaskTable('spillover', spilloverTasks, disabled)}
+             </CardContent>
+             <CardFooter>
+                <p className="text-xs text-muted-foreground">* Description required.</p>
+            </CardFooter>
+         </Card>
+
+        {/* Definition of Done */}
+        <div className="space-y-2">
+          <Label htmlFor="definition-of-done" className="text-base font-semibold">Definition of Done (DoD)</Label>
+          <Textarea
+            id="definition-of-done"
+            placeholder="Specify the criteria that must be met for a task to be considered 'Done'..."
+            value={planningData.definitionOfDone}
+            onChange={(e) => handleInputChange('definitionOfDone', e.target.value)}
+            rows={4}
+             disabled={disabled}
+          />
+        </div>
+
+        {/* Testing Strategy */}
+        <div className="space-y-2">
+          <Label htmlFor="testing-strategy" className="text-base font-semibold">Testing Strategy</Label>
+          <Textarea
+            id="testing-strategy"
+            placeholder="Outline the approach for testing during this sprint (e.g., unit tests, integration tests, manual QA)..."
+            value={planningData.testingStrategy}
+            onChange={(e) => handleInputChange('testingStrategy', e.target.value)}
+            rows={4}
+             disabled={disabled}
+          />
+        </div>
+     </>
+  );
+
+
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-             <div>
-                <CardTitle>Sprint Planning: {projectName}</CardTitle>
-                 <CardDescription>Define goals, tasks, DoD, and testing strategy for a sprint. {isSprintCompleted ? <span className="font-semibold text-destructive">(Completed - Read Only)</span> : (isSprintActive ? <span className="font-semibold text-primary">(Active)</span> : '')}</CardDescription>
-             </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-                <Select
-                    value={selectedSprintNumber?.toString() ?? ""}
-                    onValueChange={handleSprintSelect}
-                    disabled={sprints.length === 0}
-                    >
-                    <SelectTrigger className="min-w-[200px] flex-1 sm:flex-none">
-                        <SelectValue placeholder="Select Sprint" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectGroup>
-                        <SelectLabel>Sprints</SelectLabel>
-                        {sprints.sort((a,b) => a.sprintNumber - b.sprintNumber).map(sprint => (
-                            <SelectItem key={sprint.sprintNumber} value={sprint.sprintNumber.toString()}>
-                            Sprint {sprint.sprintNumber} ({sprint.startDate}) - {sprint.status}
-                            </SelectItem>
-                        ))}
-                        {sprints.length === 0 && <SelectItem value="no-sprints" disabled>No sprints found</SelectItem>}
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
-                 {/* Start Sprint Button */}
-                {isSprintPlanned && selectedSprint && (
-                    <Button onClick={handleStartSprint} variant="secondary" size="sm" className="bg-green-600 hover:bg-green-700 text-white">
-                       <PlayCircle className="mr-2 h-4 w-4" /> Start Sprint
-                    </Button>
-                )}
-                <Button onClick={() => handleSave()} disabled={selectedSprintNumber === null || isSprintCompleted}>Save Planning</Button>
-            </div>
-          </div>
-        </CardHeader>
+        {/* Section to Create New Sprint */}
+        <Card>
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <CardTitle>Plan New Sprint</CardTitle>
+                    {!isCreatingNewSprint && (
+                        <Button variant="outline" size="sm" onClick={handlePlanNewSprintClick}>
+                            <PlusCircle className="mr-2 h-4 w-4" /> Plan New Sprint
+                        </Button>
+                    )}
+                     {isCreatingNewSprint && (
+                        <Button variant="ghost" size="sm" onClick={handleCancelNewSprint} className="text-destructive hover:text-destructive">
+                            <XCircle className="mr-2 h-4 w-4" /> Cancel
+                        </Button>
+                    )}
+                </div>
+                 <CardDescription>Define the details for a new upcoming sprint.</CardDescription>
+            </CardHeader>
+            {isCreatingNewSprint && (
+                <CardContent className="space-y-6">
+                     {/* New Sprint Basic Details */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                        <div>
+                            <Label htmlFor="new-sprint-number">Sprint Number*</Label>
+                            <Input
+                                id="new-sprint-number"
+                                type="number"
+                                placeholder={nextSprintNumber}
+                                value={newSprintForm.sprintNumber}
+                                onChange={e => handleNewSprintFormChange('sprintNumber', e.target.value)}
+                                required
+                                className="h-9"
+                                min="1"
+                            />
+                         </div>
+                         <div>
+                              <Label htmlFor="new-sprint-start-date">Start Date*</Label>
+                               <Popover>
+                                   <PopoverTrigger asChild>
+                                       <Button
+                                           variant={"outline"}
+                                           className={cn(
+                                               "w-full justify-start text-left font-normal h-9",
+                                               !newSprintForm.startDate && "text-muted-foreground"
+                                           )}
+                                       >
+                                           <CalendarIcon className="mr-2 h-4 w-4" />
+                                           {newSprintForm.startDate ? format(newSprintForm.startDate, "PPP") : <span>Pick a date</span>}
+                                       </Button>
+                                   </PopoverTrigger>
+                                   <PopoverContent className="w-auto p-0">
+                                       <Calendar
+                                           mode="single"
+                                           selected={newSprintForm.startDate}
+                                           onSelect={(date) => handleNewSprintFormChange('startDate', date)}
+                                           initialFocus
+                                       />
+                                   </PopoverContent>
+                               </Popover>
+                         </div>
+                         <div>
+                             <Label htmlFor="new-sprint-duration">Duration*</Label>
+                              <Select value={newSprintForm.duration} onValueChange={(value) => handleNewSprintFormChange('duration', value)} required>
+                                  <SelectTrigger id="new-sprint-duration" className="h-9 w-full">
+                                      <SelectValue placeholder="Select Duration" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                      {DURATION_OPTIONS.map(option => (
+                                          <SelectItem key={option} value={option}>{option}</SelectItem>
+                                      ))}
+                                  </SelectContent>
+                              </Select>
+                         </div>
+                     </div>
 
-        {selectedSprintNumber !== null && selectedSprint ? (
-          <CardContent className="space-y-6">
-            {/* Sprint Goal */}
-            <div className="space-y-2">
-              <Label htmlFor="sprint-goal" className="text-base font-semibold">Sprint Goal</Label>
-              <Textarea
-                id="sprint-goal"
-                placeholder="Define the primary objective for this sprint..."
-                value={planningData.goal}
-                onChange={(e) => handleInputChange('goal', e.target.value)}
-                rows={3}
-                disabled={isSprintCompleted}
-              />
-            </div>
+                     {/* Render Planning Form for New Sprint */}
+                     {renderPlanningForm(false)} {/* Planning form is enabled for new sprint */}
 
-             {/* New Tasks Table */}
-             <Card>
-                 <CardHeader>
-                     <CardTitle>New Tasks for Sprint</CardTitle>
-                 </CardHeader>
-                 <CardContent>
-                     {renderTaskTable('new', newTasks)}
-                 </CardContent>
-                 <CardFooter>
-                    <p className="text-xs text-muted-foreground">* Description required.</p>
+                </CardContent>
+            )}
+             {isCreatingNewSprint && (
+                 <CardFooter className="border-t pt-4 flex justify-end">
+                    <Button onClick={handleCreateAndSaveNewSprint}>Create and Save Sprint Plan</Button>
                 </CardFooter>
-             </Card>
+            )}
+        </Card>
 
-              {/* Spillover Tasks Table */}
-             <Card>
-                 <CardHeader>
-                     <CardTitle>Spillover Tasks from Previous Sprint</CardTitle>
-                 </CardHeader>
-                 <CardContent>
-                     {renderTaskTable('spillover', spilloverTasks)}
-                 </CardContent>
-                 <CardFooter>
-                    <p className="text-xs text-muted-foreground">* Description required.</p>
-                </CardFooter>
-             </Card>
 
-            {/* Definition of Done */}
-            <div className="space-y-2">
-              <Label htmlFor="definition-of-done" className="text-base font-semibold">Definition of Done (DoD)</Label>
-              <Textarea
-                id="definition-of-done"
-                placeholder="Specify the criteria that must be met for a task to be considered 'Done'..."
-                value={planningData.definitionOfDone}
-                onChange={(e) => handleInputChange('definitionOfDone', e.target.value)}
-                rows={4}
-                 disabled={isSprintCompleted}
-              />
-            </div>
+      {/* Section for Existing Sprints */}
+      {!isCreatingNewSprint && (
+          <Card>
+            <CardHeader>
+              <CardTitle>View & Plan Existing Sprints: {projectName}</CardTitle>
+               <CardDescription>Select a sprint below to view or edit its plan. Completed sprints are read-only. Use the 'Start Sprint' button for 'Planned' sprints.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                 {sprints.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-8">No existing sprints found. Plan a new sprint above or add past sprints in the 'Entry' tab.</p>
+                 ) : (
+                    <div className="overflow-x-auto">
+                       <Table>
+                         <TableHeader>
+                           <TableRow>
+                             <TableHead className="w-[100px]">Sprint #</TableHead>
+                             <TableHead>Start Date</TableHead>
+                             <TableHead>End Date</TableHead>
+                             <TableHead>Status</TableHead>
+                             <TableHead className="w-[80px] text-center">Actions</TableHead>
+                           </TableRow>
+                         </TableHeader>
+                         <TableBody>
+                           {sprints.sort((a, b) => a.sprintNumber - b.sprintNumber).map((sprint) => (
+                             <TableRow key={sprint.sprintNumber} className={cn(selectedSprintNumber === sprint.sprintNumber && "bg-muted")}>
+                               <TableCell className="font-medium">{sprint.sprintNumber}</TableCell>
+                               <TableCell>{sprint.startDate}</TableCell>
+                               <TableCell>{sprint.endDate}</TableCell>
+                               <TableCell>
+                                 <Badge variant={getStatusBadgeVariant(sprint.status)} className="capitalize">
+                                   <Circle className={cn("mr-1 h-2 w-2 fill-current", getStatusColorClass(sprint.status))} />
+                                   {sprint.status}
+                                 </Badge>
+                               </TableCell>
+                               <TableCell className="text-center space-x-1">
+                                 <Button
+                                   variant="ghost"
+                                   size="icon"
+                                   onClick={() => handleSelectExistingSprint(sprint.sprintNumber)}
+                                   aria-label={`View/Edit Plan for Sprint ${sprint.sprintNumber}`}
+                                   title="View/Edit Plan"
+                                 >
+                                   <Edit className="h-4 w-4" />
+                                 </Button>
+                                 {sprint.status === 'Planned' && (
+                                    <Button
+                                       variant="ghost"
+                                       size="icon"
+                                       onClick={() => {
+                                          setSelectedSprintNumber(sprint.sprintNumber); // Select first if not already selected
+                                          handleStartSprint();
+                                       }}
+                                       aria-label={`Start Sprint ${sprint.sprintNumber}`}
+                                       title="Start Sprint"
+                                       className="text-green-600 hover:text-green-700"
+                                    >
+                                      <PlayCircle className="h-4 w-4" />
+                                    </Button>
+                                 )}
+                               </TableCell>
+                             </TableRow>
+                           ))}
+                         </TableBody>
+                       </Table>
+                     </div>
+                 )}
+             </CardContent>
 
-            {/* Testing Strategy */}
-            <div className="space-y-2">
-              <Label htmlFor="testing-strategy" className="text-base font-semibold">Testing Strategy</Label>
-              <Textarea
-                id="testing-strategy"
-                placeholder="Outline the approach for testing during this sprint (e.g., unit tests, integration tests, manual QA)..."
-                value={planningData.testingStrategy}
-                onChange={(e) => handleInputChange('testingStrategy', e.target.value)}
-                rows={4}
-                 disabled={isSprintCompleted}
-              />
-            </div>
 
-          </CardContent>
-        ) : (
-          <CardContent>
-            <p className="text-muted-foreground text-center py-8">
-              {sprints.length > 0 ? 'Select a sprint from the dropdown above to view or edit its planning details.' : 'Create sprints in the \'Entry\' tab first.'}
-            </p>
-          </CardContent>
+            {/* Planning Details Area for Selected Sprint */}
+             {selectedSprint && (
+                <>
+                    <CardContent className="space-y-6 border-t pt-6 mt-6">
+                       <h3 className="text-xl font-semibold">Planning Details for Sprint {selectedSprintNumber}</h3>
+                        {renderPlanningForm(isSprintCompleted)}
+                    </CardContent>
+                    <CardFooter className="border-t pt-4 flex justify-end gap-2">
+                         {isSprintPlanned && (
+                             <Button onClick={handleStartSprint} variant="secondary" size="sm" className="bg-green-600 hover:bg-green-700 text-white">
+                                 <PlayCircle className="mr-2 h-4 w-4" /> Start Sprint
+                             </Button>
+                         )}
+                         <Button onClick={handleSaveExistingSprintPlanning} disabled={isSprintCompleted}>
+                             Save Planning
+                         </Button>
+                     </CardFooter>
+                 </>
+             )}
+          </Card>
         )}
-          <CardFooter className="border-t pt-4 flex justify-end gap-2">
-              {isSprintPlanned && selectedSprint && (
-                   <Button onClick={handleStartSprint} variant="secondary" size="sm" className="bg-green-600 hover:bg-green-700 text-white">
-                       <PlayCircle className="mr-2 h-4 w-4" /> Start Sprint
-                   </Button>
-              )}
-             <Button onClick={() => handleSave()} disabled={selectedSprintNumber === null || isSprintCompleted}>Save Planning</Button>
-          </CardFooter>
-      </Card>
+
     </div>
   );
 }
