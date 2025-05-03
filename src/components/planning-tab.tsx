@@ -16,7 +16,7 @@ import type { Sprint, SprintPlanning, Task, Member, SprintStatus } from '@/types
 import { initialSprintPlanning, taskStatuses, predefinedRoles } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { addDays, format, parseISO, isValid, differenceInDays } from 'date-fns';
+import { addDays, format, parseISO, isValid, differenceInDays, getDay } from 'date-fns'; // Import getDay
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import SprintTimelineChart from '@/components/charts/sprint-timeline-chart'; // Import the new chart
@@ -95,6 +95,37 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
   return totalDays > 0 ? totalDays : null;
 };
 
+// Helper function to calculate end date skipping weekends
+const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number): Date => {
+  let currentDate = startDate;
+  let daysAdded = 0;
+  let workingDaysCounted = 0;
+
+  // If duration is 0 or less, return the start date
+  if (workingDays <= 0) return startDate;
+
+  // Count the start date if it's a weekday
+  const startDayOfWeek = getDay(startDate);
+  if (startDayOfWeek !== 0 && startDayOfWeek !== 6) {
+    workingDaysCounted = 1;
+  }
+
+  // If the duration is just 1 day and start date is a weekday, end date is the start date
+  if (workingDays === 1 && workingDaysCounted === 1) {
+      return startDate;
+  }
+
+  while (workingDaysCounted < workingDays) {
+    daysAdded++;
+    currentDate = addDays(startDate, daysAdded);
+    const dayOfWeek = getDay(currentDate); // 0=Sun, 6=Sat
+
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      workingDaysCounted++;
+    }
+  }
+  return currentDate; // The final end date
+};
 
 
 interface PlanningTabProps {
@@ -174,25 +205,8 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
          .map(task => {
              const startDate = parseISO(task.startDate!);
              const durationDays = parseEstimatedTimeToDays(task.estimatedTime!)!;
-             // Calculate an *approximate* end date based on working days for the chart
-             // Note: This simple calculation doesn't account for weekends within the duration.
-              // Calculate end date by adding *calendar* days, assuming estimate is working days.
-              // This is an approximation for visualization. More complex logic needed for exact weekend skipping.
-             let daysToAdd = 0;
-             let currentDay = startDate;
-             let workingDaysCounted = 0;
-             while (workingDaysCounted < durationDays) {
-                 const dayOfWeek = currentDay.getDay(); // 0=Sun, 6=Sat
-                 if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-                     workingDaysCounted++;
-                 }
-                 // Don't increment daysToAdd on the last working day
-                 if (workingDaysCounted < durationDays) {
-                     daysToAdd++;
-                 }
-                 currentDay = addDays(startDate, daysToAdd + 1); // Check the next day
-             }
-             const endDate = addDays(startDate, daysToAdd);
+             // Calculate end date skipping weekends using the helper function
+             const endDate = calculateEndDateSkippingWeekends(startDate, durationDays);
 
              return {
                  ...task,

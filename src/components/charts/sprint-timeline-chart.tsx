@@ -4,8 +4,10 @@
 import type { Task, Member } from '@/types/sprint-data'; // Import Member
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from 'recharts';
 import { ChartConfig, ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
-import { format, parseISO, differenceInDays, addDays, isWithinInterval } from 'date-fns';
+import { format, parseISO, differenceInDays, addDays, isWithinInterval, getDay, eachDayOfInterval } from 'date-fns'; // Import getDay, eachDayOfInterval
 import { useMemo } from 'react';
+import { cn } from "@/lib/utils";
+
 
 // Define a temporary type for chart data that includes the calculated endDate
 interface TaskWithEndDate extends Task {
@@ -38,6 +40,8 @@ const statusColors: { [key: string]: string } = {
   'Blocked': 'hsl(var(--destructive))', // Red
 };
 
+const weekendColor = 'hsl(var(--muted) / 0.2)'; // Very light gray for weekend background
+
 
 const defaultColor = 'hsl(var(--muted-foreground))'; // Gray for unassigned/default
 
@@ -63,6 +67,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
     return tasks
         .map((task, index) => {
+            if (!task.startDate) return null; // Skip tasks without start date
             const taskStart = parseISO(task.startDate!);
             const taskEnd = parseISO(task.endDate); // Use the calculated endDate
 
@@ -75,9 +80,12 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                visEnd = visStart;
              }
 
-            const startDay = differenceInDays(visStart, start);
-            // Ensure duration is at least 1 day for visualization
-            const duration = Math.max(differenceInDays(visEnd, visStart) + 1, 1);
+            const startDayIndex = differenceInDays(visStart, start);
+            // Calculate duration in *days* for the bar length (inclusive)
+            const durationInDays = differenceInDays(visEnd, visStart) + 1;
+             // Ensure duration is at least 1 day for visualization
+            const visualDuration = Math.max(durationInDays, 1);
+
 
              // Assign color based on assignee first, fallback to status or default
              const color = task.assignee && memberColorMap[task.assignee]
@@ -87,12 +95,29 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             return {
                 name: task.description || `Task ${task.id}`,
                 taskIndex: index, // Use index for Y-axis positioning
-                range: [startDay, startDay + duration -1], // [start_day_index, end_day_index]
+                // range: [startDayIndex, startDayIndex + visualDuration -1], // [start_day_index, end_day_index]
+                range: [startDayIndex, startDayIndex + visualDuration -1], // Bar spans from start day index to end day index
                 fill: color,
                 tooltip: `${task.description || 'Task'} (${task.status || 'N/A'}) - Est. ${task.estimatedTime || '?'} ${task.assignee ? '(' + task.assignee + ')' : '(Unassigned)'} [${format(taskStart, 'MM/dd')} - ${format(taskEnd, 'MM/dd')}]` // Updated tooltip
             };
-        });
+        }).filter(item => item !== null); // Remove null items
   }, [tasks, sprintStartDate, sprintEndDate, memberColorMap]); // Add memberColorMap dependency
+
+  // Calculate weekend days within the sprint range
+   const weekendIndices = useMemo(() => {
+       if (!sprintStartDate || !sprintEndDate) return [];
+       const start = parseISO(sprintStartDate);
+       const end = parseISO(sprintEndDate);
+       const indices: number[] = [];
+       eachDayOfInterval({ start, end }).forEach((date) => {
+           const dayOfWeek = getDay(date); // 0 = Sunday, 6 = Saturday
+           if (dayOfWeek === 0 || dayOfWeek === 6) {
+               indices.push(differenceInDays(date, start));
+           }
+       });
+       return indices;
+   }, [sprintStartDate, sprintEndDate]);
+
 
   if (chartData.length === 0) {
     return <div className="flex items-center justify-center h-full text-muted-foreground">No tasks with valid start date and estimate to display.</div>;
@@ -128,6 +153,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
           <XAxis
              type="number"
+             dataKey="range[0]" // Use the start day index for positioning
              domain={[0, sprintDays ]} // Domain from day 0 to sprintDays
              ticks={sprintDayIndices} // Ticks for each day index
              tickFormatter={(tick) => xTicks[tick] ?? ''} // Format ticks to dates
@@ -135,19 +161,30 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
              axisLine={false}
              tickLine={true}
              interval={0} // Ensure all ticks are considered for rendering based on formatter
-            //  hide // Hide the default axis, we use ReferenceLines below for grid effect
              allowDuplicatedCategory={false} // Prevent duplicate category labels if needed
+             // Reversed might not be needed for X-axis timeline
            />
-           {/* Add ReferenceLines for Day Markers (Grid effect) */}
-           {/* {sprintDayIndices.map((i) => (
+           {/* Add ReferenceAreas for Weekend Highlighting */}
+           {weekendIndices.map((index) => (
                <ReferenceLine
-                 key={`day-line-${i}`}
-                 x={i} // Position line at the START of the day index
-                 stroke="hsl(var(--border))"
-                 strokeDasharray="2 2"
-                 // label={{ value: xTicks[i] ?? '', position: 'bottom', fontSize: 10, fill: 'hsl(var(--muted-foreground))', dy: 10 }}
+                 key={`weekend-line-${index}`}
+                 x={index + 0.5} // Position line slightly offset to cover the day block visually
+                 stroke={weekendColor} // Use very light gray for weekends
+                 strokeWidth={10} // Adjust width to cover the day visually - EXPERIMENT
+                 ifOverflow="extendDomain" // Extend domain if needed
+                 // label={{ value: "Weekend", position: 'insideTop', fontSize: 8, fill: 'hsl(var(--muted-foreground))', angle: -90, dy: -5 }}
                />
-            ))} */}
+               // Alternative: Use ReferenceArea - might require different setup
+               // <ReferenceArea
+               //   key={`weekend-area-${index}`}
+               //   x1={index}
+               //   x2={index + 1}
+               //   fill={weekendColor}
+               //   strokeOpacity={0} // No border for the area
+               //   ifOverflow="hidden" // Clip the area to the chart boundaries
+               // />
+           ))}
+
           <YAxis
             dataKey="taskIndex"
             type="number"
@@ -174,11 +211,12 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
               }}
              />
            <Legend content={null} /> {/* Hide default legend */}
-           <Bar dataKey="range" radius={2} barSize={10} fill={(data) => data.payload.fill} >
-             {/* We set fill color directly in chartData or using fill function */}
-           </Bar>
+           {/* Use dataKey="range" which is [start, end]. Recharts automatically calculates width */}
+           <Bar dataKey="range" radius={2} barSize={10} fill={(data) => data.payload.fill} />
+
         </BarChart>
       </ResponsiveContainer>
     </ChartContainer>
   );
 }
+
