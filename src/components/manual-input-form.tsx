@@ -8,40 +8,83 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import type { SprintData, Sprint, DeveloperDailyPoints } from '@/types/sprint-data';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select" // Import Select component
+import type { SprintData, Sprint } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { PlusCircle, Trash2 } from 'lucide-react';
+import { addDays, format, parseISO } from 'date-fns'; // For date calculations
+import { cn } from "@/lib/utils";
+
 
 interface ManualInputFormProps {
   onSubmit: (data: SprintData) => void;
 }
 
-// Add optional start/end date fields to the manual row
+// Updated row structure for manual entry
 interface ManualEntryRow {
   id: number;
   sprintNumber: string;
-  date: string;
-  developer: string;
-  storyPointsCompleted: string;
-  dayOfSprint: string;
-  totalSprintPoints: string;
-  totalDaysInSprint: string;
-  // Optional for direct entry, will be derived if possible
-  startDate?: string;
-  endDate?: string;
+  startDate: string;
+  duration: string; // e.g., "1 Week", "2 Weeks"
+  totalCommitment: string;
+  totalDelivered: string;
+  details: string;
 }
+
+const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
+
+// Helper to calculate working days and end date from duration string
+const calculateSprintMetrics = (startDateStr: string, duration: string): { totalDays: number, endDate: string } => {
+    let totalDays = 0;
+    let calendarDaysToAdd = 0;
+
+    switch (duration) {
+        case "1 Week":
+            totalDays = 5;
+            calendarDaysToAdd = 6; // Saturday
+            break;
+        case "2 Weeks":
+            totalDays = 10;
+            calendarDaysToAdd = 13; // Following Saturday
+            break;
+        case "3 Weeks":
+            totalDays = 15;
+            calendarDaysToAdd = 20; // Following Saturday
+            break;
+        case "4 Weeks":
+            totalDays = 20;
+            calendarDaysToAdd = 27; // Following Saturday
+            break;
+        default:
+            totalDays = 0;
+            calendarDaysToAdd = -1; // Indicate invalid duration
+    }
+
+    if (!startDateStr || calendarDaysToAdd < 0) {
+        return { totalDays: 0, endDate: 'N/A' };
+    }
+
+    try {
+        const startDate = parseISO(startDateStr); // Handles YYYY-MM-DD
+        const endDate = addDays(startDate, calendarDaysToAdd);
+        return { totalDays, endDate: format(endDate, 'yyyy-MM-dd') };
+    } catch (e) {
+        console.error("Error calculating end date:", e);
+        return { totalDays: 0, endDate: 'N/A' };
+    }
+};
 
 
 export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
   const [rows, setRows] = useState<ManualEntryRow[]>([
-    { id: Date.now(), sprintNumber: '', date: '', developer: '', storyPointsCompleted: '', dayOfSprint: '', totalSprintPoints: '', totalDaysInSprint: '' }
+    { id: Date.now(), sprintNumber: '', startDate: '', duration: '', totalCommitment: '', totalDelivered: '', details: '' }
   ]);
   const [pasteData, setPasteData] = useState<string>('');
   const { toast } = useToast();
 
 
   const handleAddRow = () => {
-    setRows([...rows, { id: Date.now(), sprintNumber: '', date: '', developer: '', storyPointsCompleted: '', dayOfSprint: '', totalSprintPoints: '', totalDaysInSprint: '' }]);
+     setRows([...rows, { id: Date.now(), sprintNumber: '', startDate: '', duration: '', totalCommitment: '', totalDelivered: '', details: '' }]);
   };
 
   const handleRemoveRow = (id: number) => {
@@ -51,6 +94,12 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
   const handleInputChange = (id: number, field: keyof Omit<ManualEntryRow, 'id'>, value: string) => {
     setRows(rows.map(row => row.id === id ? { ...row, [field]: value } : row));
   };
+
+   // Specific handler for Select component
+  const handleDurationChange = (id: number, value: string) => {
+     handleInputChange(id, 'duration', value);
+  };
+
 
   const handlePasteChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setPasteData(event.target.value);
@@ -63,14 +112,14 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
     }
 
     const lines = pasteData.trim().split('\n');
-    // Include optional StartDate and EndDate in expected/possible headers
-    const expectedHeaders = ['SprintNumber', 'Date', 'Developer', 'StoryPointsCompleted', 'DayOfSprint', 'TotalSprintPoints', 'TotalDaysInSprint', 'StartDate', 'EndDate'];
-    const requiredHeaders = ['SprintNumber', 'Date', 'Developer', 'StoryPointsCompleted', 'DayOfSprint', 'TotalSprintPoints', 'TotalDaysInSprint']; // Core required
+    // Update expected headers for simplified format
+    const expectedHeaders = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered', 'Details'];
+    const requiredHeaders = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered']; // Core required
     const newRows: ManualEntryRow[] = [];
     let headerLine = '';
     let dataLines: string[] = [];
 
-    // Check if the first line looks like a header (check against required headers)
+    // Check if the first line looks like a header
     const firstLineCols = lines[0].split('\t'); // Assuming TSV
      if (requiredHeaders.every(header => firstLineCols.some(col => col.trim().toLowerCase() === header.toLowerCase()))) {
          headerLine = lines[0];
@@ -78,6 +127,11 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
      } else {
          // Assume no header provided, use required headers implicitly
          dataLines = lines;
+         // Verify if the number of columns matches required headers count if no header detected
+         if (firstLineCols.length < requiredHeaders.length) {
+              toast({ variant: "destructive", title: "Error", description: `Pasted data seems to be missing columns. Expected at least ${requiredHeaders.length}.` });
+              return;
+         }
      }
 
      const headers = headerLine ? headerLine.split('\t').map(h => h.trim()) : requiredHeaders;
@@ -87,15 +141,18 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
         const canonicalHeader = expectedHeaders.find(eh => eh.toLowerCase() === h.toLowerCase());
         if (canonicalHeader) {
             headerMap[canonicalHeader] = i;
+        } else if (!headerLine && i < expectedHeaders.length) {
+            // If no header, map based on order up to expected headers count
+            headerMap[expectedHeaders[i]] = i;
         }
      });
 
-     // Check if all REQUIRED headers are present
+     // Check if all REQUIRED headers are mapped
      const missingRequiredHeaders = requiredHeaders.filter(rh => !(rh in headerMap));
-     if (missingRequiredHeaders.length > 0 && headerLine) { // Only throw error if headers were provided but are incomplete for required fields
-          toast({ variant: "destructive", title: "Error", description: `Missing required columns in pasted data: ${missingRequiredHeaders.join(', ')}` });
-         return;
-     }
+      if (missingRequiredHeaders.length > 0) {
+            toast({ variant: "destructive", title: "Error", description: `Missing required columns in pasted data: ${missingRequiredHeaders.join(', ')}` });
+           return;
+       }
 
 
     dataLines.forEach((line, index) => {
@@ -112,15 +169,22 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
          expectedHeaders.forEach(header => { // Iterate through all possible headers
             const colIndex = headerMap[header];
              const value = colIndex !== undefined ? (values[colIndex] || '').trim() : '';
-             // Only add if the header was found or it's a required one (even if implicit)
+             // Only add if the header was found or it's an implicit required one
              if (colIndex !== undefined || requiredHeaders.includes(header)) {
-                (newRow as any)[header] = value;
+                // Map spreadsheet header names to ManualEntryRow field names
+                switch(header) {
+                    case 'SprintNumber': newRow.sprintNumber = value; break;
+                    case 'StartDate': newRow.startDate = value; break;
+                    case 'Duration': newRow.duration = value; break;
+                    case 'TotalCommitment': newRow.totalCommitment = value; break;
+                    case 'TotalDelivered': newRow.totalDelivered = value; break;
+                    case 'Details': newRow.details = value; break;
+                }
              }
          });
 
-
-        // Basic check if essential fields might be empty
-        if (!newRow.sprintNumber || !newRow.date || !newRow.developer || !newRow.storyPointsCompleted || !newRow.dayOfSprint || !newRow.totalSprintPoints || !newRow.totalDaysInSprint) {
+        // Basic check if essential fields might be empty after mapping
+        if (!newRow.sprintNumber || !newRow.startDate || !newRow.duration || !newRow.totalCommitment || !newRow.totalDelivered) {
            console.warn(`Skipping pasted line ${index + (headerLine ? 2 : 1)}: Contains potentially empty required fields.`, newRow);
            // Optionally skip the row or allow it and let validation handle it later
         }
@@ -142,37 +206,27 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const sprintsMap = new Map<number, Sprint>();
-    const developerPoints: DeveloperDailyPoints = {};
-    let maxDaysInSprint = 0;
+    const sprints: Sprint[] = [];
     let hasErrors = false;
-    const sprintDateRanges = new Map<number, { min: string, max: string }>(); // Track min/max dates per sprint
+    let maxTotalDays = 0; // Track max days for SprintData
 
     rows.forEach((row, index) => {
         // Validate and parse each field
         const sprintNumber = parseInt(row.sprintNumber, 10);
-        const dateStr = row.date.trim(); // Validate YYYY-MM-DD format
-        const developer = row.developer.trim();
-        const points = parseInt(row.storyPointsCompleted, 10);
-        const day = parseInt(row.dayOfSprint, 10);
-        const totalPointsInSprint = parseInt(row.totalSprintPoints, 10);
-        const totalDays = parseInt(row.totalDaysInSprint, 10);
-        const startDate = row.startDate?.trim(); // Optional start date
-        const endDate = row.endDate?.trim(); // Optional end date
+        const startDateStr = row.startDate.trim(); // Validate YYYY-MM-DD format
+        const duration = row.duration.trim();
+        const commitment = parseInt(row.totalCommitment, 10);
+        const delivered = parseInt(row.totalDelivered, 10);
+        const details = row.details?.trim();
 
         // --- Validation ---
         let rowErrors: string[] = [];
-        if (isNaN(sprintNumber) || sprintNumber <= 0) rowErrors.push("Invalid SprintNumber");
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) rowErrors.push("Invalid Date (use YYYY-MM-DD)");
-        if (!developer) rowErrors.push("Developer cannot be empty");
-        if (isNaN(points) || points < 0) rowErrors.push("Invalid StoryPointsCompleted");
-        if (isNaN(day) || day < 0) rowErrors.push("Invalid DayOfSprint (must be >= 0)");
-        if (isNaN(totalPointsInSprint) || totalPointsInSprint < 0) rowErrors.push("Invalid TotalSprintPoints");
-        if (isNaN(totalDays) || totalDays < 0) rowErrors.push("Invalid TotalDaysInSprint");
-        if (!isNaN(day) && !isNaN(totalDays) && day > totalDays) rowErrors.push("DayOfSprint cannot be greater than TotalDaysInSprint");
-        if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) rowErrors.push("Invalid StartDate (use YYYY-MM-DD)");
-        if (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) rowErrors.push("Invalid EndDate (use YYYY-MM-DD)");
-        if (startDate && endDate && startDate > endDate) rowErrors.push("StartDate cannot be after EndDate");
+        if (isNaN(sprintNumber) || sprintNumber <= 0) rowErrors.push("Invalid Sprint #");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) rowErrors.push("Invalid Start Date (use YYYY-MM-DD)");
+         if (!duration || !DURATION_OPTIONS.includes(duration)) rowErrors.push("Invalid Duration");
+        if (isNaN(commitment) || commitment < 0) rowErrors.push("Invalid Total Commitment");
+        if (isNaN(delivered) || delivered < 0) rowErrors.push("Invalid Total Delivered");
+        if (!isNaN(delivered) && !isNaN(commitment) && delivered > commitment) rowErrors.push("Delivered cannot exceed Commitment");
 
 
         if (rowErrors.length > 0) {
@@ -186,75 +240,31 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
         }
         // --- End Validation ---
 
-         // Update min/max date tracking for the sprint
-         if (!sprintDateRanges.has(sprintNumber)) {
-             sprintDateRanges.set(sprintNumber, { min: dateStr, max: dateStr });
-         } else {
-             const currentRange = sprintDateRanges.get(sprintNumber)!;
-             if (dateStr < currentRange.min) currentRange.min = dateStr;
-             if (dateStr > currentRange.max) currentRange.max = dateStr;
+         // Calculate derived fields
+         const { totalDays, endDate } = calculateSprintMetrics(startDateStr, duration);
+         if (totalDays <= 0 || endDate === 'N/A') {
+             toast({ variant: "destructive", title: `Error in Row ${index + 1}`, description: "Could not calculate sprint metrics from Start Date and Duration." });
+             hasErrors = true;
+             return;
          }
 
-        if (!sprintsMap.has(sprintNumber)) {
-            sprintsMap.set(sprintNumber, {
-                sprintNumber: sprintNumber,
-                committedPoints: totalPointsInSprint,
-                completedPoints: 0,
-                dailyBurndown: Array(totalDays + 1).fill(totalPointsInSprint),
-                totalDays: totalDays,
-                 // Use provided dates if valid, otherwise they'll be derived later
-                startDate: startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : undefined,
-                endDate: endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : undefined,
-            });
-            if (totalDays > maxDaysInSprint) maxDaysInSprint = totalDays;
-        }
-
-
-        const currentSprint = sprintsMap.get(sprintNumber)!;
-        // Consistency check for core sprint properties
-         if (currentSprint.committedPoints !== totalPointsInSprint || currentSprint.totalDays !== totalDays) {
-            toast({
-                variant: "destructive",
-                title: `Error in Row ${index + 1}`,
-                description: `Inconsistent TotalSprintPoints or TotalDaysInSprint for Sprint ${sprintNumber}. Please ensure these values are the same for all entries of the same sprint.`
-            });
-            hasErrors = true;
-            return;
+         // Track maximum total days
+         if (totalDays > maxTotalDays) {
+             maxTotalDays = totalDays;
          }
-          // Consistency check for provided start/end dates
-         if (startDate && currentSprint.startDate && startDate !== currentSprint.startDate) {
-              toast({ variant: "destructive", title: `Error in Row ${index + 1}`, description: `Inconsistent StartDate for Sprint ${sprintNumber}.`});
-              hasErrors = true; return;
-         }
-         if (endDate && currentSprint.endDate && endDate !== currentSprint.endDate) {
-             toast({ variant: "destructive", title: `Error in Row ${index + 1}`, description: `Inconsistent EndDate for Sprint ${sprintNumber}.`});
-             hasErrors = true; return;
-         }
-         // Update if dates were initially undefined
-         if (startDate && !currentSprint.startDate) currentSprint.startDate = startDate;
-         if (endDate && !currentSprint.endDate) currentSprint.endDate = endDate;
 
 
-        currentSprint.completedPoints += points;
-
-        // Update Burndown
-        if (day >= 0 && day <= currentSprint.totalDays) {
-           for (let i = day; i <= currentSprint.totalDays; i++) {
-              if (currentSprint.dailyBurndown[i] !== undefined) {
-                 currentSprint.dailyBurndown[i] -= points;
-              }
-           }
-           // Ensure non-negative
-            for (let i = 0; i <= currentSprint.totalDays; i++) {
-               if (currentSprint.dailyBurndown[i] < 0) currentSprint.dailyBurndown[i] = 0;
-            }
-        }
-
-
-        // Aggregate Developer Points
-        if (!developerPoints[developer]) developerPoints[developer] = {};
-        if (!developerPoints[developer][dateStr]) developerPoints[developer][dateStr] = 0;
-        developerPoints[developer][dateStr] += points;
+        // Create Sprint object
+        sprints.push({
+            sprintNumber,
+            startDate: startDateStr,
+            duration,
+            committedPoints: commitment,
+            completedPoints: delivered,
+            details,
+            totalDays,
+            endDate
+        });
     });
 
 
@@ -262,50 +272,24 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
         return; // Don't submit if there were validation errors
     }
 
-
-    if (sprintsMap.size === 0) {
+    if (sprints.length === 0) {
         toast({ variant: "destructive", title: "Error", description: "No valid sprint data entered." });
         return;
     }
 
-
-    // Finalize burndown calculations and derive start/end dates if not provided
-     sprintsMap.forEach(sprint => {
-         // Derive start/end dates from actual data if not explicitly provided or invalid
-         const dateRange = sprintDateRanges.get(sprint.sprintNumber);
-         if (dateRange) {
-             if (!sprint.startDate) sprint.startDate = dateRange.min;
-             if (!sprint.endDate) sprint.endDate = dateRange.max;
-         } else {
-             // Fallback if no dates were recorded for the sprint (shouldn't happen with validation)
-             sprint.startDate = sprint.startDate || 'N/A';
-             sprint.endDate = sprint.endDate || 'N/A';
-         }
-
-
-         sprint.dailyBurndown[0] = sprint.committedPoints; // Set day 0 correctly
-         for (let i = 1; i <= sprint.totalDays; i++) {
-             if (sprint.dailyBurndown[i] === sprint.committedPoints && sprint.dailyBurndown[i-1] !== undefined) {
-                 sprint.dailyBurndown[i] = sprint.dailyBurndown[i-1];
-             }
-              if (sprint.dailyBurndown[i] > sprint.committedPoints) sprint.dailyBurndown[i] = sprint.committedPoints; // Cap at committed
-              if (sprint.dailyBurndown[i] < 0) sprint.dailyBurndown[i] = 0; // Ensure non-negative
-         }
-    });
-
-    const sprints = Array.from(sprintsMap.values()).sort((a, b) => a.sprintNumber - b.sprintNumber);
+    // Sort sprints by number
+    sprints.sort((a, b) => a.sprintNumber - b.sprintNumber);
 
 
     const finalData: SprintData = {
         sprints,
-        developerPoints,
         totalStoryPoints: sprints.reduce((sum, s) => sum + s.completedPoints, 0),
-        daysInSprint: maxDaysInSprint,
+        daysInSprint: maxTotalDays, // Use the calculated max total days
     };
 
     onSubmit(finalData);
      // Optionally clear the form after successful submission
-     // setRows([{ id: Date.now(), sprintNumber: '', date: '', developer: '', storyPointsCompleted: '', dayOfSprint: '', totalSprintPoints: '', totalDaysInSprint: '' }]);
+     // setRows([{ id: Date.now(), sprintNumber: '', startDate: '', duration: '', totalCommitment: '', totalDelivered: '', details: '' }]);
   };
 
 
@@ -315,11 +299,11 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
        <Card>
           <CardHeader>
               <CardTitle>Paste Data (Optional)</CardTitle>
-               <CardDescription>Paste tab-separated data. Required columns: SprintNumber, Date (YYYY-MM-DD), Developer, StoryPointsCompleted, DayOfSprint, TotalSprintPoints, TotalDaysInSprint. Optional: StartDate, EndDate.</CardDescription>
+               <CardDescription>Paste tab-separated data. Columns: SprintNumber, StartDate (YYYY-MM-DD), Duration (e.g., '2 Weeks'), TotalCommitment, TotalDelivered, Details (optional).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <Textarea
-               placeholder="SprintNumber	Date	Developer	StoryPointsCompleted	DayOfSprint	TotalSprintPoints	TotalDaysInSprint..."
+               placeholder="SprintNumber	StartDate	Duration	TotalCommitment	TotalDelivered	Details..."
                value={pasteData}
                onChange={handlePasteChange}
                rows={5}
@@ -334,71 +318,69 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
         <CardHeader>
           <CardTitle>Manual Sprint Data Entry</CardTitle>
            <CardDescription>
-                Enter sprint task completion data row by row. Required fields are marked. Ensure consistency for TotalSprintPoints and TotalDaysInSprint within the same sprint. Dates must be YYYY-MM-DD.
+                Enter sprint data row by row. Required fields are marked. Dates must be YYYY-MM-DD.
            </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
              {/* Table Header */}
-              <div className="hidden md:grid grid-cols-[auto_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 items-center pb-2 border-b">
-                 <Label className="text-xs font-medium text-muted-foreground">Sprint*</Label>
-                 <Label className="text-xs font-medium text-muted-foreground">Date*</Label>
-                 <Label className="text-xs font-medium text-muted-foreground">Developer*</Label>
-                 <Label className="text-xs font-medium text-muted-foreground text-right">Points*</Label>
-                 <Label className="text-xs font-medium text-muted-foreground text-right">Day*</Label>
-                 <Label className="text-xs font-medium text-muted-foreground text-right">Total Pts*</Label>
-                 <Label className="text-xs font-medium text-muted-foreground text-right">Total Days*</Label>
-                 <Label className="text-xs font-medium text-muted-foreground">Start Date</Label>
-                 <Label className="text-xs font-medium text-muted-foreground">End Date</Label>
-                 <div /> {/* Placeholder */}
+              <div className="hidden md:grid grid-cols-[80px_1fr_1fr_1fr_1fr_2fr_auto] gap-2 items-center pb-2 border-b">
+                 <Label className="text-xs font-medium text-muted-foreground">Sprint #*</Label>
+                 <Label className="text-xs font-medium text-muted-foreground">Start Date*</Label>
+                 <Label className="text-xs font-medium text-muted-foreground">Duration*</Label>
+                 <Label className="text-xs font-medium text-muted-foreground text-right">Commitment*</Label>
+                 <Label className="text-xs font-medium text-muted-foreground text-right">Delivered*</Label>
+                 <Label className="text-xs font-medium text-muted-foreground">Details</Label>
+                 <div /> {/* Placeholder for delete button */}
              </div>
 
             {/* Input Rows */}
             <div className="space-y-3">
               {rows.map((row, index) => (
-                 <div key={row.id} className="grid grid-cols-1 md:grid-cols-[auto_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 items-start">
-                   {/* Required Fields */}
+                 <div key={row.id} className="grid grid-cols-1 md:grid-cols-[80px_1fr_1fr_1fr_1fr_2fr_auto] gap-2 items-start">
+                   {/* Sprint Number */}
                    <div>
-                     <Label htmlFor={`sprintNumber-${row.id}`} className="md:hidden text-xs font-medium">Sprint*</Label>
-                     <Input id={`sprintNumber-${row.id}`} type="number" placeholder="Sprint #" value={row.sprintNumber} onChange={e => handleInputChange(row.id, 'sprintNumber', e.target.value)} required className="h-9"/>
+                     <Label htmlFor={`sprintNumber-${row.id}`} className="md:hidden text-xs font-medium">Sprint #*</Label>
+                     <Input id={`sprintNumber-${row.id}`} type="number" placeholder="#" value={row.sprintNumber} onChange={e => handleInputChange(row.id, 'sprintNumber', e.target.value)} required className="h-9 w-full"/> {/* Adjusted width */}
                    </div>
+                   {/* Start Date */}
                    <div>
-                     <Label htmlFor={`date-${row.id}`} className="md:hidden text-xs font-medium">Date*</Label>
-                     <Input id={`date-${row.id}`} type="date" value={row.date} onChange={e => handleInputChange(row.id, 'date', e.target.value)} required className="h-9"/>
+                     <Label htmlFor={`startDate-${row.id}`} className="md:hidden text-xs font-medium">Start Date*</Label>
+                     <Input id={`startDate-${row.id}`} type="date" value={row.startDate} onChange={e => handleInputChange(row.id, 'startDate', e.target.value)} required className="h-9"/>
                    </div>
+                   {/* Duration */}
+                    <div>
+                         <Label htmlFor={`duration-${row.id}`} className="md:hidden text-xs font-medium">Duration*</Label>
+                        <Select value={row.duration} onValueChange={(value) => handleDurationChange(row.id, value)} required>
+                          <SelectTrigger id={`duration-${row.id}`} className="h-9">
+                            <SelectValue placeholder="Select Duration" />
+                          </SelectTrigger>
+                          <SelectContent>
+                             {DURATION_OPTIONS.map(option => (
+                                <SelectItem key={option} value={option}>{option}</SelectItem>
+                             ))}
+                          </SelectContent>
+                        </Select>
+                    </div>
+                   {/* Commitment */}
                    <div>
-                     <Label htmlFor={`developer-${row.id}`} className="md:hidden text-xs font-medium">Developer*</Label>
-                     <Input id={`developer-${row.id}`} placeholder="Developer" value={row.developer} onChange={e => handleInputChange(row.id, 'developer', e.target.value)} required className="h-9"/>
+                     <Label htmlFor={`commitment-${row.id}`} className="md:hidden text-xs font-medium">Commitment*</Label>
+                     <Input id={`commitment-${row.id}`} type="number" placeholder="Points" value={row.totalCommitment} onChange={e => handleInputChange(row.id, 'totalCommitment', e.target.value)} required className="h-9 text-right"/>
                    </div>
+                   {/* Delivered */}
                    <div>
-                     <Label htmlFor={`points-${row.id}`} className="md:hidden text-xs font-medium">Points*</Label>
-                     <Input id={`points-${row.id}`} type="number" placeholder="Points" value={row.storyPointsCompleted} onChange={e => handleInputChange(row.id, 'storyPointsCompleted', e.target.value)} required className="h-9 text-right"/>
+                     <Label htmlFor={`delivered-${row.id}`} className="md:hidden text-xs font-medium">Delivered*</Label>
+                     <Input id={`delivered-${row.id}`} type="number" placeholder="Points" value={row.totalDelivered} onChange={e => handleInputChange(row.id, 'totalDelivered', e.target.value)} required className="h-9 text-right"/>
                    </div>
+                   {/* Details */}
                    <div>
-                     <Label htmlFor={`day-${row.id}`} className="md:hidden text-xs font-medium">Day*</Label>
-                     <Input id={`day-${row.id}`} type="number" placeholder="Day" value={row.dayOfSprint} onChange={e => handleInputChange(row.id, 'dayOfSprint', e.target.value)} required className="h-9 text-right"/>
-                   </div>
-                   <div>
-                      <Label htmlFor={`totalPoints-${row.id}`} className="md:hidden text-xs font-medium">Total Pts*</Label>
-                     <Input id={`totalPoints-${row.id}`} type="number" placeholder="Total Pts" value={row.totalSprintPoints} onChange={e => handleInputChange(row.id, 'totalSprintPoints', e.target.value)} required className="h-9 text-right"/>
-                   </div>
-                   <div>
-                      <Label htmlFor={`totalDays-${row.id}`} className="md:hidden text-xs font-medium">Total Days*</Label>
-                     <Input id={`totalDays-${row.id}`} type="number" placeholder="Total Days" value={row.totalDaysInSprint} onChange={e => handleInputChange(row.id, 'totalDaysInSprint', e.target.value)} required className="h-9 text-right"/>
-                   </div>
-                    {/* Optional Date Fields */}
-                   <div>
-                     <Label htmlFor={`startDate-${row.id}`} className="md:hidden text-xs font-medium">Start Date</Label>
-                     <Input id={`startDate-${row.id}`} type="date" value={row.startDate || ''} onChange={e => handleInputChange(row.id, 'startDate', e.target.value)} className="h-9"/>
-                   </div>
-                   <div>
-                     <Label htmlFor={`endDate-${row.id}`} className="md:hidden text-xs font-medium">End Date</Label>
-                     <Input id={`endDate-${row.id}`} type="date" value={row.endDate || ''} onChange={e => handleInputChange(row.id, 'endDate', e.target.value)} className="h-9"/>
+                     <Label htmlFor={`details-${row.id}`} className="md:hidden text-xs font-medium">Details</Label>
+                     <Input id={`details-${row.id}`} placeholder="Optional notes..." value={row.details} onChange={e => handleInputChange(row.id, 'details', e.target.value)} className="h-9"/>
                    </div>
 
 
                    {/* Delete Button */}
-                   <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveRow(row.id)} className="h-9 w-9 text-muted-foreground hover:text-destructive self-center" aria-label="Remove row">
+                   <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveRow(row.id)} className="h-9 w-9 text-muted-foreground hover:text-destructive self-center mt-1 md:mt-0" aria-label="Remove row">
                      <Trash2 className="h-4 w-4" />
                    </Button>
                  </div>
