@@ -8,9 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Import Select
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PlusCircle, Trash2, ArrowLeft } from 'lucide-react';
-import type { Sprint, SprintDetailItem, AppData, Project } from '@/types/sprint-data';
+import type { Sprint, SprintDetailItem, AppData, Project, Member } from '@/types/sprint-data'; // Import Member
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import Link from 'next/link'; // Import Link for back navigation
@@ -24,7 +25,7 @@ const createEmptyDetailRow = (): DetailRow => ({
     _internalId: `temp_${Date.now()}_${Math.random()}`,
     id: '', // Will be assigned on save if needed, or use _internalId
     ticketNumber: '',
-    developer: '',
+    developer: '', // Keep as string, will store member name
     storyPoints: 0,
     devTime: '',
 });
@@ -43,6 +44,7 @@ export default function EditSprintDetailsPage() {
   const [detailRows, setDetailRows] = useState<DetailRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [members, setMembers] = useState<Member[]>([]); // State for project members
 
   // Load project data and find the specific sprint
   useEffect(() => {
@@ -60,14 +62,27 @@ export default function EditSprintDetailsPage() {
 
         if (currentProject) {
           setProject(currentProject);
+          setMembers(currentProject.members || []); // Load members
           const currentSprint = currentProject.sprintData.sprints.find(s => s.sprintNumber === sprintNumber);
 
           if (currentSprint) {
+             // Check if sprint is completed
+             if (currentSprint.status === 'Completed') {
+                 toast({
+                     variant: "default",
+                     title: "Sprint Completed",
+                     description: `Sprint ${sprintNumber} is completed and cannot be edited.`
+                 });
+                 router.push('/'); // Redirect if completed
+                 return;
+             }
+
             setSprint(currentSprint);
             // Initialize detail rows from the loaded sprint
             setDetailRows(
               (currentSprint.details || []).map((item, index) => ({
                 ...item,
+                developer: item.developer ?? '', // Ensure developer is string
                 _internalId: item.id || `initial_${index}_${Date.now()}`,
               }))
             );
@@ -100,7 +115,14 @@ export default function EditSprintDetailsPage() {
   useEffect(() => {
     if (!isLoading && sprint) { // Only track after initial load
        const originalDetailsString = JSON.stringify(sprint.details || []);
-       const currentDetailsString = JSON.stringify(detailRows.map(({ _internalId, ...rest }) => rest) // Exclude internal ID for comparison
+       const currentDetailsString = JSON.stringify(detailRows.map(({ _internalId, ...rest }) => ({
+            // Exclude internal ID and ensure types match for comparison
+            id: rest.id,
+            ticketNumber: rest.ticketNumber?.trim() ?? '',
+            developer: rest.developer?.trim() ?? '',
+            storyPoints: Number(rest.storyPoints ?? 0),
+            devTime: rest.devTime?.trim() ?? '',
+       }))
           .filter(row => row.ticketNumber || row.developer || row.storyPoints || row.devTime)); // Filter out completely empty rows before comparing
 
        setHasUnsavedChanges(originalDetailsString !== currentDetailsString);
@@ -123,17 +145,24 @@ export default function EditSprintDetailsPage() {
   const handleDetailInputChange = (
     internalId: string,
     field: keyof Omit<SprintDetailItem, 'id'>,
-    value: string | number
+    value: string | number | undefined
   ) => {
     setDetailRows(rows =>
       rows.map(row =>
-        row._internalId === internalId ? { ...row, [field]: value } : row
+        row._internalId === internalId ? { ...row, [field]: value ?? '' } : row // Set to empty string if value is undefined/null
       )
     );
   };
 
+   const handleDeveloperChange = (internalId: string, value: string) => {
+     handleDetailInputChange(internalId, 'developer', value === 'unassigned' ? undefined : value); // Set undefined if 'unassigned'
+  };
+
   const handleSaveDetails = () => {
-    if (!project || !sprint) return;
+    if (!project || !sprint || sprint.status === 'Completed') {
+        toast({ variant: "destructive", title: "Error", description: "Cannot save details for a completed sprint or if project/sprint is missing." });
+        return;
+    }
 
     let hasErrors = false;
     const finalDetails: SprintDetailItem[] = [];
@@ -145,7 +174,7 @@ export default function EditSprintDetailsPage() {
         }
 
         const ticketNumber = row.ticketNumber.trim();
-        const developer = row.developer.trim();
+        const developer = row.developer.trim(); // This is the member's name
         const storyPoints = Number(row.storyPoints); // Ensure it's a number
         const devTime = row.devTime.trim();
 
@@ -166,7 +195,7 @@ export default function EditSprintDetailsPage() {
         }
 
         finalDetails.push({
-            id: row.id || row._internalId, // Preserve existing ID or use internal one as fallback
+            id: row.id || `detail_${sprint.sprintNumber}_${Date.now()}_${index}`, // Ensure a unique ID if new
             ticketNumber,
             developer,
             storyPoints,
@@ -204,6 +233,7 @@ export default function EditSprintDetailsPage() {
             setDetailRows(
               (updatedSprint.details || []).map((item, index) => ({
                 ...item,
+                 developer: item.developer ?? '',
                 _internalId: item.id || `saved_${index}_${Date.now()}`, // Use saved ID or generate new internal ID
               }))
             );
@@ -238,24 +268,26 @@ export default function EditSprintDetailsPage() {
                <div>
                   <Link href="/" passHref legacyBehavior>
                      <Button variant="outline" size="sm" className="mb-4">
-                        <ArrowLeft className="mr-2 h-4 w-4" /> Back to Projects
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Back to Project Home
                      </Button>
                   </Link>
-                  <CardTitle>Edit Details for Sprint {sprint.sprintNumber}</CardTitle>
+                  <CardTitle>Edit Details for Sprint {sprint.sprintNumber} ({sprint.status})</CardTitle>
                   <CardDescription>Project: {project.name}</CardDescription>
                </div>
-               <Button onClick={handleSaveDetails} disabled={!hasUnsavedChanges}>
+               <Button onClick={handleSaveDetails} disabled={!hasUnsavedChanges || sprint.status === 'Completed'}>
                  Save Details
                </Button>
              </div>
              <CardDescription className="pt-2">
-               Add or modify Jira ticket information for this sprint. Click 'Save Details' when finished.
+               {sprint.status === 'Completed'
+                 ? 'This sprint is completed and read-only.'
+                 : 'Add or modify ticket information for this sprint. Click \'Save Details\' when finished.'}
              </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
              {/* Table Header for larger screens */}
-             <div className="hidden md:grid grid-cols-[1fr_1fr_100px_100px_40px] gap-x-3 items-center pb-2 border-b">
+              <div className="hidden md:grid grid-cols-[1fr_1fr_100px_100px_40px] gap-x-3 items-center pb-2 border-b">
                 <Label className="text-xs font-medium text-muted-foreground">Ticket #*</Label>
                 <Label className="text-xs font-medium text-muted-foreground">Developer*</Label>
                 <Label className="text-xs font-medium text-muted-foreground text-right">Story Pts*</Label>
@@ -276,18 +308,28 @@ export default function EditSprintDetailsPage() {
                             onChange={e => handleDetailInputChange(row._internalId, 'ticketNumber', e.target.value)}
                             placeholder="JIRA-123"
                             className="h-9"
+                            disabled={sprint.status === 'Completed'}
                          />
                       </div>
-                      {/* Developer */}
+                      {/* Developer (Assignee) Dropdown */}
                       <div className="md:col-span-1 col-span-2">
                          <Label htmlFor={`developer-${row._internalId}`} className="md:hidden text-xs font-medium">Developer*</Label>
-                         <Input
-                            id={`developer-${row._internalId}`}
-                            value={row.developer}
-                            onChange={e => handleDetailInputChange(row._internalId, 'developer', e.target.value)}
-                            placeholder="Jane Doe"
-                            className="h-9"
-                         />
+                           <Select
+                               value={row.developer ?? ''} // Use name as value
+                               onValueChange={(value) => handleDeveloperChange(row._internalId, value)}
+                               disabled={sprint.status === 'Completed'}
+                           >
+                               <SelectTrigger id={`developer-${row._internalId}`} className="h-9">
+                                   <SelectValue placeholder="Select Developer" />
+                               </SelectTrigger>
+                               <SelectContent>
+                                   <SelectItem value="unassigned" className="text-muted-foreground">-- Unassigned --</SelectItem>
+                                   {members.map(member => (
+                                       <SelectItem key={member.id} value={member.name}>{member.name}</SelectItem>
+                                   ))}
+                                   {members.length === 0 && <SelectItem value="no-members" disabled>No members in project</SelectItem>}
+                               </SelectContent>
+                           </Select>
                       </div>
                       {/* Story Points */}
                       <div className="md:col-span-1 col-span-1">
@@ -300,6 +342,7 @@ export default function EditSprintDetailsPage() {
                             placeholder="Pts"
                             className="h-9 text-right"
                             min="0"
+                            disabled={sprint.status === 'Completed'}
                          />
                       </div>
                       {/* Dev Time */}
@@ -311,6 +354,7 @@ export default function EditSprintDetailsPage() {
                             onChange={e => handleDetailInputChange(row._internalId, 'devTime', e.target.value)}
                             placeholder="e.g., 2d"
                             className="h-9 text-right"
+                            disabled={sprint.status === 'Completed'}
                          />
                       </div>
                        {/* Delete Button */}
@@ -322,6 +366,7 @@ export default function EditSprintDetailsPage() {
                             onClick={() => handleRemoveDetailRow(row._internalId)}
                             className="h-9 w-9 text-muted-foreground hover:text-destructive"
                             aria-label="Remove detail row"
+                            disabled={sprint.status === 'Completed'}
                          >
                             <Trash2 className="h-4 w-4" />
                          </Button>
@@ -329,7 +374,7 @@ export default function EditSprintDetailsPage() {
                    </div>
                 ))}
              </div>
-             <Button type="button" onClick={handleAddDetailRow} variant="outline" size="sm" className="mt-4">
+             <Button type="button" onClick={handleAddDetailRow} variant="outline" size="sm" className="mt-4" disabled={sprint.status === 'Completed'}>
                <PlusCircle className="mr-2 h-4 w-4" />
                Add Detail Row
              </Button>
@@ -337,7 +382,7 @@ export default function EditSprintDetailsPage() {
           </CardContent>
           <CardFooter className="flex justify-between items-center border-t pt-4">
             <p className="text-xs text-muted-foreground">* Required field.</p>
-            <Button onClick={handleSaveDetails} disabled={!hasUnsavedChanges}>
+            <Button onClick={handleSaveDetails} disabled={!hasUnsavedChanges || sprint.status === 'Completed'}>
               Save Details
             </Button>
           </CardFooter>

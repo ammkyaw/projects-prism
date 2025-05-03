@@ -1,4 +1,6 @@
 
+// Represents the status of a sprint
+export type SprintStatus = 'Planned' | 'Active' | 'Completed';
 
 // Represents a single team member
 export interface Member {
@@ -12,8 +14,8 @@ export interface Task {
   id: string; // Unique ID for the task item
   description: string;
   storyPoints?: number | string; // Can be number or empty string from input
-  assignee?: string; // Could potentially link to Member ID in the future
-  status?: string; // e.g., 'To Do', 'In Progress', 'Done'
+  assignee?: string; // Stores the Member's name
+  status?: 'To Do' | 'In Progress' | 'Done' | 'Blocked'; // Added more specific statuses
 }
 
 // Represents the planning data for a single sprint
@@ -29,7 +31,7 @@ export interface SprintPlanning {
 export interface SprintDetailItem {
   id: string; // Unique ID for the detail item
   ticketNumber: string;
-  developer: string; // Could potentially link to Member ID in the future
+  developer: string; // Stores the Member's name
   storyPoints: number;
   devTime: string; // e.g., "2d", "4h", "1w"
 }
@@ -42,6 +44,7 @@ export interface Sprint {
   startDate: string; // YYYY-MM-DD format
   endDate: string; // YYYY-MM-DD format, derived from startDate and duration
   duration: string; // e.g., "1 Week", "2 Weeks"
+  status: SprintStatus; // Added sprint status
   details?: SprintDetailItem[]; // Optional array for detailed ticket info
   planning?: SprintPlanning; // Optional object for planning details
 }
@@ -92,3 +95,6 @@ export const predefinedRoles = [
   'Scrum Master',
   'Product Owner',
 ];
+
+// Predefined Task Statuses
+export const taskStatuses: Array<Task['status']> = ['To Do', 'In Progress', 'Done', 'Blocked'];

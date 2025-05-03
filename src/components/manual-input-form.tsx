@@ -9,10 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { SprintData, Sprint } from '@/types/sprint-data';
+import type { SprintData, Sprint, SprintStatus } from '@/types/sprint-data'; // Import SprintStatus
 import { useToast } from "@/hooks/use-toast";
 import { PlusCircle, Trash2 } from 'lucide-react';
-import { addDays, format, parseISO } from 'date-fns';
+import { addDays, format, parseISO, isPast } from 'date-fns'; // Import isPast
 import { cn } from "@/lib/utils";
 
 interface ManualInputFormProps {
@@ -21,7 +21,7 @@ interface ManualInputFormProps {
   initialData?: Sprint[]; // Optional initial sprint data
 }
 
-// Updated row structure for manual entry - Removed details
+// Updated row structure for manual entry
 interface ManualEntryRow {
   id: number; // Use for React key, persistent across renders
   sprintNumber: string;
@@ -29,6 +29,7 @@ interface ManualEntryRow {
   duration: string; // e.g., "1 Week", "2 Weeks"
   totalCommitment: string;
   totalDelivered: string;
+  status: SprintStatus; // Keep track of status internally if needed, though likely overwritten on submit
 }
 
 const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
@@ -60,7 +61,7 @@ const calculateSprintMetrics = (startDateStr: string, duration: string): { total
     }
 };
 
-// Helper to convert Sprint to ManualEntryRow - Removed details
+// Helper to convert Sprint to ManualEntryRow
 const sprintToRow = (sprint: Sprint, index: number): ManualEntryRow => ({
   id: Date.now() + index, // Assign a unique ID for the row
   sprintNumber: sprint.sprintNumber.toString(),
@@ -68,9 +69,10 @@ const sprintToRow = (sprint: Sprint, index: number): ManualEntryRow => ({
   duration: sprint.duration,
   totalCommitment: sprint.committedPoints.toString(),
   totalDelivered: sprint.completedPoints.toString(),
+  status: sprint.status ?? 'Planned', // Include status
 });
 
-// Helper to create an empty row - Removed details
+// Helper to create an empty row
 const createEmptyRow = (): ManualEntryRow => ({
     id: Date.now(),
     sprintNumber: '',
@@ -78,6 +80,7 @@ const createEmptyRow = (): ManualEntryRow => ({
     duration: '',
     totalCommitment: '',
     totalDelivered: '',
+    status: 'Planned', // Default status for new rows
 });
 
 
@@ -85,6 +88,13 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
   const [rows, setRows] = useState<ManualEntryRow[]>([]);
   const [pasteData, setPasteData] = useState<string>('');
   const { toast } = useToast();
+   const [clientNow, setClientNow] = useState<Date | null>(null); // For client-side date comparison
+
+   // Get current date on client mount
+   useEffect(() => {
+     setClientNow(new Date());
+   }, []);
+
 
   // Effect to initialize or update rows based on initialData prop
   useEffect(() => {
@@ -128,33 +138,36 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
     }
 
     const lines = pasteData.trim().split('\n');
-    // Removed 'Details' from expectedHeaders
-    const expectedHeaders = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered'];
+    // Required columns for basic functionality
     const requiredHeaders = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered'];
+    // Optional columns (status might be provided)
+    const optionalHeaders = ['Status'];
+    const expectedHeaders = [...requiredHeaders, ...optionalHeaders];
+
     const newRows: ManualEntryRow[] = [];
     let headerLine = '';
     let dataLines: string[] = [];
 
-    const firstLineCols = lines[0].split('\t');
-     if (requiredHeaders.every(header => firstLineCols.some(col => col.trim().toLowerCase() === header.toLowerCase()))) {
+    const firstLineCols = lines[0].split('\t').map(h => h.trim().toLowerCase());
+     // Check if the first line looks like a header row containing all required columns
+     if (requiredHeaders.every(header => firstLineCols.includes(header.toLowerCase()))) {
          headerLine = lines[0];
          dataLines = lines.slice(1);
      } else {
          dataLines = lines;
-         if (firstLineCols.length < requiredHeaders.length) {
+         // Basic check if enough columns exist if no header detected
+         if (lines[0].split('\t').length < requiredHeaders.length) {
               toast({ variant: "destructive", title: "Error", description: `Pasted data seems to be missing columns. Expected at least ${requiredHeaders.length}.` });
               return;
          }
      }
 
-     const headers = headerLine ? headerLine.split('\t').map(h => h.trim()) : requiredHeaders;
+     const headers = headerLine ? headerLine.split('\t').map(h => h.trim()) : requiredHeaders; // Use required if no header detected
      const headerMap: { [key: string]: number } = {};
      headers.forEach((h, i) => {
         const canonicalHeader = expectedHeaders.find(eh => eh.toLowerCase() === h.toLowerCase());
         if (canonicalHeader) {
             headerMap[canonicalHeader] = i;
-        } else if (!headerLine && i < expectedHeaders.length) {
-            headerMap[expectedHeaders[i]] = i;
         }
      });
 
@@ -168,17 +181,13 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
         if (!line.trim()) return;
 
         const values = line.split('\t');
-         if (values.length < requiredHeaders.length && !headerLine) {
-             console.warn(`Skipping pasted line ${index + (headerLine ? 2 : 1)}: Not enough columns for required data.`);
-             return;
-         }
 
         const newRow: Partial<ManualEntryRow> = { id: Date.now() + index };
 
-         expectedHeaders.forEach(header => {
+         requiredHeaders.forEach(header => {
             const colIndex = headerMap[header];
-             const value = colIndex !== undefined ? (values[colIndex] || '').trim() : '';
-             if (colIndex !== undefined || requiredHeaders.includes(header)) {
+            const value = colIndex !== undefined ? (values[colIndex] || '').trim() : '';
+            if (value || colIndex !== undefined) { // Only assign if value exists or column was present
                 switch(header) {
                     case 'SprintNumber': newRow.sprintNumber = value; break;
                     case 'StartDate': newRow.startDate = value; break;
@@ -189,9 +198,26 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
              }
          });
 
+          // Handle optional Status column
+          const statusIndex = headerMap['Status'];
+          let statusValue = 'Planned'; // Default
+          if (statusIndex !== undefined && values[statusIndex]) {
+               const pastedStatus = values[statusIndex].trim();
+               if (['Planned', 'Active', 'Completed'].includes(pastedStatus)) {
+                   statusValue = pastedStatus as SprintStatus;
+               } else {
+                  console.warn(`Ignoring invalid status "${pastedStatus}" in pasted row ${index + (headerLine ? 2 : 1)}. Defaulting to 'Planned'.`);
+               }
+          }
+          newRow.status = statusValue as SprintStatus;
+
+
+        // Basic validation for required fields before adding
         if (!newRow.sprintNumber || !newRow.startDate || !newRow.duration || !newRow.totalCommitment || !newRow.totalDelivered) {
-           console.warn(`Skipping pasted line ${index + (headerLine ? 2 : 1)}: Contains potentially empty required fields.`, newRow);
+           console.warn(`Skipping pasted line ${index + (headerLine ? 2 : 1)}: Missing one or more required fields (SprintNumber, StartDate, Duration, TotalCommitment, TotalDelivered).`, newRow);
+           return; // Skip this row
         }
+
 
         newRows.push(newRow as ManualEntryRow);
     });
@@ -260,13 +286,32 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
              maxTotalDays = totalDays;
          }
 
+          // Determine initial status based on date (on client side for consistency)
+          let initialStatus: SprintStatus = 'Planned';
+          if (clientNow) {
+              try {
+                 const start = parseISO(startDateStr);
+                 const end = parseISO(endDate);
+                 if (isPast(end)) {
+                     initialStatus = 'Completed';
+                 } // Otherwise remains 'Planned', active status is set manually.
+              } catch (e) {
+                 console.error("Error parsing date for status check", e);
+                  toast({ variant: "destructive", title: `Error in Row ${index + 1}`, description: "Invalid date format encountered during status check." });
+                  hasErrors = true;
+                  return;
+              }
+          }
+
         sprints.push({
             sprintNumber,
             startDate: startDateStr,
             duration,
             committedPoints: commitment,
             completedPoints: delivered,
+            status: initialStatus, // Assign calculated initial status
             details: [], // Initialize details array when submitting
+            planning: undefined, // Initialize planning as undefined
             totalDays,
             endDate
         });
@@ -296,11 +341,11 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
        <Card>
           <CardHeader>
               <CardTitle>Paste Data (Optional)</CardTitle>
-               <CardDescription>Paste tab-separated data to replace current entries. Columns: SprintNumber, StartDate (YYYY-MM-DD), Duration ('1 Week', '2 Weeks', etc.), TotalCommitment, TotalDelivered.</CardDescription>
+               <CardDescription>Paste tab-separated data to replace current entries. Required columns: SprintNumber, StartDate (YYYY-MM-DD), Duration ('1 Week', '2 Weeks', etc.), TotalCommitment, TotalDelivered. Optional: Status ('Planned', 'Active', 'Completed').</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <Textarea
-               placeholder="SprintNumber	StartDate	Duration	TotalCommitment	TotalDelivered"
+               placeholder="SprintNumber	StartDate	Duration	TotalCommitment	TotalDelivered	Status"
                value={pasteData}
                onChange={handlePasteChange}
                rows={5}
@@ -315,11 +360,12 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
         <CardHeader>
           <CardTitle>Manual Sprint Data Entry</CardTitle>
            <CardDescription>
-                Enter or edit sprint data row by row. Required fields are marked. Dates must be YYYY-MM-DD.
+                Enter or edit sprint data row by row. Required fields are marked. Dates must be YYYY-MM-DD. Sprints are initially 'Planned' or 'Completed' based on end date. Activate sprints in the 'Planning' tab.
            </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+               {/* Updated Grid for better alignment */}
               <div className="hidden md:grid grid-cols-[80px_140px_140px_100px_100px_40px] gap-x-3 items-center pb-2 border-b">
                  <Label className="text-xs font-medium text-muted-foreground">Sprint #*</Label>
                  <Label className="text-xs font-medium text-muted-foreground">Start Date*</Label>
