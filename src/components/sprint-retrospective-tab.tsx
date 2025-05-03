@@ -26,7 +26,3 @@ export default function SprintRetrospectiveTab({ projectId, projectName, sprints
     </Card>
   );
 }
-```
-  </change>
-  <change>
-    <file>src/components/backlog-

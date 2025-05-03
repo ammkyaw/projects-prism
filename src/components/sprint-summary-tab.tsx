@@ -147,7 +147,3 @@ export default function SprintSummaryTab({ sprintData, projectName, projectId, o
     </Card>
   );
 }
-```
-  </change>
-  <change>
-    <file>src/components/sprint-retrospective-tab.

@@ -26,7 +26,3 @@ export default function BacklogPrioritizationTab({ projectId, projectName, backl
     </Card>
   );
 }
-```
-  </change>
-  <change>
-    <file>src/components/backlog-grooming-

@@ -25,7 +25,3 @@ export default function AnalyticsReportsTab({ sprintData, projectName }: Analyti
     </Card>
   );
 }
-```
-  </change>
-  <change>
-    <

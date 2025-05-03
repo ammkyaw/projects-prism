@@ -94,7 +94,3 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
     </div>
   );
 }
-```
-  </change>
-  <change>
-    <file>src/components/sprint-summary

@@ -26,7 +26,3 @@ export default function BacklogGroomingTab({ projectId, projectName, backlog }: 
     </Card>
   );
 }
-```
-  </change>
-  <change>
-    <file>src/components

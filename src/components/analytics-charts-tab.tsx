@@ -70,7 +70,3 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
     </div>
   );
 }
-```
-  </change>
-  <change>
-    <file>src/components/analytics-reports-
