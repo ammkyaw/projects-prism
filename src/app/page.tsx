@@ -28,7 +28,7 @@ import AddMembersDialog from '@/components/add-members-dialog';
 
 
 import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember } from '@/types/sprint-data'; // Updated Task type reference
-import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam, initialBacklogTask } from '@/types/sprint-data';
+import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam, initialBacklogTask, taskPriorities } from '@/types/sprint-data'; // Import taskPriorities
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isPast, isValid } from 'date-fns';
@@ -255,7 +255,7 @@ export default function Home() {
                              title: typeof taskData.title === 'string' ? taskData.title : undefined,
                              description: typeof taskData.description === 'string' ? taskData.description : undefined,
                              storyPoints: (typeof taskData.storyPoints === 'number' || typeof taskData.storyPoints === 'string') ? taskData.storyPoints : undefined,
-                             priority: typeof taskData.priority === 'string' ? taskData.priority as Task['priority'] : undefined,
+                             priority: typeof taskData.priority === 'string' && taskPriorities.includes(taskData.priority as any) ? taskData.priority as Task['priority'] : 'Medium', // Validate and default priority
                              taskType: typeof taskData.taskType === 'string' ? taskData.taskType as Task['taskType'] : undefined,
                              createdDate: typeof taskData.createdDate === 'string' && isValid(parseISO(taskData.createdDate)) ? taskData.createdDate : undefined,
                              initiator: typeof taskData.initiator === 'string' ? taskData.initiator : undefined,
@@ -320,7 +320,7 @@ export default function Home() {
                                            reviewer: typeof taskData.reviewer === 'string' ? taskData.reviewer : emptyTask.reviewer,
                                            status: typeof taskData.status === 'string' && taskStatuses.includes(taskData.status as any) ? taskData.status : emptyTask.status,
                                            startDate: typeof taskData.startDate === 'string' && isValid(parseISO(taskData.startDate)) ? taskData.startDate : emptyTask.startDate,
-                                           priority: typeof taskData.priority === 'string' ? taskData.priority as Task['priority'] : undefined,
+                                           priority: typeof taskData.priority === 'string' && taskPriorities.includes(taskData.priority as any) ? taskData.priority as Task['priority'] : 'Medium', // Validate and default priority
                                            dependsOn: Array.isArray(taskData.dependsOn) ? taskData.dependsOn.filter((dep: any): dep is string => typeof dep === 'string') : undefined,
                                            // Backlog specific fields should not be present in sprint tasks unless needed for context
                                            taskType: undefined, // Not typically stored in sprint task
@@ -406,7 +406,7 @@ export default function Home() {
                members: validatedMembers.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
                holidayCalendars: validatedCalendars.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
                teams: validatedTeams.sort((a, b) => a.name.localeCompare(b.name)), // Add validated teams, sorted
-               backlog: validatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority) - taskPriorities.indexOf(b.priority)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')), // Add validated backlog, sorted by priority then backlogId
+               backlog: validatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')), // Add validated backlog, sorted by priority then backlogId
                sprintData: validatedSprintData,
              });
              console.log(`Successfully validated and added project: ${projectData.name}`);
@@ -793,8 +793,8 @@ export default function Home() {
     planningData: SprintPlanning
   ) => {
     if (!selectedProjectId) {
-      // Toast handled within this function if needed
-      return;
+       toast({ variant: "destructive", title: "Error", description: "No project selected." });
+       return;
     }
     let projectNameForToast = 'N/A';
     let projectWasUpdated = false;
@@ -805,7 +805,7 @@ export default function Home() {
             projectNameForToast = p.name;
             if ((p.sprintData.sprints ?? []).some(s => s.sprintNumber === sprintDetails.sprintNumber)) { // Handle null/undefined
                 console.error(`Sprint number ${sprintDetails.sprintNumber} already exists for project ${p.name}.`);
-                // Error handled by returning original 'p'
+                 // Error handled by returning original 'p'
                 return p;
             }
 
@@ -856,9 +856,9 @@ export default function Home() {
 
       // If no update happened (e.g., sprint number existed), return the previous state
       if (!projectWasUpdated) {
-          // Using setTimeout to ensure toast doesn't interfere with rendering updates
+         // Using setTimeout to ensure toast doesn't interfere with rendering updates
          setTimeout(() => {
-             toast({ variant: "destructive", title: "Error", description: `Sprint number ${sprintDetails.sprintNumber} already exists in project '${projectNameForToast}'.` });
+            toast({ variant: "destructive", title: "Error", description: `Sprint number ${sprintDetails.sprintNumber} already exists in project '${projectNameForToast}'.` });
          }, 0);
           return prevProjects;
       }
@@ -867,13 +867,13 @@ export default function Home() {
        return updatedProjects;
     });
 
-    // Show toast *after* setProjects has potentially completed its update cycle
-    if (projectWasUpdated) {
-        // Using setTimeout to ensure toast doesn't interfere with rendering updates
-        setTimeout(() => {
-             toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
-        }, 0);
-    }
+     // Show toast *after* setProjects has potentially completed its update cycle
+     if (projectWasUpdated) {
+         // Using setTimeout to ensure toast doesn't interfere with rendering updates
+         setTimeout(() => {
+              toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
+         }, 0);
+     }
 
   }, [selectedProjectId, toast, projects]);
 
@@ -1564,6 +1564,7 @@ export default function Home() {
     </div>
   );
 }
+
 
 
 
