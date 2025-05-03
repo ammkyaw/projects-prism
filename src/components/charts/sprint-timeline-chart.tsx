@@ -201,7 +201,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  // console.log(`Task ${index + 1} (${task.id}): Dev Phase - Start: ${format(devStartDateObj, 'yyyy-MM-dd')}, End: ${format(devEndDateObj, 'yyyy-MM-dd')}, Indices: [${devStartDayIndex}, ${devEndDayIndex}], Days: ${devWorkingDays}`);
              } else {
                  // If dev days are 0 or null, the phase doesn't exist, lastPhaseEndDateObj remains devStartDateObj (the adjusted task start)
-                 console.warn(`Task ${index + 1} (${task.id}): Dev estimate is zero or invalid. Skipping Dev phase.`);
+                 // console.warn(`Task ${index + 1} (${task.id}): Dev estimate is zero or invalid. Skipping Dev phase.`);
                  // No change to lastPhaseEndDateObj here
              }
 
@@ -228,7 +228,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  qaPhaseValid = true;
                  // console.log(`Task ${index + 1} (${task.id}): QA Phase - Start: ${format(qaStartDateObj, 'yyyy-MM-dd')}, End: ${format(qaEndDateObj, 'yyyy-MM-dd')}, Indices: [${qaStartDayIndex}, ${qaEndDayIndex}], Days: ${qaWorkingDays}`);
              } else {
-                  console.warn(`Task ${index + 1} (${task.id}): QA estimate is zero or invalid. Skipping QA phase.`);
+                  // console.warn(`Task ${index + 1} (${task.id}): QA estimate is zero or invalid. Skipping QA phase.`);
                  // No change to lastPhaseEndDateObj here
              }
 
@@ -255,7 +255,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 bufferPhaseValid = true;
                  // console.log(`Task ${index + 1} (${task.id}): Buffer Phase - Start: ${format(bufferStartDateObj, 'yyyy-MM-dd')}, End: ${format(bufferEndDateObj, 'yyyy-MM-dd')}, Indices: [${bufferStartDayIndex}, ${bufferEndDayIndex}], Days: ${bufferWorkingDays}`);
             } else {
-                 console.warn(`Task ${index + 1} (${task.id}): Buffer estimate is zero or invalid. Skipping Buffer phase.`);
+                 // console.warn(`Task ${index + 1} (${task.id}): Buffer estimate is zero or invalid. Skipping Buffer phase.`);
             }
 
 
@@ -411,8 +411,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                <ReferenceLine
                  key={`weekend-rect-${index}`}
                  x={index}
-                 stroke="transparent"
-                 ifOverflow="extendDomain"
+                 stroke="transparent" // Ensure no visible line is drawn
+                 ifOverflow="extendDomain" // Prevent clipping if near edge
                  label={(props) => {
                      const { viewBox } = props;
                      // Calculate width based on axis viewbox and total days
@@ -420,10 +420,11 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                      return (
                        <rect
                          x={props.viewBox.x} // Use the provided x position
-                         y={viewBox?.y ?? 0}
+                         y={viewBox?.y ?? 0} // Use the provided y position
                          width={dayWidth} // Use calculated width
-                         height={viewBox?.height ?? 200}
-                         fill={weekendColor}
+                         height={viewBox?.height ?? 200} // Use provided height or default
+                         fill={weekendColor} // Use the defined black weekend color
+                         fillOpacity={0.3} // Add some opacity
                          style={{ pointerEvents: 'none' }} // Prevent interaction
                        />
                      );
@@ -435,7 +436,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  <ReferenceLine
                    key={`holiday-rect-${index}`}
                    x={index}
-                   stroke="transparent"
+                   stroke="transparent" // Ensure no visible line is drawn
                    ifOverflow="extendDomain"
                    label={(props) => {
                        const { viewBox } = props;
@@ -446,11 +447,12 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                             <UITooltip> {/* Use renamed Tooltip */}
                               <TooltipTrigger asChild>
                                  <rect
-                                   x={props.viewBox.x}
-                                   y={viewBox?.y ?? 0}
-                                   width={dayWidth}
-                                   height={viewBox?.height ?? 200}
+                                   x={props.viewBox.x} // Use the provided x position
+                                   y={viewBox?.y ?? 0} // Use the provided y position
+                                   width={dayWidth} // Use calculated width
+                                   height={viewBox?.height ?? 200} // Use provided height or default
                                    fill={holidayColor} // Use the defined dark red holiday color
+                                   fillOpacity={0.2} // Add some opacity
                                    style={{ pointerEvents: 'auto' }} // Ensure tooltip triggers
                                  />
                                </TooltipTrigger>
@@ -500,4 +502,5 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     </ChartContainer>
   );
 }
+
 
