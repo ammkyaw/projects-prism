@@ -947,28 +947,37 @@ export default function Home() {
         setProjects(prevProjects => {
             const updatedProjects = prevProjects.map(p => {
                 if (p.id === selectedProjectId) {
+                    let foundAndRemoved = false;
                     // Remove the task from the specified sprint's planning.newTasks
                     const updatedSprints = p.sprintData.sprints.map(s => {
                         if (s.sprintNumber === sprintNumber && s.planning) {
                             const taskToRemove = s.planning.newTasks.find(t => t.id === taskId);
                             if (taskToRemove) {
                                 revertedTaskDetails = `${taskToRemove.ticketNumber} (${taskToRemove.title || 'No Title'})`;
+                                foundAndRemoved = true;
+                                return {
+                                    ...s,
+                                    planning: {
+                                        ...s.planning,
+                                        newTasks: s.planning.newTasks.filter(task => task.id !== taskId),
+                                    }
+                                };
                             }
-                            return {
-                                ...s,
-                                planning: {
-                                    ...s.planning,
-                                    newTasks: s.planning.newTasks.filter(task => task.id !== taskId),
-                                }
-                            };
                         }
                         return s;
                     });
 
+                    // If the task wasn't found in the sprint, no need to update backlog
+                    if (!foundAndRemoved) {
+                        console.warn(`Task ID ${taskId} not found in Sprint ${sprintNumber} planning.`);
+                        // Maybe show a warning toast?
+                        return p;
+                    }
+
                     // Find the corresponding item in the backlog and reset its 'movedToSprint' status
                     const updatedBacklog = (p.backlog || []).map(item => {
-                        // Match using taskBacklogId if available, otherwise fall back to taskId (though less reliable)
-                        const isMatch = taskBacklogId ? item.backlogId === taskBacklogId : item.id === taskId;
+                        // Match primarily using taskBacklogId if available, as task.id is unique to the sprint instance
+                        const isMatch = taskBacklogId ? item.backlogId === taskBacklogId : false; // Only rely on backlogId
                         if (isMatch && item.movedToSprint === sprintNumber) {
                             return { ...item, movedToSprint: undefined }; // Reset movedToSprint
                         }
@@ -992,7 +1001,8 @@ export default function Home() {
         if (revertedTaskDetails) {
             toast({ title: "Task Reverted", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber} and returned to backlog.` });
         } else {
-             toast({ variant: "warning", title: "Task Not Found", description: `Could not find task ID ${taskId} in Sprint ${sprintNumber} planning or backlog.` });
+             // Only show warning if it wasn't found (means foundAndRemoved remained false)
+             toast({ variant: "warning", title: "Task Not Found", description: `Could not find task ID ${taskId} in Sprint ${sprintNumber} planning.` });
         }
     }, [selectedProjectId, toast]);
 
@@ -1601,3 +1611,5 @@ export default function Home() {
     </div>
   );
 }
+
+    

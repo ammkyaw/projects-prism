@@ -337,15 +337,14 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     updater(prevRows => {
         const taskToRemove = prevRows.find(row => row._internalId === internalId);
-        if (type === 'new' && taskToRemove && selectedSprintNumber) {
-             // If removing a new task, call the revert function
+
+        // Check if it's a 'new' task and has a backlogId, meaning it came from the backlog
+        if (type === 'new' && taskToRemove && taskToRemove.backlogId && selectedSprintNumber) {
+             // Call the revert function passed from parent
              onRevertTask(selectedSprintNumber, taskToRemove.id, taskToRemove.backlogId);
         }
+         // Always remove the task from the current sprint planning state
         const newRows = prevRows.filter(row => row._internalId !== internalId);
-        // No longer need to keep an empty row for 'new' tasks
-        // if (type === 'new' && newRows.length === 0) {
-        //     return [createEmptyTaskRow()];
-        // }
         return newRows;
     });
   };
@@ -1213,3 +1212,5 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
     </div>
   );
 }
+
+    
