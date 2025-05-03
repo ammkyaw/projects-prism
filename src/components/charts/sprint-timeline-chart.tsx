@@ -10,16 +10,8 @@ import { format, parseISO, differenceInDays, addDays, isWithinInterval, getDay, 
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from "@/lib/utils";
 
-interface SprintTimelineChartProps {
-  tasks: Task[];
-  sprintStartDate?: string;
-  sprintEndDate?: string;
-  members: Member[];
-  holidayCalendars: HolidayCalendar[]; // Add holiday calendars prop
-}
-
 const weekendColor = 'hsl(var(--muted) / 0.2)'; // Very light gray for weekend background
-const holidayColor = 'hsl(var(--destructive) / 0.15)'; // Light red for holiday background
+const holidayColor = 'hsl(0 72% 51% / 0.2)'; // Darker Red for holiday background (adjust opacity/saturation as needed)
 const devTaskBarColor = 'hsl(var(--primary))'; // Use primary color (blue) for dev task bars
 const qaTaskBarColor = 'hsl(var(--accent))'; // Use accent color (gold/pink) for QA task bars
 const bufferTaskBarColor = 'hsl(var(--muted))'; // Use muted color (gray) for buffer bars
@@ -153,92 +145,69 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
   const chartData = useMemo(() => {
     if (!tasks || tasks.length === 0 || !sprintStartDate || !sprintEndDate || !isValid(parseISO(sprintStartDate)) || !isValid(parseISO(sprintEndDate))) {
-       console.log("Timeline Pre-check failed:", { tasks, sprintStartDate, sprintEndDate });
       return [];
     }
 
     const sprintStartObj = parseISO(sprintStartDate);
     const sprintEndObj = parseISO(sprintEndDate);
-    const sprintLengthDays = differenceInDays(sprintEndObj, sprintStartObj);
-
-    console.log("Processing tasks for timeline:", tasks);
+    const sprintLengthDays = differenceInDays(sprintEndObj, sprintStartObj); // Calendar days length
 
     const processedTasks = tasks
         .map((task, index) => {
-             console.log(`Task ${index + 1} (${task.description}):`, task);
              const assigneeName = task.assignee;
              const memberHolidays = assigneeName ? (memberHolidayMap.get(assigneeName) ?? new Set<string>()) : new Set<string>(); // Get holidays for assignee or empty set
 
             if (!task.startDate || !isValid(parseISO(task.startDate))) {
-                console.warn(`Task ${index + 1}: Invalid or missing start date.`);
+                console.warn(`Task ${index + 1} (${task.description}): Invalid or missing start date.`);
                 return null;
             }
 
-            // Changed const to let to allow reassignment in the fallback case
             let taskStartObj = parseISO(task.startDate!);
             let lastPhaseEndDateObj = taskStartObj; // Tracks the end date of the last valid phase for dependency
 
+             // Ensure the effective start date of the *first* phase is a working day
+             while (isNonWorkingDay(taskStartObj, memberHolidays)) {
+               taskStartObj = addDays(taskStartObj, 1);
+             }
+             lastPhaseEndDateObj = taskStartObj; // Reset lastPhaseEnd to the adjusted task start
+
             // --- Development Phase ---
             const devWorkingDays = parseEstimatedTimeToDays(task.devEstimatedTime);
-            console.log(`Task ${index + 1}: Dev days parsed: ${devWorkingDays}`);
-            let devStartDateObj = taskStartObj;
-            let devEndDateObj = taskStartObj;
+            let devStartDateObj = taskStartObj; // Start from adjusted task start date
+            let devEndDateObj = devStartDateObj; // Initialize end date
             let devStartDayIndex = -1;
             let devEndDayIndex = -1;
             let devPhaseValid = false;
 
-            if (devWorkingDays !== null && devWorkingDays >= 0) { // Allow 0 days
-                 devStartDateObj = taskStartObj; // Use task's start date for dev
-                 // Adjust start date if it falls on a non-working day
-                 while (isNonWorkingDay(devStartDateObj, memberHolidays)) {
-                   devStartDateObj = addDays(devStartDateObj, 1);
-                 }
-                 // Calculate end date based on WORKING days, skipping non-working days
+            if (devWorkingDays !== null && devWorkingDays > 0) { // Only calculate if > 0 days
                  devEndDateObj = calculateEndDateSkippingNonWorkingDays(devStartDateObj, devWorkingDays, memberHolidays);
 
                  devStartDayIndex = differenceInDays(devStartDateObj, sprintStartObj);
-                 // End day index should be inclusive of the end date
                  devEndDayIndex = differenceInDays(devEndDateObj, sprintStartObj);
 
-                 // Clamp indices to be within the sprint boundaries
+                 // Clamp indices
                  devStartDayIndex = Math.max(0, devStartDayIndex);
-                 devEndDayIndex = Math.min(sprintLengthDays, Math.max(devStartDayIndex, devEndDayIndex));
+                 devEndDayIndex = Math.min(sprintLengthDays, devEndDayIndex);
 
-                 lastPhaseEndDateObj = devEndDateObj; // Update the end date for the next phase
+                 lastPhaseEndDateObj = devEndDateObj; // Update the end date for the next phase dependency
                  devPhaseValid = true;
-                 console.log(`Task ${index + 1}: Dev Phase - Start: ${format(devStartDateObj, 'yyyy-MM-dd')}, End: ${format(devEndDateObj, 'yyyy-MM-dd')}, Indices: [${devStartDayIndex}, ${devEndDayIndex}]`);
-            } else {
-                console.warn(`Task ${index + 1}: Invalid or zero Dev estimate.`);
-                 // If dev is invalid, next phases start from task start date
-                 // If dev was 0 days, next phases start immediately after the adjusted start date
-                 if (devWorkingDays === 0) {
-                    // This loop needs devStartDateObj to be mutable (which is `let`)
-                    while (isNonWorkingDay(devStartDateObj, memberHolidays)) {
-                       devStartDateObj = addDays(devStartDateObj, 1);
-                     }
-                     lastPhaseEndDateObj = devStartDateObj;
-                 } else {
-                      // This loop needs taskStartObj to be mutable (now it's `let`)
-                      while (isNonWorkingDay(taskStartObj, memberHolidays)) {
-                         taskStartObj = addDays(taskStartObj, 1);
-                      }
-                     lastPhaseEndDateObj = taskStartObj; // Fallback to adjusted original task start
-                 }
-            }
+                 console.log(`Task ${index + 1} (${task.id}): Dev Phase - Start: ${format(devStartDateObj, 'yyyy-MM-dd')}, End: ${format(devEndDateObj, 'yyyy-MM-dd')}, Indices: [${devStartDayIndex}, ${devEndDayIndex}], Days: ${devWorkingDays}`);
+             } else {
+                 // If dev days are 0 or null, the phase doesn't exist, lastPhaseEndDateObj remains devStartDateObj (the adjusted task start)
+                 console.warn(`Task ${index + 1} (${task.id}): Dev estimate is zero or invalid. Skipping Dev phase.`);
+                 // No change to lastPhaseEndDateObj here
+             }
 
 
             // --- QA Phase ---
             const qaWorkingDays = parseEstimatedTimeToDays(task.qaEstimatedTime);
-            console.log(`Task ${index + 1}: QA days parsed: ${qaWorkingDays}`);
-            let qaStartDateObj = lastPhaseEndDateObj; // Start relative to the end of the previous valid phase
-            let qaEndDateObj = lastPhaseEndDateObj;
+            let qaStartDateObj = getNextWorkingDay(lastPhaseEndDateObj, memberHolidays); // QA starts next working day AFTER previous phase ends
+            let qaEndDateObj = qaStartDateObj;
             let qaStartDayIndex = -1;
             let qaEndDayIndex = -1;
             let qaPhaseValid = false;
 
-             if (qaWorkingDays !== null && qaWorkingDays >= 0) {
-                 // QA starts the next working day *after* the previous phase ended
-                 qaStartDateObj = getNextWorkingDay(lastPhaseEndDateObj, memberHolidays);
+             if (qaWorkingDays !== null && qaWorkingDays > 0) { // Only calculate if > 0 days
                  qaEndDateObj = calculateEndDateSkippingNonWorkingDays(qaStartDateObj, qaWorkingDays, memberHolidays);
 
                  qaStartDayIndex = differenceInDays(qaStartDateObj, sprintStartObj);
@@ -246,30 +215,26 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                   // Clamp indices
                  qaStartDayIndex = Math.max(0, qaStartDayIndex);
-                 qaEndDayIndex = Math.min(sprintLengthDays, Math.max(qaStartDayIndex, qaEndDayIndex));
+                 qaEndDayIndex = Math.min(sprintLengthDays, qaEndDayIndex);
 
-                 lastPhaseEndDateObj = qaEndDateObj; // Update the end date for the next phase
+                 lastPhaseEndDateObj = qaEndDateObj; // Update the end date for the next phase dependency
                  qaPhaseValid = true;
-                 console.log(`Task ${index + 1}: QA Phase - Start: ${format(qaStartDateObj, 'yyyy-MM-dd')}, End: ${format(qaEndDateObj, 'yyyy-MM-dd')}, Indices: [${qaStartDayIndex}, ${qaEndDayIndex}]`);
+                 console.log(`Task ${index + 1} (${task.id}): QA Phase - Start: ${format(qaStartDateObj, 'yyyy-MM-dd')}, End: ${format(qaEndDateObj, 'yyyy-MM-dd')}, Indices: [${qaStartDayIndex}, ${qaEndDayIndex}], Days: ${qaWorkingDays}`);
              } else {
-                 console.warn(`Task ${index + 1}: Invalid or zero QA estimate.`);
-                 // If QA is invalid or 0, buffer starts after the last valid phase (Dev or task start)
-                 // lastPhaseEndDateObj remains unchanged from previous phase
+                  console.warn(`Task ${index + 1} (${task.id}): QA estimate is zero or invalid. Skipping QA phase.`);
+                 // No change to lastPhaseEndDateObj here
              }
 
 
             // --- Buffer Phase ---
             const bufferWorkingDays = parseEstimatedTimeToDays(task.bufferTime);
-            console.log(`Task ${index + 1}: Buffer days parsed: ${bufferWorkingDays}`);
-            let bufferStartDateObj = lastPhaseEndDateObj; // Start relative to end of the last valid phase (Dev or QA)
-            let bufferEndDateObj = lastPhaseEndDateObj;
+            let bufferStartDateObj = getNextWorkingDay(lastPhaseEndDateObj, memberHolidays); // Buffer starts next working day AFTER previous phase ends
+            let bufferEndDateObj = bufferStartDateObj;
             let bufferStartDayIndex = -1;
             let bufferEndDayIndex = -1;
             let bufferPhaseValid = false;
 
-            if (bufferWorkingDays !== null && bufferWorkingDays >= 0) {
-                // Buffer starts the next working day *after* the previous phase ended
-                bufferStartDateObj = getNextWorkingDay(lastPhaseEndDateObj, memberHolidays);
+            if (bufferWorkingDays !== null && bufferWorkingDays > 0) { // Only calculate if > 0 days
                 bufferEndDateObj = calculateEndDateSkippingNonWorkingDays(bufferStartDateObj, bufferWorkingDays, memberHolidays);
 
                 bufferStartDayIndex = differenceInDays(bufferStartDateObj, sprintStartObj);
@@ -277,22 +242,22 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                 // Clamp indices
                 bufferStartDayIndex = Math.max(0, bufferStartDayIndex);
-                bufferEndDayIndex = Math.min(sprintLengthDays, Math.max(bufferStartDayIndex, bufferEndDayIndex));
+                bufferEndDayIndex = Math.min(sprintLengthDays, bufferEndDayIndex);
 
+                 // No update to lastPhaseEndDateObj needed after buffer
                 bufferPhaseValid = true;
-                console.log(`Task ${index + 1}: Buffer Phase - Start: ${format(bufferStartDateObj, 'yyyy-MM-dd')}, End: ${format(bufferEndDateObj, 'yyyy-MM-dd')}, Indices: [${bufferStartDayIndex}, ${bufferEndDayIndex}]`);
+                 console.log(`Task ${index + 1} (${task.id}): Buffer Phase - Start: ${format(bufferStartDateObj, 'yyyy-MM-dd')}, End: ${format(bufferEndDateObj, 'yyyy-MM-dd')}, Indices: [${bufferStartDayIndex}, ${bufferEndDayIndex}], Days: ${bufferWorkingDays}`);
             } else {
-                console.warn(`Task ${index + 1}: Invalid or zero Buffer estimate.`);
-                 // If Buffer is invalid or 0, we don't add a buffer phase
+                 console.warn(`Task ${index + 1} (${task.id}): Buffer estimate is zero or invalid. Skipping Buffer phase.`);
             }
 
 
              // Tooltip to show more details
              const tooltipContent = [
                  `${task.description || 'Task'} (${task.status || 'N/A'})`,
-                 `Dev: ${task.devEstimatedTime || '?'} [${devPhaseValid ? format(devStartDateObj, 'MM/dd') + ' - ' + format(devEndDateObj, 'MM/dd') : 'N/A'}]`,
-                 `QA: ${task.qaEstimatedTime || '?'} [${qaPhaseValid ? format(qaStartDateObj, 'MM/dd') + ' - ' + format(qaEndDateObj, 'MM/dd') : 'N/A'}]`,
-                 `Buffer: ${task.bufferTime || '?'} [${bufferPhaseValid ? format(bufferStartDateObj, 'MM/dd') + ' - ' + format(bufferEndDateObj, 'MM/dd') : 'N/A'}]`,
+                 `Dev: ${task.devEstimatedTime || '0d'} [${devPhaseValid ? format(devStartDateObj, 'MM/dd') + '-' + format(devEndDateObj, 'MM/dd') : 'N/A'}]`,
+                 `QA: ${task.qaEstimatedTime || '0d'} [${qaPhaseValid ? format(qaStartDateObj, 'MM/dd') + '-' + format(qaEndDateObj, 'MM/dd') : 'N/A'}]`,
+                 `Buffer: ${task.bufferTime || '0d'} [${bufferPhaseValid ? format(bufferStartDateObj, 'MM/dd') + '-' + format(bufferEndDateObj, 'MM/dd') : 'N/A'}]`,
                  task.assignee ? `Assignee: ${task.assignee}` : '',
                  task.reviewer ? `Reviewer: ${task.reviewer}` : '',
              ].filter(Boolean).join(' | ');
@@ -301,16 +266,15 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             const result = {
                 name: task.description || `Task ${task.id}`,
                 taskIndex: index,
-                // range is for the bar component, needs start and end+1 (to cover the full end day)
-                // Ensure indices are valid and end >= start before creating range
-                // +1 makes the range inclusive of the end day index
+                // Recharts bar needs [start, end] where end is EXCLUSIVE for length calculation,
+                // but INCLUSIVE for positioning. So we use [startIndex, endIndex + 1]
                 devRange: devPhaseValid && devEndDayIndex >= devStartDayIndex ? [devStartDayIndex, devEndDayIndex + 1] : undefined,
                 qaRange: qaPhaseValid && qaEndDayIndex >= qaStartDayIndex ? [qaStartDayIndex, qaEndDayIndex + 1] : undefined,
                 bufferRange: bufferPhaseValid && bufferEndDayIndex >= bufferStartDayIndex ? [bufferStartDayIndex, bufferEndDayIndex + 1] : undefined,
                 tooltip: tooltipContent,
                 assignee: task.assignee, // Pass assignee for potential holiday highlighting
             };
-             console.log(`Task ${index + 1}: Final Result`, result);
+             console.log(`Task ${index + 1} (${task.id}): Final Chart Data`, result);
              // Include if *any* range is valid
              return result.devRange || result.qaRange || result.bufferRange ? result : null;
         }).filter(item => item !== null);
@@ -339,48 +303,37 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
        return indices;
    }, [sprintStartDate, sprintEndDate]);
 
-    // Calculate holiday indices for the entire sprint duration
-    const holidayIndices = useMemo(() => {
-        if (!sprintStartDate || !sprintEndDate || !isValid(parseISO(sprintStartDate)) || !isValid(parseISO(sprintEndDate))) return [];
+    // Calculate holiday indices and names for the entire sprint duration
+    const holidayMap = useMemo(() => {
+        const map = new Map<number, Set<string>>(); // Map day index to Set of holiday names
+        if (!sprintStartDate || !sprintEndDate || !isValid(parseISO(sprintStartDate)) || !isValid(parseISO(sprintEndDate))) return map;
         const start = parseISO(sprintStartDate);
         const end = parseISO(sprintEndDate);
-        const indices = new Map<number, Set<string>>(); // Map day index to Set of holiday names
 
         try {
-            const allHolidaysInSprint = new Set<string>();
-             // Aggregate all unique holiday dates within the sprint range from all calendars
-             holidayCalendars.forEach(cal => {
-                cal.holidays.forEach(hol => {
-                    if (hol.date && isValid(parseISO(hol.date))) {
-                         const holidayDate = parseISO(hol.date);
-                         if (isWithinInterval(holidayDate, { start, end })) {
-                             allHolidaysInSprint.add(hol.date);
-                         }
-                    }
-                });
-            });
+            eachDayOfInterval({ start, end }).forEach(date => {
+                const dateStr = format(date, 'yyyy-MM-dd');
+                const dayIndex = differenceInDays(date, start);
+                let holidayNamesForDay: Set<string> | undefined;
 
-            // Add indices for these unique holiday dates
-            allHolidaysInSprint.forEach(holidayDateStr => {
-                const holidayDate = parseISO(holidayDateStr);
-                const index = differenceInDays(holidayDate, start);
-                // Find holiday names for this date
-                const names = new Set<string>();
+                // Check all calendars for a holiday on this date
                 holidayCalendars.forEach(cal => {
-                   cal.holidays.forEach(hol => {
-                       if (hol.date === holidayDateStr) {
-                           names.add(hol.name);
-                       }
-                   });
+                    cal.holidays.forEach(hol => {
+                        if (hol.date === dateStr) {
+                            if (!holidayNamesForDay) {
+                                holidayNamesForDay = new Set<string>();
+                                map.set(dayIndex, holidayNamesForDay);
+                            }
+                            holidayNamesForDay.add(hol.name);
+                        }
+                    });
                 });
-                indices.set(index, names);
             });
-
         } catch (e) {
-            console.error("Error calculating holiday indices:", e);
+            console.error("Error calculating holiday map:", e);
             return new Map();
         }
-        return indices;
+        return map;
     }, [sprintStartDate, sprintEndDate, holidayCalendars]);
 
 
@@ -435,7 +388,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
           <XAxis
              type="number"
-             dataKey="taskIndex" // Not used for positioning, just reference
+             // dataKey="taskIndex" // Not used for positioning, just reference
              scale="linear"
              domain={[0, sprintDays ]} // Domain is 0 to total calendar days
              ticks={sprintDayIndices} // Ticks for each day index
@@ -455,21 +408,23 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  ifOverflow="extendDomain"
                  label={(props) => {
                      const { viewBox } = props;
+                     // Calculate width based on axis viewbox and total days
                      const dayWidth = viewBox && viewBox.width && sprintDays > 0 ? viewBox.width / sprintDays : 10;
                      return (
                        <rect
-                         x={props.viewBox.x}
+                         x={props.viewBox.x} // Use the provided x position
                          y={viewBox?.y ?? 0}
-                         width={dayWidth}
+                         width={dayWidth} // Use calculated width
                          height={viewBox?.height ?? 200}
                          fill={weekendColor}
+                         style={{ pointerEvents: 'none' }} // Prevent interaction
                        />
                      );
                  }}
                />
            ))}
             {/* Holiday Reference Areas */}
-            {Array.from(holidayIndices.entries()).map(([index, holidayNames]) => (
+            {Array.from(holidayMap.entries()).map(([index, holidayNames]) => (
                  <ReferenceLine
                    key={`holiday-rect-${index}`}
                    x={index}
@@ -488,7 +443,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                                    y={viewBox?.y ?? 0}
                                    width={dayWidth}
                                    height={viewBox?.height ?? 200}
-                                   fill={holidayColor}
+                                   fill={holidayColor} // Use the defined dark red holiday color
                                    style={{ pointerEvents: 'auto' }} // Ensure tooltip triggers
                                  />
                                </TooltipTrigger>
