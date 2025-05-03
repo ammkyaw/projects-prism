@@ -1,9 +1,12 @@
+
 export interface Sprint {
   sprintNumber: number;
   committedPoints: number;
   completedPoints: number;
   dailyBurndown: number[]; // Array representing remaining points for each day (index 0 = day 0)
   totalDays: number;
+  startDate?: string; // Optional: YYYY-MM-DD format
+  endDate?: string; // Optional: YYYY-MM-DD format
 }
 
 export interface DeveloperDailyPoints {
@@ -18,3 +21,4 @@ export interface SprintData {
   totalStoryPoints: number; // Overall total, maybe less useful
   daysInSprint: number; // Max days in any sprint, useful for axis scaling
 }
+```

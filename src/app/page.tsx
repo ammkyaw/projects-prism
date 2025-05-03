@@ -1,105 +1,70 @@
 
 "use client";
 
-import type { ChangeEvent, FormEvent } from 'react';
-import { useState, useEffect } from 'react'; // Import useState and useEffect
+import type { ChangeEvent } from 'react';
+import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants explicitly
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, Download, BarChart, LineChart, Users, Edit } from 'lucide-react';
-import VelocityChart from '@/components/charts/velocity-chart';
-import BurndownChart from '@/components/charts/burndown-chart';
-import DeveloperPointsChart from '@/components/charts/developer-points-chart';
-import ManualInputForm from '@/components/manual-input-form'; // Import the new form component
-import type { SprintData, DeveloperDailyPoints, Sprint } from '@/types/sprint-data';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input'; // Keep Input if needed for other parts, maybe header
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Download, Upload, Edit, HomeIcon, BarChart, ListPlus } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import HomeTab from '@/components/home-tab'; // Import Home tab component
+import EntryTab from '@/components/entry-tab'; // Import Entry tab component
+import ReportsTab from '@/components/reports-tab'; // Import Reports tab component
+
+import type { SprintData, Sprint, DeveloperDailyPoints } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils"; // Import cn utility function
+import { cn } from "@/lib/utils";
 
 export default function Home() {
   const [sprintData, setSprintData] = useState<SprintData | null>(null);
-  const [fileName, setFileName] = useState<string>('');
-  const [inputMode, setInputMode] = useState<'upload' | 'manual' | null>(null); // Track input mode
+  const [activeTab, setActiveTab] = useState<string>("home"); // Default to home tab
   const { toast } = useToast();
 
-  // Clear data when switching input modes
-  useEffect(() => {
-    setSprintData(null);
-    setFileName('');
-  }, [inputMode]);
-
-  const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setInputMode('upload'); // Set mode on new upload
-    setFileName(file.name);
-    setSprintData(null); // Clear previous data
-
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
+   // Effect to load data from localStorage on mount
+   useEffect(() => {
+    const savedData = localStorage.getItem('sprintData');
+    if (savedData) {
       try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        // Ensure header option includes empty strings for potentially missing headers
-        const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-
-        if (jsonData.length < 2) {
-            throw new Error("CSV file must contain headers and at least one data row.");
+        const parsedData = JSON.parse(savedData);
+        // Basic validation of parsed data structure
+        if (parsedData && Array.isArray(parsedData.sprints) && typeof parsedData.developerPoints === 'object') {
+          setSprintData(parsedData);
+           toast({ title: "Data Loaded", description: "Loaded previously saved sprint data." });
+        } else {
+          console.warn("Invalid data found in localStorage.");
+          localStorage.removeItem('sprintData'); // Clear invalid data
         }
-
-        // Extract headers from the first row
-        const headers: string[] = jsonData[0].map(String);
-        // Convert subsequent rows to objects using headers
-        const dataRows = jsonData.slice(1).map(rowArray => {
-            let rowObject: { [key: string]: any } = {};
-            headers.forEach((header, index) => {
-                // Use header only if it's not empty
-                if(header?.trim()) {
-                    rowObject[header.trim()] = rowArray[index];
-                }
-            });
-            return rowObject;
-        });
-
-        // Basic validation and parsing (adapt based on actual CSV structure)
-        const parsedData = parseSprintData(dataRows);
-        setSprintData(parsedData);
-        toast({ title: "Success", description: "File uploaded and processed." });
-      } catch (error: any) {
-        console.error("Error parsing file:", error);
-        toast({
-          variant: "destructive",
-          title: "Error Parsing File",
-          description: error.message || "Failed to parse file. Please ensure it's in the correct format with required headers.",
-        })
-        setFileName(''); // Reset filename on error
-        setSprintData(null); // Reset data on error
-        setInputMode(null); // Reset mode
+      } catch (error) {
+        console.error("Failed to parse sprint data from localStorage:", error);
+        localStorage.removeItem('sprintData'); // Clear corrupted data
       }
-    };
-
-    reader.onerror = (error) => {
-      console.error("Error reading file:", error);
-      toast({
-        variant: "destructive",
-        title: "Error Reading File",
-        description: "Failed to read the file.",
-      })
-      setFileName(''); // Reset filename on error
-      setInputMode(null); // Reset mode
     }
+  }, [toast]); // Add toast to dependency array
 
-    reader.readAsBinaryString(file);
-  };
+  // Effect to save data to localStorage whenever it changes
+  useEffect(() => {
+    if (sprintData) {
+      try {
+        const dataToSave = JSON.stringify(sprintData);
+        localStorage.setItem('sprintData', dataToSave);
+      } catch (error) {
+         console.error("Failed to save sprint data to localStorage:", error);
+         toast({
+           variant: "destructive",
+           title: "Save Error",
+           description: "Could not save sprint data locally. Data might be too large or storage is unavailable.",
+         });
+      }
+
+    } else {
+       localStorage.removeItem('sprintData'); // Clear storage if data is null
+    }
+  }, [sprintData, toast]); // Add toast to dependency array
 
 
-  // Parsing function for uploaded file data
-  const parseSprintData = (jsonData: any[]): SprintData => {
+   const parseSprintData = (jsonData: any[]): SprintData => {
      const requiredColumns = ['SprintNumber', 'Date', 'Developer', 'StoryPointsCompleted', 'DayOfSprint', 'TotalSprintPoints', 'TotalDaysInSprint'];
     // Check if jsonData is valid and has at least one row
     if (!jsonData || jsonData.length === 0) {
@@ -115,10 +80,12 @@ export default function Home() {
     const sprintsMap = new Map<number, Sprint>();
     const developerPoints: DeveloperDailyPoints = {};
     let maxDaysInSprint = 0;
+    let minDate: string | null = null;
+    let maxDate: string | null = null;
 
     jsonData.forEach((row, rowIndex) => {
       const sprintNumber = parseInt(row.SprintNumber, 10);
-      let date = row.Date; // Can be Excel date number or string
+      let dateValue = row.Date; // Can be Excel date number or string
       const developer = row.Developer?.toString().trim();
       const points = parseInt(row.StoryPointsCompleted, 10);
       const day = parseInt(row.DayOfSprint, 10);
@@ -126,7 +93,7 @@ export default function Home() {
       const totalDays = parseInt(row.TotalDaysInSprint, 10);
 
       // Validate essential data for each row
-      if (isNaN(sprintNumber) || !date || !developer || isNaN(points) || isNaN(day) || isNaN(totalPointsInSprint) || isNaN(totalDays)) {
+      if (isNaN(sprintNumber) || !dateValue || !developer || isNaN(points) || isNaN(day) || isNaN(totalPointsInSprint) || isNaN(totalDays)) {
         console.warn(`Skipping invalid row ${rowIndex + 2}:`, row); // +2 because of header and 0-indexing
         return; // Skip rows with missing or invalid essential data
       }
@@ -137,28 +104,38 @@ export default function Home() {
 
       // Format date consistently (handle Excel date numbers)
        let dateStr: string;
-       if (typeof date === 'number') {
+       if (typeof dateValue === 'number') {
          // Check if it's a valid Excel date number (greater than 0)
-         if (date > 0) {
+         if (dateValue > 0) {
            try {
               // Use XLSX utility function to format the date number
-             dateStr = XLSX.SSF.format('yyyy-mm-dd', date);
+             dateStr = XLSX.SSF.format('yyyy-mm-dd', dateValue);
            } catch (e) {
-              console.warn(`Skipping row ${rowIndex + 2}: Invalid date format for value ${date}. Using original value.`);
-              dateStr = date.toString(); // Fallback to string
+              console.warn(`Skipping row ${rowIndex + 2}: Invalid date format for value ${dateValue}. Using original value.`);
+              dateStr = dateValue.toString(); // Fallback to string
            }
          } else {
-             console.warn(`Skipping row ${rowIndex + 2}: Invalid Excel date number ${date}.`);
+             console.warn(`Skipping row ${rowIndex + 2}: Invalid Excel date number ${dateValue}.`);
              return; // Skip if date number is not positive
          }
-       } else if (typeof date === 'string') {
+       } else if (typeof dateValue === 'string') {
          // Attempt to parse common date string formats if needed, otherwise assume 'yyyy-mm-dd'
          // For simplicity, we assume it's already in a usable format or 'yyyy-mm-dd'
-         dateStr = date.split('T')[0]; // Basic handling for ISO strings
+         const potentialDate = new Date(dateValue);
+         if (!isNaN(potentialDate.getTime())) {
+             dateStr = potentialDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+         } else {
+            console.warn(`Skipping row ${rowIndex + 2}: Invalid date string format ${dateValue}.`);
+            return;
+         }
        } else {
-          console.warn(`Skipping row ${rowIndex + 2}: Unrecognized date type ${typeof date}.`);
+          console.warn(`Skipping row ${rowIndex + 2}: Unrecognized date type ${typeof dateValue}.`);
          return; // Skip if date type is not recognized
        }
+
+       // Update overall min/max dates
+       if (minDate === null || dateStr < minDate) minDate = dateStr;
+       if (maxDate === null || dateStr > maxDate) maxDate = dateStr;
 
 
       if (!sprintsMap.has(sprintNumber)) {
@@ -168,6 +145,8 @@ export default function Home() {
           completedPoints: 0,
           dailyBurndown: Array(totalDays + 1).fill(totalPointsInSprint), // Initialize burndown
           totalDays: totalDays,
+          startDate: dateStr, // Initialize with first date encountered
+          endDate: dateStr, // Initialize with first date encountered
         });
         if (totalDays > maxDaysInSprint) maxDaysInSprint = totalDays;
       }
@@ -179,6 +158,10 @@ export default function Home() {
           // Optionally throw an error or use the first value encountered
           // For now, we'll just warn and continue with the first value set.
        }
+
+        // Update sprint start/end dates
+        if (dateStr < currentSprint.startDate) currentSprint.startDate = dateStr;
+        if (dateStr > currentSprint.endDate) currentSprint.endDate = dateStr;
 
       currentSprint.completedPoints += points;
 
@@ -238,13 +221,12 @@ export default function Home() {
     };
   };
 
-  // Handler for manual data submission
-  const handleManualData = (data: SprintData) => {
+  const handleDataProcessed = (data: SprintData) => {
     setSprintData(data);
-    setInputMode('manual'); // Keep track that data came from manual input
-    setFileName(''); // Clear file name
-    toast({ title: "Success", description: "Manual data submitted." });
+    toast({ title: "Success", description: "Sprint data processed." });
+    setActiveTab("reports"); // Switch to reports tab after processing
   };
+
 
   const handleExport = () => {
     if (!sprintData) {
@@ -255,18 +237,20 @@ export default function Home() {
       });
       return;
     }
-    // ... rest of the export logic remains the same
      try {
       const wb = XLSX.utils.book_new();
 
-      // Sheet 1: Velocity Data
-      const velocityData = sprintData.sprints.map(s => ({
-        'Sprint Number': s.sprintNumber,
-        'Committed Points': s.committedPoints,
-        'Completed Points': s.completedPoints,
-      }));
-      const wsVelocity = XLSX.utils.json_to_sheet(velocityData);
-      XLSX.utils.book_append_sheet(wb, wsVelocity, 'Velocity');
+      // Sheet 1: Sprint Summary (including dates)
+       const summaryData = sprintData.sprints.map(s => ({
+         'Sprint Number': s.sprintNumber,
+         'Start Date': s.startDate,
+         'End Date': s.endDate,
+         'Committed Points': s.committedPoints,
+         'Completed Points': s.completedPoints,
+       }));
+       const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+       XLSX.utils.book_append_sheet(wb, wsSummary, 'Sprint Summary');
+
 
        // Sheet 2: Burndown Data (Assuming the *last* sprint's burndown for export)
       const lastSprint = sprintData.sprints[sprintData.sprints.length - 1];
@@ -307,174 +291,42 @@ export default function Home() {
     }
   };
 
-  // Determine which sprint's burndown to show (e.g., the last one)
-  const activeBurndownSprint = sprintData?.sprints[sprintData.sprints.length - 1];
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <header className="sticky top-0 z-10 flex items-center justify-between p-4 bg-card border-b shadow-sm">
         <h1 className="text-2xl font-semibold text-primary">Sprint Stats</h1>
-        <div className="flex items-center gap-4">
+         <div className="flex items-center gap-4">
           {sprintData && (
             <Button onClick={handleExport} variant="outline" size="sm">
               <Download className="mr-2 h-4 w-4" />
               Export Data
             </Button>
           )}
-          {/* Button to activate Upload mode */}
-           <Button
-             onClick={() => setInputMode(inputMode !== 'upload' ? 'upload' : null)}
-             variant={inputMode === 'upload' ? 'default' : 'outline'}
-             size="sm"
-             className="hidden md:inline-flex" // Hide on small screens where Label is used
-           >
-             <Upload className="mr-2 h-4 w-4" />
-             {fileName && inputMode === 'upload' ? `File: ${fileName.substring(0,15)}...` : 'Upload File'}
-           </Button>
-           {/* Hidden input for file upload */}
-           <Input
-              id="csv-upload"
-              type="file"
-              accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
-              onChange={handleFileUpload}
-              className="hidden"
-              ref={input => input && (input.value = "")} // Reset file input value to allow re-uploading same file
-            />
-            {/* Styled Label acting as a button for file upload */}
-            <Label
-              htmlFor="csv-upload"
-              className={cn(buttonVariants({ variant: inputMode === 'upload' ? 'default' : 'outline', size: 'sm' }), 'cursor-pointer inline-flex items-center')}
-             >
-                 <Upload className="mr-2 h-4 w-4" />
-                 <span className="truncate max-w-[100px] sm:max-w-[150px]">
-                    {fileName && inputMode === 'upload' ? `File: ${fileName}` : 'Upload File'}
-                 </span>
-
-            </Label>
-
-
-          <Button onClick={() => setInputMode(inputMode !== 'manual' ? 'manual' : null)} variant={inputMode === 'manual' ? 'default' : 'outline'} size="sm">
-            <Edit className="mr-2 h-4 w-4" />
-            Manual Entry
-          </Button>
+          {/* Add other header controls if needed */}
         </div>
       </header>
 
       <main className="flex-1 p-6">
-        {/* Conditional Rendering based on inputMode */}
-        {!inputMode && !sprintData && (
-            <Card className="lg:col-span-3 flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
-              <CardHeader className="text-center">
-                <CardTitle>Choose Input Method</CardTitle>
-                <CardDescription>Select how you want to provide sprint data.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col sm:flex-row gap-4">
-                 <Label htmlFor="csv-upload-initial" className={cn(buttonVariants({ variant: "default", size: "lg" }), "cursor-pointer inline-flex items-center justify-center")}>
-                   <Upload className="mr-2 h-5 w-5" /> Select File
-                 </Label>
-                 <Input
-                   id="csv-upload-initial"
-                   type="file"
-                   accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
-                   onChange={handleFileUpload}
-                   className="hidden" // Hide the default input, use Label for styling
-                    ref={input => input && (input.value = "")} // Reset file input value
-                 />
-                 <Button onClick={() => setInputMode('manual')} variant="outline" size="lg" className="inline-flex items-center justify-center">
-                   <Edit className="mr-2 h-5 w-5" /> Manual Entry
-                 </Button>
-              </CardContent>
-              <CardFooter className="text-center px-4">
-                   <p className="text-xs text-muted-foreground mt-4">
-                      Upload a CSV/Excel file with columns: SprintNumber, Date, Developer, StoryPointsCompleted, DayOfSprint, TotalSprintPoints, TotalDaysInSprint.<br/>
-                      Or enter the data manually using the form.
-                   </p>
-              </CardFooter>
-            </Card>
-        )}
+         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsTrigger value="home"><HomeIcon className="mr-2 h-4 w-4" />Home</TabsTrigger>
+            <TabsTrigger value="entry"><ListPlus className="mr-2 h-4 w-4" />Entry</TabsTrigger>
+            <TabsTrigger value="reports"><BarChart className="mr-2 h-4 w-4" />Reports</TabsTrigger>
+          </TabsList>
 
-        {inputMode === 'upload' && !sprintData && (
-            <Card className="lg:col-span-3 flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
-              <CardHeader className="text-center">
-                  <CardTitle>Upload Sprint Data</CardTitle>
-                  <CardDescription>Upload a CSV or Excel file to generate reports.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                  <Label htmlFor="csv-upload-active" className={cn(buttonVariants({ variant: "default", size: "lg" }), "cursor-pointer inline-flex items-center justify-center")}>
-                     <Upload className="mr-2 h-5 w-5" />
-                     {fileName ? `Processing: ${fileName}` : 'Select File'}
-                  </Label>
-                  <Input
-                   id="csv-upload-active"
-                   type="file"
-                   accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
-                   onChange={handleFileUpload}
-                   className="hidden" // Hide the default input, use Label for styling
-                   ref={input => input && (input.value = "")} // Reset file input value
-                 />
-              </CardContent>
-               <CardFooter className="text-center px-4">
-                    <p className="text-xs text-muted-foreground">Example columns: SprintNumber, Date, Developer, StoryPointsCompleted, DayOfSprint, TotalSprintPoints, TotalDaysInSprint</p>
-               </CardFooter>
-          </Card>
-        )}
+          <TabsContent value="home">
+            <HomeTab sprintData={sprintData} />
+          </TabsContent>
 
-        {inputMode === 'manual' && !sprintData && (
-          <ManualInputForm onSubmit={handleManualData} />
-        )}
+          <TabsContent value="entry">
+            <EntryTab onDataProcessed={handleDataProcessed} parseSprintData={parseSprintData}/>
+          </TabsContent>
 
-
-        {/* Chart Section - Displayed when data is available */}
-         {sprintData && (
-           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card className="lg:col-span-1 h-[400px]">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <LineChart className="h-5 w-5 text-primary" /> Velocity Chart
-                </CardTitle>
-                <CardDescription>Team's capacity over past sprints.</CardDescription>
-              </CardHeader>
-              <CardContent className="h-[calc(100%-100px)] pl-2">
-                 <VelocityChart data={sprintData.sprints} />
-              </CardContent>
-            </Card>
-
-            <Card className="lg:col-span-1 h-[400px]">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></svg>
-                  Burndown Chart
-                  </CardTitle>
-                  <CardDescription>
-                    {activeBurndownSprint ? `Progress for Sprint ${activeBurndownSprint.sprintNumber}` : 'Sprint progress tracking.'}
-                  </CardDescription>
-
-              </CardHeader>
-              <CardContent className="h-[calc(100%-100px)] pl-2">
-                 {activeBurndownSprint ? (
-                  <BurndownChart
-                      data={activeBurndownSprint.dailyBurndown}
-                      totalDays={activeBurndownSprint.totalDays}
-                      committedPoints={activeBurndownSprint.committedPoints} />
-                 ) : (
-                     <p className="text-muted-foreground text-center pt-10">No sprint data for burndown.</p>
-                 )}
-              </CardContent>
-            </Card>
-
-            <Card className="lg:col-span-1 h-[400px]">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-primary" /> Developer Points
-                </CardTitle>
-                <CardDescription>Story points completed per developer per day.</CardDescription>
-              </CardHeader>
-              <CardContent className="h-[calc(100%-100px)] pl-2">
-                 <DeveloperPointsChart data={sprintData.developerPoints} />
-              </CardContent>
-            </Card>
-          </div>
-        )}
+          <TabsContent value="reports">
+             <ReportsTab sprintData={sprintData} />
+          </TabsContent>
+        </Tabs>
       </main>
 
       <footer className="text-center p-4 text-xs text-muted-foreground border-t">
@@ -483,4 +335,70 @@ export default function Home() {
     </div>
   );
 }
+```]></content>
+  </change>
+  <change>
+    <file>src/components/home-tab.tsx</file>
+    <description>Create a new component for the Home tab content, displaying an introduction and sprint summary table.</description>
+    <content><![CDATA[
+import type { SprintData } from '@/types/sprint-data';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Info } from 'lucide-react';
 
+interface HomeTabProps {
+  sprintData: SprintData | null;
+}
+
+export default function HomeTab({ sprintData }: HomeTabProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Welcome to Sprint Stats!</CardTitle>
+        <CardDescription>
+          This tool helps you visualize your team's agile sprint performance.
+          Use the 'Entry' tab to input your data either by uploading a file or entering it manually.
+          View the generated charts and reports in the 'Reports' tab.
+          This Home tab provides a summary of the loaded sprint data.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {sprintData && sprintData.sprints.length > 0 ? (
+          <>
+            <h3 className="text-lg font-semibold mb-4">Sprint Summary</h3>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[100px]">Sprint #</TableHead>
+                    <TableHead>Start Date</TableHead>
+                    <TableHead>End Date</TableHead>
+                    <TableHead className="text-right">Commitment</TableHead>
+                    <TableHead className="text-right">Delivered</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sprintData.sprints.map((sprint) => (
+                    <TableRow key={sprint.sprintNumber}>
+                      <TableCell className="font-medium">{sprint.sprintNumber}</TableCell>
+                      <TableCell>{sprint.startDate || 'N/A'}</TableCell>
+                      <TableCell>{sprint.endDate || 'N/A'}</TableCell>
+                      <TableCell className="text-right">{sprint.committedPoints}</TableCell>
+                      <TableCell className="text-right">{sprint.completedPoints}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center justify-center text-muted-foreground p-8 border border-dashed rounded-md">
+            <Info className="mr-2 h-5 w-5" />
+            No sprint data loaded. Go to the 'Entry' tab to add data.
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+```
