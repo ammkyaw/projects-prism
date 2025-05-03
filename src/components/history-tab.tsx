@@ -6,9 +6,12 @@ import type { Task, Sprint } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Info, History, ArrowUpDown } from 'lucide-react';
+import { Info, History, ArrowUpDown, LinkIcon, View } from 'lucide-react'; // Added LinkIcon, View
 import { taskPriorities, taskTypes } from '@/types/sprint-data';
 import { format, parseISO, isValid } from 'date-fns';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogClose, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { cn } from '@/lib/utils';
 
 interface HistoryTabProps {
   projectId: string;
@@ -16,11 +19,14 @@ interface HistoryTabProps {
   historyItems: Task[]; // Pass only items that have been moved (task.movedToSprint is set)
 }
 
-type SortKey = 'priority' | 'title' | 'taskType' | 'createdDate' | 'movedToSprint';
+type SortKey = 'priority' | 'title' | 'taskType' | 'createdDate' | 'movedToSprint' | 'backlogId' | 'initiator'; // Added backlogId, initiator
 type SortDirection = 'asc' | 'desc';
 
 export default function HistoryTab({ projectId, projectName, historyItems }: HistoryTabProps) {
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection } | null>(null);
+  const [viewingTask, setViewingTask] = useState<Task | null>(null);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+
 
   const sortedHistory = useMemo(() => {
     let sortableItems = [...(historyItems || [])]; // Use historyItems
@@ -44,13 +50,25 @@ export default function HistoryTab({ projectId, projectName, historyItems }: His
                  aValue = a.title?.toLowerCase() || '';
                  bValue = b.title?.toLowerCase() || '';
                  break;
+            case 'backlogId': // Add sorting for backlogId
+                aValue = a.backlogId?.toLowerCase() || '';
+                bValue = b.backlogId?.toLowerCase() || '';
+                break;
+            case 'initiator': // Add sorting for initiator
+                aValue = a.initiator?.toLowerCase() || '';
+                bValue = b.initiator?.toLowerCase() || '';
+                break;
             case 'movedToSprint':
                   aValue = a.movedToSprint ?? Infinity; // Sort undefined/null last
                   bValue = b.movedToSprint ?? Infinity;
                   break;
+            case 'taskType':
+                  aValue = a.taskType || '';
+                  bValue = b.taskType || '';
+                  break;
             default:
-                 aValue = (a[sortConfig.key] as any)?.toString().toLowerCase() || '';
-                 bValue = (b[sortConfig.key] as any)?.toString().toLowerCase() || '';
+                 aValue = (a[sortConfig.key as keyof Task] as any)?.toString().toLowerCase() || '';
+                 bValue = (b[sortConfig.key as keyof Task] as any)?.toString().toLowerCase() || '';
         }
 
         if (aValue < bValue) {
@@ -59,7 +77,8 @@ export default function HistoryTab({ projectId, projectName, historyItems }: His
         if (aValue > bValue) {
           return sortConfig.direction === 'asc' ? 1 : -1;
         }
-        return 0;
+        // Secondary sort by backlogId if primary values are equal
+        return (a.backlogId ?? '').localeCompare(b.backlogId ?? '');
       });
     } else {
         // Default sort by sprint number moved to, then priority
@@ -78,75 +97,170 @@ export default function HistoryTab({ projectId, projectName, historyItems }: His
 
   const getSortIndicator = (key: SortKey) => {
     if (!sortConfig || sortConfig.key !== key) {
-      return <ArrowUpDown className="ml-2 h-3 w-3 opacity-30" />;
+      return <ArrowUpDown className="ml-1 h-3 w-3 opacity-30 inline" />; // Consistent style
     }
     return sortConfig.direction === 'asc' ? '▲' : '▼';
   };
 
+   const handleViewDetails = (task: Task) => {
+       setViewingTask(task);
+       setIsViewDialogOpen(true);
+   };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-center gap-2"><History className="h-5 w-5 text-primary" /> Backlog History</CardTitle>
-        <CardDescription>View backlog items that have been moved to sprints for project '{projectName}'. Click headers to sort.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {sortedHistory.length === 0 ? (
-             <div className="flex flex-col items-center justify-center min-h-[200px] border-dashed border-2 rounded-md p-6">
-                <Info className="h-8 w-8 text-muted-foreground mb-2" />
-                <p className="text-muted-foreground">No backlog items have been moved to sprints yet.</p>
-             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                     <TableHead className="w-[100px]">
-                        <Button variant="ghost" onClick={() => requestSort('movedToSprint')} className="px-1 h-auto">
-                            Sprint # {getSortIndicator('movedToSprint')}
-                        </Button>
-                    </TableHead>
-                    <TableHead className="w-[150px]">
-                        <Button variant="ghost" onClick={() => requestSort('priority')} className="px-1 h-auto">
-                            Priority {getSortIndicator('priority')}
-                        </Button>
-                    </TableHead>
-                    <TableHead className="w-[150px]">Backlog ID</TableHead>
-                    <TableHead>
-                         <Button variant="ghost" onClick={() => requestSort('title')} className="px-1 h-auto">
-                             Title {getSortIndicator('title')}
-                         </Button>
-                    </TableHead>
-                     <TableHead className="w-[150px]">
-                         <Button variant="ghost" onClick={() => requestSort('taskType')} className="px-1 h-auto">
-                             Task Type {getSortIndicator('taskType')}
-                         </Button>
-                     </TableHead>
-                     <TableHead className="w-[130px]">
-                         <Button variant="ghost" onClick={() => requestSort('createdDate')} className="px-1 h-auto">
-                             Created {getSortIndicator('createdDate')}
-                         </Button>
-                     </TableHead>
-                    <TableHead className="w-[100px] text-right">Story Pts</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedHistory.map(task => (
-                    <TableRow key={task.id}>
-                       <TableCell>{task.movedToSprint}</TableCell>
-                      <TableCell>{task.priority}</TableCell>
-                      <TableCell className="font-medium">{task.backlogId}</TableCell>
-                      <TableCell>{task.title}</TableCell>
-                      <TableCell>{task.taskType}</TableCell>
-                      <TableCell>{task.createdDate && isValid(parseISO(task.createdDate)) ? format(parseISO(task.createdDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
-                      <TableCell className="text-right">{task.storyPoints ?? '-'}</TableCell>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><History className="h-5 w-5 text-primary" /> Backlog History</CardTitle>
+          <CardDescription>View backlog items that have been moved to sprints for project '{projectName}'. Click headers to sort.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {sortedHistory.length === 0 ? (
+               <div className="flex flex-col items-center justify-center min-h-[200px] border-dashed border-2 rounded-md p-6">
+                  <Info className="h-8 w-8 text-muted-foreground mb-2" />
+                  <p className="text-muted-foreground">No backlog items have been moved to sprints yet.</p>
+               </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    {/* Mirror headers from BacklogTab, excluding actions */}
+                    <TableRow>
+                       <TableHead className="w-[100px]">
+                           <Button variant="ghost" onClick={() => requestSort('backlogId')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                               Backlog ID {getSortIndicator('backlogId')}
+                           </Button>
+                       </TableHead>
+                       <TableHead>
+                           <Button variant="ghost" onClick={() => requestSort('title')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                               Title {getSortIndicator('title')}
+                           </Button>
+                       </TableHead>
+                       <TableHead className="w-[120px]">
+                           <Button variant="ghost" onClick={() => requestSort('taskType')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                               Task Type {getSortIndicator('taskType')}
+                           </Button>
+                       </TableHead>
+                       <TableHead className="w-[120px]">
+                            <Button variant="ghost" onClick={() => requestSort('initiator')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                Initiator {getSortIndicator('initiator')}
+                            </Button>
+                       </TableHead>
+                       <TableHead className="w-[120px]">
+                            <Button variant="ghost" onClick={() => requestSort('createdDate')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                Created Date {getSortIndicator('createdDate')}
+                            </Button>
+                       </TableHead>
+                       <TableHead className="w-[100px]">
+                           <Button variant="ghost" onClick={() => requestSort('priority')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                               Priority {getSortIndicator('priority')}
+                           </Button>
+                       </TableHead>
+                        <TableHead className="w-[100px]">
+                            Dependencies
+                        </TableHead>
+                        <TableHead className="w-[100px]">
+                            <Button variant="ghost" onClick={() => requestSort('movedToSprint')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                Sprint # {getSortIndicator('movedToSprint')}
+                            </Button>
+                        </TableHead>
+                       <TableHead className="w-[80px] text-right">Story Pts</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-         )}
-      </CardContent>
-       {/* Footer or additional controls can be added here */}
-    </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedHistory.map(task => (
+                      <TableRow key={task.id}>
+                        {/* Backlog ID */}
+                        <TableCell className="font-medium">
+                          <button
+                              type="button"
+                              onClick={() => handleViewDetails(task)}
+                              className="text-primary underline cursor-pointer hover:text-primary/80"
+                              aria-label={`View details for ${task.backlogId}`}
+                          >
+                              {task.backlogId}
+                          </button>
+                        </TableCell>
+                        {/* Title */}
+                        <TableCell>{task.title}</TableCell>
+                        {/* Task Type */}
+                        <TableCell>{task.taskType}</TableCell>
+                        {/* Initiator */}
+                        <TableCell>{task.initiator || '-'}</TableCell>
+                        {/* Created Date */}
+                        <TableCell>{task.createdDate && isValid(parseISO(task.createdDate)) ? format(parseISO(task.createdDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
+                        {/* Priority */}
+                        <TableCell>{task.priority}</TableCell>
+                         {/* Dependencies */}
+                         <TableCell className="text-xs">
+                             {(task.dependsOn && task.dependsOn.length > 0) ? task.dependsOn.join(', ') : <span className="italic text-muted-foreground">None</span>}
+                         </TableCell>
+                         {/* Moved To Sprint # */}
+                         <TableCell>{task.movedToSprint}</TableCell>
+                        {/* Story Points */}
+                        <TableCell className="text-right">{task.storyPoints ?? '-'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+           )}
+        </CardContent>
+      </Card>
+
+       {/* View Details Dialog */}
+     <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle>Backlog Item Details: {viewingTask?.backlogId}</DialogTitle>
+            </DialogHeader>
+             {viewingTask && (
+                <div className="grid gap-4 py-4 text-sm">
+                    <div className="grid grid-cols-3 items-center gap-4">
+                        <Label className="text-right font-medium text-muted-foreground">Title</Label>
+                        <span className="col-span-2">{viewingTask.title || '-'}</span>
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-4">
+                        <Label className="text-right font-medium text-muted-foreground">Type</Label>
+                        <span className="col-span-2">{viewingTask.taskType}</span>
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-4">
+                        <Label className="text-right font-medium text-muted-foreground">Priority</Label>
+                        <span className="col-span-2">{viewingTask.priority}</span>
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-4">
+                        <Label className="text-right font-medium text-muted-foreground">Initiator</Label>
+                        <span className="col-span-2">{viewingTask.initiator || '-'}</span>
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-4">
+                        <Label className="text-right font-medium text-muted-foreground">Created</Label>
+                        <span className="col-span-2">{viewingTask.createdDate && isValid(parseISO(viewingTask.createdDate)) ? format(parseISO(viewingTask.createdDate), 'PPP') : '-'}</span>
+                    </div>
+                     <div className="grid grid-cols-3 items-start gap-4">
+                        <Label className="text-right font-medium text-muted-foreground pt-1">Description</Label>
+                        <p className="col-span-2 whitespace-pre-wrap break-words">{viewingTask.description || '-'}</p>
+                    </div>
+                     <div className="grid grid-cols-3 items-center gap-4">
+                        <Label className="text-right font-medium text-muted-foreground">Dependencies</Label>
+                        <span className="col-span-2">{(viewingTask.dependsOn && viewingTask.dependsOn.length > 0) ? viewingTask.dependsOn.join(', ') : 'None'}</span>
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-4">
+                        <Label className="text-right font-medium text-muted-foreground">Story Points</Label>
+                        <span className="col-span-2">{viewingTask.storyPoints || '-'}</span>
+                    </div>
+                     <div className="grid grid-cols-3 items-center gap-4">
+                         <Label className="text-right font-medium text-muted-foreground">Moved to Sprint</Label>
+                         <span className="col-span-2">{viewingTask.movedToSprint ?? 'N/A'}</span>
+                     </div>
+                </div>
+             )}
+            <DialogFooter>
+                <DialogClose asChild>
+                    <Button type="button" variant="outline">Close</Button>
+                </DialogClose>
+            </DialogFooter>
+        </DialogContent>
+     </Dialog>
+    </>
   );
 }

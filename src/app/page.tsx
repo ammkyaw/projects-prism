@@ -29,7 +29,7 @@ import HistoryTab from '@/components/history-tab'; // Import HistoryTab componen
 import SprintSummaryTab from '@/components/sprints/sprint-summary-tab'; // Updated path
 import SprintPlanningTab from '@/components/sprints/sprint-planning-tab'; // New component for planning
 import SprintRetrospectiveTab from '@/components/sprints/sprint-retrospective-tab'; // Updated path
-// import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // REMOVED
+import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Updated path
 import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
 import AnalyticsChartsTab from '@/components/analytics-charts-tab';
 import AnalyticsReportsTab from '@/components/analytics-reports-tab'; // Updated path
@@ -935,6 +935,68 @@ export default function Home() {
    }, [selectedProjectId, toast]);
 
 
+   // Handler to revert a task from sprint planning back to the backlog
+    const handleRevertTaskToBacklog = useCallback((sprintNumber: number, taskId: string, taskBacklogId: string | undefined) => {
+        if (!selectedProjectId) {
+            toast({ variant: "destructive", title: "Error", description: "No project selected." });
+            return;
+        }
+
+        let revertedTaskDetails: string | null = null;
+
+        setProjects(prevProjects => {
+            const updatedProjects = prevProjects.map(p => {
+                if (p.id === selectedProjectId) {
+                    // Remove the task from the specified sprint's planning.newTasks
+                    const updatedSprints = p.sprintData.sprints.map(s => {
+                        if (s.sprintNumber === sprintNumber && s.planning) {
+                            const taskToRemove = s.planning.newTasks.find(t => t.id === taskId);
+                            if (taskToRemove) {
+                                revertedTaskDetails = `${taskToRemove.ticketNumber} (${taskToRemove.title || 'No Title'})`;
+                            }
+                            return {
+                                ...s,
+                                planning: {
+                                    ...s.planning,
+                                    newTasks: s.planning.newTasks.filter(task => task.id !== taskId),
+                                }
+                            };
+                        }
+                        return s;
+                    });
+
+                    // Find the corresponding item in the backlog and reset its 'movedToSprint' status
+                    const updatedBacklog = (p.backlog || []).map(item => {
+                        // Match using taskBacklogId if available, otherwise fall back to taskId (though less reliable)
+                        const isMatch = taskBacklogId ? item.backlogId === taskBacklogId : item.id === taskId;
+                        if (isMatch && item.movedToSprint === sprintNumber) {
+                            return { ...item, movedToSprint: undefined }; // Reset movedToSprint
+                        }
+                        return item;
+                    });
+
+                    return {
+                        ...p,
+                        backlog: updatedBacklog,
+                        sprintData: {
+                            ...p.sprintData,
+                            sprints: updatedSprints,
+                        }
+                    };
+                }
+                return p;
+            });
+            return updatedProjects;
+        });
+
+        if (revertedTaskDetails) {
+            toast({ title: "Task Reverted", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber} and returned to backlog.` });
+        } else {
+             toast({ variant: "warning", title: "Task Not Found", description: `Could not find task ID ${taskId} in Sprint ${sprintNumber} planning or backlog.` });
+        }
+    }, [selectedProjectId, toast]);
+
+
   // Handler to add members to the *newly created* project (from dialog)
    const handleAddMembersToNewProject = useCallback((addedMembers: Member[]) => {
        if (!newlyCreatedProjectId) return;
@@ -1309,6 +1371,7 @@ export default function Home() {
                     holidayCalendars: selectedProject.holidayCalendars ?? [],
                     teams: selectedProject.teams ?? [],
                     backlog: selectedProject.backlog?.filter(task => !task.movedToSprint) ?? [], // Only pass non-moved items
+                    onRevertTask: handleRevertTaskToBacklog, // Pass revert function
                  };
                 break;
             case 'sprints/retrospective':
@@ -1335,7 +1398,7 @@ export default function Home() {
              case 'backlog/history': // Updated sub-tab path
                 componentProps = {
                     ...componentProps,
-                    historyItems: selectedProject.backlog?.filter(task => !!task.movedToSprint) ?? [],
+                    historyItems: selectedProject.backlog?.filter(task => !!task.movedToSprint) ?? [], // Pass only moved items
                  };
                 break;
             case 'analytics/charts':

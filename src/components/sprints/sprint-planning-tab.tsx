@@ -145,6 +145,7 @@ interface SprintPlanningTabProps {
   holidayCalendars: HolidayCalendar[]; // Add holiday calendars prop
   teams: Team[]; // Add teams prop
   backlog: Task[]; // Add backlog prop
+  onRevertTask: (sprintNumber: number, taskId: string, taskBacklogId: string | undefined) => void; // Add revert callback
 }
 
 interface TaskRow extends Task {
@@ -174,7 +175,7 @@ const createEmptyTaskRow = (): TaskRow => ({
 });
 
 
-export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars, teams, backlog }: SprintPlanningTabProps) {
+export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars, teams, backlog, onRevertTask }: SprintPlanningTabProps) {
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | null>(null);
   const [planningData, setPlanningData] = useState<SprintPlanning>(initialSprintPlanning);
   const [newTasks, setNewTasks] = useState<TaskRow[]>([]);
@@ -335,6 +336,11 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
      if (isSprintCompleted && !isCreatingNewSprint) return;
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     updater(prevRows => {
+        const taskToRemove = prevRows.find(row => row._internalId === internalId);
+        if (type === 'new' && taskToRemove && selectedSprintNumber) {
+             // If removing a new task, call the revert function
+             onRevertTask(selectedSprintNumber, taskToRemove.id, taskToRemove.backlogId);
+        }
         const newRows = prevRows.filter(row => row._internalId !== internalId);
         // No longer need to keep an empty row for 'new' tasks
         // if (type === 'new' && newRows.length === 0) {
@@ -474,7 +480,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
               !row.startDate
           ) {
               // Allow saving if it's the only row and it's empty, but don't add it to finalTasks
-              if (taskRows.length === 1) return;
+              if (taskRows.length === 1 && !row.ticketNumber?.trim() && !row.storyPoints?.toString().trim()) return;
               // Otherwise, skip this effectively empty row
               return;
           }
@@ -516,6 +522,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
           finalTasks.push({
               id: row.id || `task_${selectedSprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
               ticketNumber: ticketNumber || '',
+              backlogId: row.backlogId, // Persist backlogId if it exists
               title: title,
               description: description,
               storyPoints: storyPoints,
