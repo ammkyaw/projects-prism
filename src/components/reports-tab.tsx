@@ -86,4 +86,3 @@ export default function ReportsTab({ sprintData }: ReportsTabProps) {
     </div>
   );
 }
-```
