@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon, XCircle } from 'lucide-react'; // Added icons
+import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon, XCircle, GanttChartSquare, Info } from 'lucide-react'; // Added icons
 import type { Sprint, SprintPlanning, Task, Member, SprintStatus } from '@/types/sprint-data';
 import { initialSprintPlanning, taskStatuses, predefinedRoles } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
@@ -127,14 +127,20 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           _internalId: task.id || `initial_spill_${index}_${Date.now()}`,
         }))
       );
+      // Add empty row only if sprint is not completed and no tasks exist
       if (!isSprintCompleted) {
         if ((loadedPlanning.newTasks || []).length === 0) setNewTasks([createEmptyTaskRow()]);
         if ((loadedPlanning.spilloverTasks || []).length === 0) setSpilloverTasks([createEmptyTaskRow()]);
+      } else {
+        // If completed, ensure no empty rows are displayed
+        if ((loadedPlanning.newTasks || []).length === 0) setNewTasks([]);
+        if ((loadedPlanning.spilloverTasks || []).length === 0) setSpilloverTasks([]);
       }
     } else {
         resetForms();
     }
   }, [selectedSprint, isCreatingNewSprint, isSprintCompleted, resetForms]);
+
 
   // Effect to reset planning form when switching to create mode
   useEffect(() => {
@@ -200,28 +206,36 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     );
   };
 
-  const finalizeTasks = (taskRows: TaskRow[]): { tasks: Task[], errors: string[] } => {
+  const finalizeTasks = (taskRows: TaskRow[], taskType: 'new' | 'spillover'): { tasks: Task[], errors: string[] } => {
       const finalTasks: Task[] = [];
       const errors: string[] = [];
       taskRows.forEach((row, index) => {
-          if (!row.description && !row.storyPoints && !row.assignee && row.status === 'To Do') {
-               if (!row.description && !row.storyPoints && !row.assignee) return;
-          }
+          const taskPrefix = `${taskType === 'new' ? 'New' : 'Spillover'} Task (Row ${index + 1})`;
+          // Skip completely empty rows silently unless there's only one row
+           if (taskRows.length > 1 && !row.description && !row.storyPoints && !row.assignee && row.status === 'To Do') {
+              return;
+           }
+           // If it's the only row and it's empty, also skip it
+           if (taskRows.length === 1 && !row.description && !row.storyPoints && !row.assignee && row.status === 'To Do') {
+                return;
+            }
+
+
           const description = row.description?.trim();
           const storyPointsRaw = row.storyPoints?.toString().trim();
           const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
           const assignee = row.assignee?.trim() || undefined;
           const status = row.status?.trim() as Task['status'];
 
-          if (!description) errors.push(`Task description is required (Row ${index + 1}).`);
+          if (!description) errors.push(`${taskPrefix}: Description is required.`);
           if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
-               errors.push(`Invalid Story Points for task "${description || `Row ${index + 1}`}". Must be a non-negative number.`);
+               errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
           }
            if (!status || !taskStatuses.includes(status)) {
-              errors.push(`Invalid status for task "${description || `Row ${index + 1}`}".`);
+              errors.push(`${taskPrefix}: Invalid status.`);
            }
           finalTasks.push({
-              id: row.id || `task_${selectedSprintNumber ?? 'new'}_${type === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
+              id: row.id || `task_${selectedSprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
               description: description || '',
               storyPoints: storyPoints,
               assignee: assignee,
@@ -241,12 +255,12 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
          return;
      }
 
-     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks);
-     const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks);
+     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks, 'new');
+     const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks, 'spillover');
      const allErrors = [...newErrors, ...spillErrors];
 
      if (allErrors.length > 0) {
-         toast({ variant: "destructive", title: "Validation Error", description: allErrors.join(" ") });
+         toast({ variant: "destructive", title: "Validation Error", description: allErrors.join("\n") });
          return;
      }
 
@@ -272,12 +286,12 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       if (!startDateStr || !isValid(parseISO(startDateStr))) formErrors.push("Valid Start Date is required.");
       if (!duration || !DURATION_OPTIONS.includes(duration)) formErrors.push("Valid Duration is required.");
 
-      const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks);
-      const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks);
+      const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks, 'new');
+      const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks, 'spillover');
       const taskErrors = [...newErrors, ...spillErrors];
 
       if (formErrors.length > 0 || taskErrors.length > 0) {
-          toast({ variant: "destructive", title: "Validation Error", description: [...formErrors, ...taskErrors].join(" ") });
+          toast({ variant: "destructive", title: "Validation Error", description: [...formErrors, ...taskErrors].join("\n") });
           return;
       }
 
@@ -322,8 +336,8 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
        }
 
        // Save current planning state *before* changing status
-       const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks);
-       const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks);
+       const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks, 'new');
+       const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks, 'spillover');
        const allErrors = [...newErrors, ...spillErrors];
 
        if (allErrors.length > 0) {
@@ -364,7 +378,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 
 
    // Helper to render task rows
-   const renderTaskTable = (type: 'new' | 'spillover', tasks: TaskRow[], disabled: boolean) => (
+   const renderTaskTable = (type: 'new' | 'spillover', taskRows: TaskRow[], disabled: boolean) => (
      <div className="space-y-4">
         <div className="hidden md:grid grid-cols-[2fr_100px_1fr_1fr_40px] gap-x-3 items-center pb-2 border-b">
             <Label className="text-xs font-medium text-muted-foreground">Description*</Label>
@@ -374,7 +388,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
             <div />
         </div>
         <div className="space-y-4 md:space-y-2">
-            {tasks.map((row) => (
+            {taskRows.map((row) => (
             <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[2fr_100px_1fr_1fr_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
                 <div className="md:col-span-1 col-span-2">
                     <Label htmlFor={`desc-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Description*</Label>
@@ -452,17 +466,19 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
             </div>
             ))}
         </div>
-        <Button
-          type="button"
-          onClick={() => addTaskRow(type)}
-          variant="outline"
-          size="sm"
-          className="mt-4"
-          disabled={disabled}
-         >
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Add {type === 'new' ? 'New' : 'Spillover'} Task
-        </Button>
+         {/* Add button only if not disabled */}
+         {!disabled && (
+            <Button
+              type="button"
+              onClick={() => addTaskRow(type)}
+              variant="outline"
+              size="sm"
+              className="mt-4"
+             >
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add {type === 'new' ? 'New' : 'Spillover'} Task
+            </Button>
+         )}
     </div>
   );
 
@@ -616,6 +632,18 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                      {/* Render Planning Form for New Sprint */}
                      {renderPlanningForm(false)} {/* Planning form is enabled for new sprint */}
 
+                      {/* Placeholder for Gantt Chart for New Sprint */}
+                     <Card className="border-dashed border-2">
+                          <CardHeader>
+                              <CardTitle className="flex items-center gap-2"><GanttChartSquare className="h-5 w-5 text-muted-foreground" /> Sprint Timeline (Preview)</CardTitle>
+                              <CardDescription>A timeline visualization will appear here once task dates and dependencies are added.</CardDescription>
+                          </CardHeader>
+                          <CardContent className="flex items-center justify-center text-muted-foreground min-h-[150px]">
+                              <Info className="mr-2 h-5 w-5" />
+                              (Gantt/Timeline visualization requires task start/end dates)
+                          </CardContent>
+                      </Card>
+
                 </CardContent>
             )}
              {isCreatingNewSprint && (
@@ -675,7 +703,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                                        variant="ghost"
                                        size="icon"
                                        onClick={() => {
-                                          setSelectedSprintNumber(sprint.sprintNumber); // Select first if not already selected
+                                          handleSelectExistingSprint(sprint.sprintNumber); // Select first if not already selected
                                           handleStartSprint();
                                        }}
                                        aria-label={`Start Sprint ${sprint.sprintNumber}`}
@@ -700,7 +728,19 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                 <>
                     <CardContent className="space-y-6 border-t pt-6 mt-6">
                        <h3 className="text-xl font-semibold">Planning Details for Sprint {selectedSprintNumber}</h3>
-                        {renderPlanningForm(isSprintCompleted)}
+                       {renderPlanningForm(isSprintCompleted)}
+
+                       {/* Placeholder for Gantt Chart for Existing Sprint */}
+                       <Card className="border-dashed border-2">
+                          <CardHeader>
+                              <CardTitle className="flex items-center gap-2"><GanttChartSquare className="h-5 w-5 text-muted-foreground" /> Sprint Timeline (Visualization)</CardTitle>
+                              <CardDescription>A timeline visualization of tasks will appear here. Requires task start/end dates and dependency information.</CardDescription>
+                          </CardHeader>
+                          <CardContent className="flex items-center justify-center text-muted-foreground min-h-[150px]">
+                              <Info className="mr-2 h-5 w-5" />
+                              (Gantt/Timeline visualization requires task dates/dependencies)
+                          </CardContent>
+                      </Card>
                     </CardContent>
                     <CardFooter className="border-t pt-4 flex justify-end gap-2">
                          {isSprintPlanned && (

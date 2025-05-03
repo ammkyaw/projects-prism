@@ -16,6 +16,9 @@ export interface Task {
   storyPoints?: number | string; // Can be number or empty string from input
   assignee?: string; // Stores the Member's name
   status?: 'To Do' | 'In Progress' | 'Done' | 'Blocked'; // Added more specific statuses
+  startDate?: string; // Optional: YYYY-MM-DD for Gantt chart
+  endDate?: string;   // Optional: YYYY-MM-DD for Gantt chart
+  dependsOn?: string[]; // Optional: Array of task IDs this task depends on
 }
 
 // Represents the planning data for a single sprint
