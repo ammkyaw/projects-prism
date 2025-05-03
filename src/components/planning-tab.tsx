@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -12,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info } from 'lucide-react'; // Renamed CalendarIcon to avoid clash
-import type { Sprint, SprintPlanning, Task, Member, SprintStatus, HolidayCalendar } from '@/types/sprint-data'; // Added HolidayCalendar
+import type { Sprint, SprintPlanning, Task, Member, SprintStatus, HolidayCalendar, Team } from '@/types/sprint-data'; // Added HolidayCalendar, Team
 import { initialSprintPlanning, taskStatuses, predefinedRoles } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -140,6 +141,7 @@ interface PlanningTabProps {
   projectName: string;
   members: Member[];
   holidayCalendars: HolidayCalendar[]; // Add holiday calendars prop
+  teams: Team[]; // Add teams prop
 }
 
 interface TaskRow extends Task {
@@ -169,7 +171,7 @@ const createEmptyTaskRow = (): TaskRow => ({
 });
 
 
-export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars }: PlanningTabProps) {
+export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars, teams }: PlanningTabProps) {
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | null>(null);
   const [planningData, setPlanningData] = useState<SprintPlanning>(initialSprintPlanning);
   const [newTasks, setNewTasks] = useState<TaskRow[]>([]);
@@ -334,6 +336,20 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     });
   };
 
+ // Function to find the team lead for a given member
+ const findTeamLead = useCallback((memberName: string | undefined): string | undefined => {
+    if (!memberName) return undefined;
+
+    const member = members.find(m => m.name === memberName);
+    if (!member) return undefined;
+
+    const team = teams.find(t => t.members.some(tm => tm.memberId === member.id));
+    if (!team || !team.leadMemberId) return undefined;
+
+    const leadMember = members.find(m => m.id === team.leadMemberId);
+    return leadMember?.name;
+  }, [members, teams]);
+
 
   const handleTaskInputChange = (
     type: 'new' | 'spillover',
@@ -344,9 +360,26 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
      if (isSprintCompleted && !isCreatingNewSprint) return;
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     updater(rows =>
-      rows.map(row =>
-        row._internalId === internalId ? { ...row, [field]: value ?? '' } : row
-      )
+      rows.map(row => {
+          if (row._internalId === internalId) {
+              const updatedRow = { ...row, [field]: value ?? '' };
+
+              // Auto-assign reviewer if assignee changes and is a Software Engineer
+              if (field === 'assignee' && typeof value === 'string') {
+                  const assigneeName = value;
+                  const assigneeMember = members.find(m => m.name === assigneeName);
+                  if (assigneeMember?.role === 'Software Engineer') {
+                      const leadName = findTeamLead(assigneeName);
+                      updatedRow.reviewer = leadName ?? ''; // Assign lead or empty string
+                  } else {
+                      // If assignee is not SE or unassigned, clear the reviewer
+                      updatedRow.reviewer = '';
+                  }
+              }
+              return updatedRow;
+          }
+          return row;
+      })
     );
   };
 
@@ -1057,3 +1090,4 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     </div>
   );
 }
+

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -803,7 +804,10 @@ export default function Home() {
 
       // If no update happened (e.g., sprint number existed), return the previous state
       if (!projectWasUpdated) {
-          toast({ variant: "destructive", title: "Error", description: `Sprint number ${sprintDetails.sprintNumber} already exists in project '${projectNameForToast}'.` });
+          // Using setTimeout to ensure toast doesn't interfere with rendering updates
+         setTimeout(() => {
+             toast({ variant: "destructive", title: "Error", description: `Sprint number ${sprintDetails.sprintNumber} already exists in project '${projectNameForToast}'.` });
+         }, 0);
           return prevProjects;
       }
 
@@ -1316,6 +1320,7 @@ export default function Home() {
                      projectName={selectedProject.name}
                      members={selectedProject.members ?? []}
                      holidayCalendars={selectedProject.holidayCalendars ?? []}
+                     teams={selectedProject.teams ?? []} // Pass teams data
                    />
                 </TabsContent>
 
@@ -1368,4 +1373,5 @@ export default function Home() {
     </div>
   );
 }
+
 
