@@ -1,4 +1,5 @@
 
+
 // Represents the status of a sprint
 export type SprintStatus = 'Planned' | 'Active' | 'Completed';
 
@@ -14,11 +15,17 @@ export interface Task {
   id: string; // Unique ID for the task item
   description: string;
   storyPoints?: number | string; // Can be number or empty string from input
-  estimatedTime?: string; // Optional: e.g., "2d", "4h", "1w 2d"
+  devEstimatedTime?: string; // Renamed from estimatedTime, Optional: e.g., "2d", "4h", "1w 2d"
+  qaEstimatedTime?: string; // Optional: Defaults to "2d"
+  bufferTime?: string; // Optional: Defaults to "1d"
   assignee?: string; // Stores the Member's name
-  status?: 'To Do' | 'In Progress' | 'Done' | 'Blocked'; // Added more specific statuses
+  reviewer?: string; // Optional: Stores the Member's name for review
+  status?: 'To Do' | 'In Progress' | 'In Review' | 'QA' | 'Done' | 'Blocked'; // Added more specific statuses
   startDate?: string | undefined; // Optional: YYYY-MM-DD for Gantt chart
   dependsOn?: string[]; // Optional: Array of task IDs this task depends on
+  // Legacy fields - keep if needed for migration or detail view, but planning uses new fields
+  ticketNumber?: string;
+  devTime?: string;
 }
 
 // Represents the planning data for a single sprint
@@ -99,5 +106,5 @@ export const predefinedRoles = [
   'Product Owner',
 ];
 
-// Predefined Task Statuses
-export const taskStatuses: Array<Task['status']> = ['To Do', 'In Progress', 'Done', 'Blocked'];
+// Predefined Task Statuses - Added 'In Review' and 'QA'
+export const taskStatuses: Array<Task['status']> = ['To Do', 'In Progress', 'In Review', 'QA', 'Done', 'Blocked'];

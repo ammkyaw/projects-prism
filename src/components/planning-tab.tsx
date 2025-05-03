@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -11,19 +12,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon, XCircle, GanttChartSquare, Info } from 'lucide-react'; // Added icons
+import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon, XCircle, GanttChartSquare, Info } from 'lucide-react';
 import type { Sprint, SprintPlanning, Task, Member, SprintStatus } from '@/types/sprint-data';
 import { initialSprintPlanning, taskStatuses, predefinedRoles } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { addDays, format, parseISO, isValid, differenceInDays, getDay } from 'date-fns'; // Import getDay
+import { addDays, format, parseISO, isValid, differenceInDays, getDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import SprintTimelineChart from '@/components/charts/sprint-timeline-chart'; // Import the new chart
+import SprintTimelineChart from '@/components/charts/sprint-timeline-chart';
 
 const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
 
-// Helper to calculate working days and end date (moved inside or imported if needed elsewhere)
+// Helper to calculate working days and end date
 const calculateSprintMetrics = (startDateStr: string, duration: string): { totalDays: number, endDate: string } => {
     let totalDays = 0;
     let calendarDaysToAdd = 0;
@@ -58,12 +59,11 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
 
   const parts = timeString.match(/(\d+w)?\s*(\d+d)?/);
   if (!parts || (parts[1] === undefined && parts[2] === undefined)) {
-      // Try parsing just a number as days
       const simpleDays = parseInt(timeString, 10);
       if (!isNaN(simpleDays) && simpleDays >= 0) {
           return simpleDays;
       }
-      return null; // No valid parts found
+      return null;
   }
 
   const weekPart = parts[1];
@@ -72,7 +72,7 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
   if (weekPart) {
     const weeks = parseInt(weekPart.replace('w', ''), 10);
     if (!isNaN(weeks)) {
-      totalDays += weeks * 5; // Assuming 5 working days per week
+      totalDays += weeks * 5;
     }
   }
 
@@ -83,14 +83,12 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
     }
   }
 
-  // Allow just "5" or "3" to mean days
   if (totalDays === 0 && /^\d+$/.test(timeString)) {
        const simpleDays = parseInt(timeString, 10);
        if (!isNaN(simpleDays) && simpleDays >= 0) {
             return simpleDays;
        }
   }
-
 
   return totalDays > 0 ? totalDays : null;
 };
@@ -101,37 +99,37 @@ const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number):
   let daysAdded = 0;
   let workingDaysCounted = 0;
 
-  // If duration is 0 or less, return the start date
   if (workingDays <= 0) return startDate;
 
-  // Loop until we have counted the required number of working days
   while (workingDaysCounted < workingDays) {
     currentDate = addDays(startDate, daysAdded);
-    const dayOfWeek = getDay(currentDate); // 0=Sun, 6=Sat
+    const dayOfWeek = getDay(currentDate);
 
     if (dayOfWeek !== 0 && dayOfWeek !== 6) {
       workingDaysCounted++;
     }
-    // If we haven't reached the target working days, increment daysAdded to check the next day
-    if (workingDaysCounted < workingDays) {
-        daysAdded++;
-    }
+     // Increment daysAdded only if we haven't met the target working days
+     if (workingDaysCounted < workingDays) {
+         daysAdded++;
+     } else {
+         // Target met, this currentDate is the end date
+         break;
+     }
   }
-  return currentDate; // The final end date
+  return currentDate;
 };
 
 
 interface PlanningTabProps {
   sprints: Sprint[];
   onSavePlanning: (sprintNumber: number, data: SprintPlanning, newStatus?: SprintStatus) => void;
-  onCreateAndPlanSprint: (sprintDetails: Omit<Sprint, 'details' | 'planning' | 'status' | 'committedPoints' | 'completedPoints'>, planningData: SprintPlanning) => void; // New handler
+  onCreateAndPlanSprint: (sprintDetails: Omit<Sprint, 'details' | 'planning' | 'status' | 'committedPoints' | 'completedPoints'>, planningData: SprintPlanning) => void;
   projectName: string;
   members: Member[];
 }
 
 interface TaskRow extends Task {
   _internalId: string;
-  // Use Date objects for picker state, string for underlying Task model
   startDateObj?: Date | undefined;
 }
 
@@ -146,16 +144,18 @@ const createEmptyTaskRow = (): TaskRow => ({
   id: '',
   description: '',
   storyPoints: '',
-  estimatedTime: '', // Add estimatedTime
+  devEstimatedTime: '', // Renamed
+  qaEstimatedTime: '2d', // Default QA time
+  bufferTime: '1d', // Default buffer time
   assignee: '',
+  reviewer: '', // Added reviewer
   status: 'To Do',
   startDate: undefined,
   startDateObj: undefined,
 });
 
-// Define a type for tasks prepared for the chart
 interface ChartTask extends Task {
-  endDate: string; // Added calculated end date for chart use
+  // No longer adding calculated endDate here, chart component will derive ranges
 }
 
 
@@ -173,7 +173,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
   const isSprintActive = selectedSprint?.status === 'Active';
   const isSprintPlanned = selectedSprint?.status === 'Planned';
 
-  // Calculate current sprint start and end dates (needed for chart)
   const currentSprintStartDate = useMemo(() => {
      if (isCreatingNewSprint && newSprintForm.startDate) {
          return format(newSprintForm.startDate, 'yyyy-MM-dd');
@@ -188,26 +187,13 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       return selectedSprint?.endDate;
   }, [isCreatingNewSprint, newSprintForm.startDate, newSprintForm.duration, selectedSprint]);
 
-   // Filter tasks with valid dates AND duration for the chart
-   // Use the current UI state (newTasks, spilloverTasks) as the source
+   // Prepare tasks for the chart (only those with valid start date and dev estimate)
    const tasksForChart: ChartTask[] = useMemo(() => {
-       const allTaskRows = [...newTasks, ...spilloverTasks]; // Use current state being edited
+       const allTaskRows = [...newTasks, ...spilloverTasks];
 
        return allTaskRows
-         .filter(task => task.startDate && task.estimatedTime && isValid(parseISO(task.startDate)) && parseEstimatedTimeToDays(task.estimatedTime) !== null)
-         .map(task => {
-             const startDate = parseISO(task.startDate!);
-             const durationDays = parseEstimatedTimeToDays(task.estimatedTime!)!;
-             // Calculate end date skipping weekends using the helper function
-             const endDate = calculateEndDateSkippingWeekends(startDate, durationDays);
-
-             return {
-                 ...task,
-                 // Add a temporary endDate field *just for the chart component*
-                 endDate: format(endDate, 'yyyy-MM-dd'),
-             };
-         });
-    // Update chart whenever the task rows in the UI change
+         .filter(task => task.startDate && task.devEstimatedTime && isValid(parseISO(task.startDate)) && parseEstimatedTimeToDays(task.devEstimatedTime) !== null)
+         .map(task => ({ ...task })); // Just pass the task data, chart calculates ranges
    }, [newTasks, spilloverTasks]);
 
 
@@ -217,14 +203,12 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     return (maxNumber + 1).toString();
   }, [sprints]);
 
-  // Reset forms when switching modes or sprints
   const resetForms = useCallback(() => {
       setPlanningData(initialSprintPlanning);
       setNewTasks([createEmptyTaskRow()]);
       setSpilloverTasks([createEmptyTaskRow()]);
   }, []);
 
-  // Convert string date (YYYY-MM-DD) to Date object, handling invalid/undefined
   const parseDateString = (dateString: string | undefined): Date | undefined => {
       if (!dateString) return undefined;
       try {
@@ -235,8 +219,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       }
   };
 
-
-  // Effect to load planning data when an existing sprint is selected
   useEffect(() => {
     if (selectedSprint && !isCreatingNewSprint) {
       const loadedPlanning = selectedSprint.planning ?? initialSprintPlanning;
@@ -245,8 +227,11 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
        const mapTaskToRow = (task: Task, index: number, type: 'new' | 'spill'): TaskRow => ({
           ...task,
           storyPoints: task.storyPoints?.toString() ?? '',
-          estimatedTime: task.estimatedTime ?? '',
+          devEstimatedTime: task.devEstimatedTime ?? '', // Use new field
+          qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
+          bufferTime: task.bufferTime ?? '1d', // Default buffer time
           assignee: task.assignee ?? '',
+          reviewer: task.reviewer ?? '', // Add reviewer
           status: task.status ?? 'To Do',
           startDate: task.startDate,
           startDateObj: parseDateString(task.startDate),
@@ -256,31 +241,25 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       setNewTasks((loadedPlanning.newTasks || []).map((task, index) => mapTaskToRow(task, index, 'new')));
       setSpilloverTasks((loadedPlanning.spilloverTasks || []).map((task, index) => mapTaskToRow(task, index, 'spill')));
 
-
-      // Add empty row only if sprint is not completed and no tasks exist
       if (!isSprintCompleted) {
         if ((loadedPlanning.newTasks || []).length === 0) setNewTasks([createEmptyTaskRow()]);
         if ((loadedPlanning.spilloverTasks || []).length === 0) setSpilloverTasks([createEmptyTaskRow()]);
       } else {
-        // If completed, ensure no empty rows are displayed
         if ((loadedPlanning.newTasks || []).length === 0) setNewTasks([]);
         if ((loadedPlanning.spilloverTasks || []).length === 0) setSpilloverTasks([]);
       }
     } else if (!isCreatingNewSprint) {
-        // If no sprint is selected (and not creating new), clear the forms
         resetForms();
     }
   }, [selectedSprint, isCreatingNewSprint, isSprintCompleted, resetForms]);
 
-
-  // Effect to reset planning form when switching to create mode
   useEffect(() => {
     if (isCreatingNewSprint) {
-        setSelectedSprintNumber(null); // Deselect any existing sprint
+        setSelectedSprintNumber(null);
         resetForms();
         setNewSprintForm({ sprintNumber: nextSprintNumber, startDate: undefined, duration: '' });
     } else {
-        setNewSprintForm({ sprintNumber: '', startDate: undefined, duration: '' }); // Clear new sprint form if switching back
+        setNewSprintForm({ sprintNumber: '', startDate: undefined, duration: '' });
     }
   }, [isCreatingNewSprint, nextSprintNumber, resetForms]);
 
@@ -295,10 +274,9 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 
   const handleCancelNewSprint = () => {
       setIsCreatingNewSprint(false);
-      resetForms(); // Also reset planning data when cancelling
-      setSelectedSprintNumber(null); // Deselect sprint
+      resetForms();
+      setSelectedSprintNumber(null);
   };
-
 
   const handleInputChange = (field: keyof Omit<SprintPlanning, 'newTasks' | 'spilloverTasks'>, value: string) => {
       if (isSprintCompleted && !isCreatingNewSprint) return;
@@ -339,11 +317,10 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     );
   };
 
-  // Specific handler for date picker changes (only start date now)
   const handleTaskDateChange = (
     type: 'new' | 'spillover',
     internalId: string,
-    field: 'startDate', // Only start date
+    field: 'startDate',
     date: Date | undefined
   ) => {
       if (isSprintCompleted && !isCreatingNewSprint) return;
@@ -364,50 +341,58 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       const errors: string[] = [];
       taskRows.forEach((row, index) => {
           const taskPrefix = `${taskType === 'new' ? 'New' : 'Spillover'} Task (Row ${index + 1})`;
-          // Skip completely empty rows silently unless there's only one row
-           if (taskRows.length > 1 && !row.description && !row.storyPoints && !row.assignee && row.status === 'To Do' && !row.estimatedTime && !row.startDate) {
+           if (taskRows.length > 1 && !row.description && !row.storyPoints && !row.assignee && row.status === 'To Do' && !row.devEstimatedTime && !row.qaEstimatedTime && !row.bufferTime && !row.startDate && !row.reviewer) {
               return;
            }
-           // If it's the only row and it's empty, also skip it
-            if (taskRows.length === 1 && !row.description && !row.storyPoints && !row.assignee && row.status === 'To Do' && !row.estimatedTime && !row.startDate) {
+            if (taskRows.length === 1 && !row.description && !row.storyPoints && !row.assignee && row.status === 'To Do' && !row.devEstimatedTime && !row.qaEstimatedTime && !row.bufferTime && !row.startDate && !row.reviewer) {
                 return;
             }
-
 
           const description = row.description?.trim();
           const storyPointsRaw = row.storyPoints?.toString().trim();
           const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
-          const estimatedTime = row.estimatedTime?.trim() || undefined; // Add estimated time
+          const devEstimatedTime = row.devEstimatedTime?.trim() || undefined;
+          const qaEstimatedTime = row.qaEstimatedTime?.trim() || undefined; // Use new field, default applied in createEmptyTaskRow
+          const bufferTime = row.bufferTime?.trim() || undefined; // Use new field, default applied
           const assignee = row.assignee?.trim() || undefined;
+          const reviewer = row.reviewer?.trim() || undefined; // Added reviewer
           const status = row.status?.trim() as Task['status'];
-          const startDate = row.startDate; // Already string | undefined
+          const startDate = row.startDate;
 
-          // Require description, estimate, and start date for timeline validity
           if (!description) errors.push(`${taskPrefix}: Description is required.`);
-          if (!estimatedTime) errors.push(`${taskPrefix}: Estimated Time is required for timeline.`);
+          if (!devEstimatedTime) errors.push(`${taskPrefix}: Dev Est. Time is required for timeline.`); // Check Dev time
+          if (!qaEstimatedTime) errors.push(`${taskPrefix}: QA Est. Time is required.`); // QA time required
+          if (!bufferTime) errors.push(`${taskPrefix}: Buffer Time is required.`); // Buffer time required
           if (!startDate) errors.push(`${taskPrefix}: Start Date is required for timeline.`);
 
           if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
                errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
           }
-          // Validate estimatedTime format
-           if (estimatedTime && parseEstimatedTimeToDays(estimatedTime) === null) {
-                errors.push(`${taskPrefix}: Invalid Estimated Time. Use formats like '2d', '1w 3d', '5'.`);
+           if (devEstimatedTime && parseEstimatedTimeToDays(devEstimatedTime) === null) {
+                errors.push(`${taskPrefix}: Invalid Dev Est. Time. Use formats like '2d', '1w 3d', '5'.`);
+           }
+           if (qaEstimatedTime && parseEstimatedTimeToDays(qaEstimatedTime) === null) {
+                errors.push(`${taskPrefix}: Invalid QA Est. Time. Use formats like '2d', '1w 3d', '5'.`);
+           }
+            if (bufferTime && parseEstimatedTimeToDays(bufferTime) === null) {
+                errors.push(`${taskPrefix}: Invalid Buffer Time. Use formats like '2d', '1w 3d', '5'.`);
            }
           if (!status || !taskStatuses.includes(status)) {
               errors.push(`${taskPrefix}: Invalid status.`);
           }
-           // Basic date validation
            if (startDate && !isValid(parseISO(startDate))) errors.push(`${taskPrefix}: Invalid Start Date format (YYYY-MM-DD).`);
 
           finalTasks.push({
               id: row.id || `task_${selectedSprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
               description: description || '',
               storyPoints: storyPoints,
-              estimatedTime: estimatedTime, // Add estimated time
+              devEstimatedTime: devEstimatedTime,
+              qaEstimatedTime: qaEstimatedTime, // Save QA time
+              bufferTime: bufferTime, // Save Buffer time
               assignee: assignee,
+              reviewer: reviewer, // Save reviewer
               status: status,
-              startDate: startDate, // Store string date
+              startDate: startDate,
           });
       });
       return { tasks: finalTasks, errors };
@@ -440,7 +425,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
          testingStrategy: planningData.testingStrategy.trim(),
      };
 
-     onSavePlanning(selectedSprintNumber, finalPlanningData); // Save only planning, status change is separate
+     onSavePlanning(selectedSprintNumber, finalPlanningData);
  };
 
   const handleCreateAndSaveNewSprint = () => {
@@ -487,9 +472,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       };
 
       onCreateAndPlanSprint(newSprintDetails, finalPlanningData);
-      setIsCreatingNewSprint(false); // Switch back to viewing existing sprints
-      // Select the newly created sprint? Or leave it unselected? Let's leave unselected for now.
-      // setSelectedSprintNumber(sprintNumInt);
+      setIsCreatingNewSprint(false);
   };
 
 
@@ -504,7 +487,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
            return;
        }
 
-       // Save current planning state *before* changing status
        const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks, 'new');
        const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks, 'spillover');
        const allErrors = [...newErrors, ...spillErrors];
@@ -523,8 +505,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
         };
 
 
-       onSavePlanning(selectedSprint.sprintNumber, finalPlanningData, 'Active'); // Pass new status 'Active'
-       // State will update via props, no need to manually set here
+       onSavePlanning(selectedSprint.sprintNumber, finalPlanningData, 'Active');
    };
 
    const getStatusBadgeVariant = (status: Sprint['status']): "default" | "secondary" | "outline" | "destructive" | null | undefined => {
@@ -546,11 +527,10 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       };
 
 
-  // Helper to render a date picker for tasks
   const renderDatePicker = (
     type: 'new' | 'spillover',
     row: TaskRow,
-    field: 'startDate', // Only 'startDate'
+    field: 'startDate',
     disabled: boolean
   ) => {
     const dateValue = row.startDateObj;
@@ -561,13 +541,13 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                 <Button
                     variant={"outline"}
                     className={cn(
-                        "w-full justify-start text-left font-normal h-9 text-xs px-2", // Smaller text and padding
+                        "w-full justify-start text-left font-normal h-9 text-xs px-2",
                         !dateValue && "text-muted-foreground"
                     )}
                     disabled={disabled}
                 >
-                    <CalendarIcon className="mr-1 h-3 w-3" /> {/* Smaller icon */}
-                    {dateValue ? format(dateValue, "MM/dd") : <span>Pick</span>} {/* Shorter format */}
+                    <CalendarIcon className="mr-1 h-3 w-3" />
+                    {dateValue ? format(dateValue, "MM/dd") : <span>Pick</span>}
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0">
@@ -583,141 +563,189 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 };
 
 
-   // Helper to render task rows
    const renderTaskTable = (type: 'new' | 'spillover', taskRows: TaskRow[], disabled: boolean) => (
-     <div className="space-y-4">
-         {/* Updated grid layout - removed End Date, adjusted columns */}
-        <div className="hidden md:grid grid-cols-[2fr_60px_100px_1fr_1fr_100px_40px] gap-x-2 items-center pb-2 border-b">
-            <Label className="text-xs font-medium text-muted-foreground">Description*</Label>
-            <Label className="text-xs font-medium text-muted-foreground text-right">Story Pts</Label>
-            <Label className="text-xs font-medium text-muted-foreground text-right">Est. Time*</Label>
-            <Label className="text-xs font-medium text-muted-foreground">Assignee</Label>
-            <Label className="text-xs font-medium text-muted-foreground">Status</Label>
-            <Label className="text-xs font-medium text-muted-foreground text-center">Start Date*</Label>
-            <div />
-        </div>
-        <div className="space-y-4 md:space-y-2">
-            {taskRows.map((row) => (
-            <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[2fr_60px_100px_1fr_1fr_100px_40px] gap-x-2 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
-                 {/* Description */}
-                <div className="md:col-span-1 col-span-2">
-                    <Label htmlFor={`desc-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Description*</Label>
-                    <Input
-                        id={`desc-${type}-${row._internalId}`}
-                        value={row.description}
-                        onChange={e => handleTaskInputChange(type, row._internalId, 'description', e.target.value)}
-                        placeholder="Task description"
-                        className="h-9"
-                        disabled={disabled}
-                        required
-                    />
-                </div>
-                 {/* Story Points */}
-                <div className="md:col-span-1 col-span-1">
-                    <Label htmlFor={`sp-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Story Pts</Label>
-                    <Input
-                        id={`sp-${type}-${row._internalId}`}
-                        type="number"
-                        value={row.storyPoints}
-                        onChange={e => handleTaskInputChange(type, row._internalId, 'storyPoints', e.target.value)}
-                        placeholder="Pts"
-                        className="h-9 text-right"
-                        min="0"
-                         disabled={disabled}
-                    />
-                </div>
-                 {/* Estimated Time */}
-                 <div className="md:col-span-1 col-span-1">
-                    <Label htmlFor={`estTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Est. Time*</Label>
-                    <Input
-                        id={`estTime-${type}-${row._internalId}`}
-                        value={row.estimatedTime}
-                        onChange={e => handleTaskInputChange(type, row._internalId, 'estimatedTime', e.target.value)}
-                        placeholder="e.g., 2d, 5"
-                        className="h-9 text-right"
-                        disabled={disabled}
-                        required // Required for timeline
-                    />
-                </div>
-                 {/* Assignee */}
-                 <div className="md:col-span-1 col-span-1">
-                    <Label htmlFor={`assignee-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Assignee</Label>
-                     <Select
-                         value={row.assignee ?? ''}
-                         onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'assignee', value === 'unassigned' ? undefined : value)}
-                         disabled={disabled || members.length === 0}
-                     >
-                        <SelectTrigger id={`assignee-${type}-${row._internalId}`} className="h-9">
-                          <SelectValue placeholder="Select Assignee" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="unassigned" className="text-muted-foreground">-- Unassigned --</SelectItem>
-                           {members.map(member => (
-                               <SelectItem key={member.id} value={member.name}>{member.name}</SelectItem>
-                           ))}
-                           {members.length === 0 && <SelectItem value="no-members" disabled>No members in project</SelectItem>}
-                        </SelectContent>
-                     </Select>
-                </div>
-                 {/* Status */}
-                <div className="md:col-span-1 col-span-1">
-                    <Label htmlFor={`status-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Status</Label>
-                     <Select
-                       value={row.status}
-                       onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'status', value)}
-                        disabled={disabled}
-                     >
-                        <SelectTrigger id={`status-${type}-${row._internalId}`} className="h-9">
-                          <SelectValue placeholder="Select Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                           {taskStatuses.map(statusOption => (
-                             <SelectItem key={statusOption} value={statusOption}>{statusOption}</SelectItem>
-                           ))}
-                        </SelectContent>
-                     </Select>
-                </div>
-                 {/* Start Date */}
-                 <div className="md:col-span-1 col-span-1">
-                    <Label htmlFor={`startDate-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Start Date*</Label>
-                    {renderDatePicker(type, row, 'startDate', disabled)}
-                 </div>
-                 {/* Delete Button */}
-                <div className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeTaskRow(type, row._internalId)}
-                        className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                        aria-label={`Remove ${type} task row`}
-                         disabled={disabled}
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </Button>
-                </div>
+      <div className="overflow-x-auto"> {/* Add horizontal scroll */}
+         <div className="min-w-[1200px] space-y-4"> {/* Set min-width */}
+             {/* Updated grid layout - added QA Est, Buffer, Reviewer */}
+            <div className="hidden md:grid grid-cols-[3fr_70px_100px_100px_100px_1fr_1fr_1fr_100px_40px] gap-x-2 items-center pb-2 border-b">
+                <Label className="text-xs font-medium text-muted-foreground">Description*</Label>
+                <Label className="text-xs font-medium text-muted-foreground text-right">Story Pts</Label>
+                <Label className="text-xs font-medium text-muted-foreground text-right">Dev Est*</Label>
+                <Label className="text-xs font-medium text-muted-foreground text-right">QA Est*</Label>
+                <Label className="text-xs font-medium text-muted-foreground text-right">Buffer*</Label>
+                <Label className="text-xs font-medium text-muted-foreground">Assignee</Label>
+                <Label className="text-xs font-medium text-muted-foreground">Reviewer</Label>
+                <Label className="text-xs font-medium text-muted-foreground">Status</Label>
+                <Label className="text-xs font-medium text-muted-foreground text-center">Start Date*</Label>
+                <div />
             </div>
-            ))}
+            <div className="space-y-4 md:space-y-2">
+                {taskRows.map((row) => (
+                <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[3fr_70px_100px_100px_100px_1fr_1fr_1fr_100px_40px] gap-x-2 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
+                     {/* Description */}
+                    <div className="md:col-span-1 col-span-2">
+                        <Label htmlFor={`desc-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Description*</Label>
+                        <Input
+                            id={`desc-${type}-${row._internalId}`}
+                            value={row.description}
+                            onChange={e => handleTaskInputChange(type, row._internalId, 'description', e.target.value)}
+                            placeholder="Task description"
+                            className="h-9"
+                            disabled={disabled}
+                            required
+                        />
+                    </div>
+                     {/* Story Points */}
+                    <div className="md:col-span-1 col-span-1">
+                        <Label htmlFor={`sp-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Story Pts</Label>
+                        <Input
+                            id={`sp-${type}-${row._internalId}`}
+                            type="number"
+                            value={row.storyPoints}
+                            onChange={e => handleTaskInputChange(type, row._internalId, 'storyPoints', e.target.value)}
+                            placeholder="Pts"
+                            className="h-9 text-right w-full"
+                            min="0"
+                             disabled={disabled}
+                        />
+                    </div>
+                     {/* Dev Estimated Time */}
+                     <div className="md:col-span-1 col-span-1">
+                        <Label htmlFor={`devEstTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Dev Est*</Label>
+                        <Input
+                            id={`devEstTime-${type}-${row._internalId}`}
+                            value={row.devEstimatedTime}
+                            onChange={e => handleTaskInputChange(type, row._internalId, 'devEstimatedTime', e.target.value)}
+                            placeholder="e.g., 2d, 5"
+                            className="h-9 text-right w-full"
+                            disabled={disabled}
+                            required
+                        />
+                    </div>
+                     {/* QA Estimated Time */}
+                     <div className="md:col-span-1 col-span-1">
+                        <Label htmlFor={`qaEstTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">QA Est*</Label>
+                        <Input
+                            id={`qaEstTime-${type}-${row._internalId}`}
+                            value={row.qaEstimatedTime}
+                            onChange={e => handleTaskInputChange(type, row._internalId, 'qaEstimatedTime', e.target.value)}
+                            placeholder="e.g., 2d"
+                            className="h-9 text-right w-full"
+                            disabled={disabled}
+                            required
+                        />
+                    </div>
+                      {/* Buffer Time */}
+                      <div className="md:col-span-1 col-span-1">
+                        <Label htmlFor={`bufferTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Buffer*</Label>
+                        <Input
+                            id={`bufferTime-${type}-${row._internalId}`}
+                            value={row.bufferTime}
+                            onChange={e => handleTaskInputChange(type, row._internalId, 'bufferTime', e.target.value)}
+                            placeholder="e.g., 1d"
+                            className="h-9 text-right w-full"
+                            disabled={disabled}
+                            required
+                        />
+                    </div>
+                     {/* Assignee */}
+                     <div className="md:col-span-1 col-span-1">
+                        <Label htmlFor={`assignee-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Assignee</Label>
+                         <Select
+                             value={row.assignee ?? ''}
+                             onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'assignee', value === 'unassigned' ? undefined : value)}
+                             disabled={disabled || members.length === 0}
+                         >
+                            <SelectTrigger id={`assignee-${type}-${row._internalId}`} className="h-9">
+                              <SelectValue placeholder="Select Assignee" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="unassigned" className="text-muted-foreground">-- Unassigned --</SelectItem>
+                               {members.map(member => (
+                                   <SelectItem key={member.id} value={member.name}>{member.name}</SelectItem>
+                               ))}
+                               {members.length === 0 && <SelectItem value="no-members" disabled>No members in project</SelectItem>}
+                            </SelectContent>
+                         </Select>
+                    </div>
+                    {/* Reviewer */}
+                    <div className="md:col-span-1 col-span-1">
+                       <Label htmlFor={`reviewer-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Reviewer</Label>
+                        <Select
+                            value={row.reviewer ?? ''}
+                            onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'reviewer', value === 'unassigned' ? undefined : value)}
+                            disabled={disabled || members.length === 0}
+                        >
+                           <SelectTrigger id={`reviewer-${type}-${row._internalId}`} className="h-9">
+                             <SelectValue placeholder="Select Reviewer" />
+                           </SelectTrigger>
+                           <SelectContent>
+                               <SelectItem value="unassigned" className="text-muted-foreground">-- Unassigned --</SelectItem>
+                              {members.map(member => (
+                                  <SelectItem key={member.id} value={member.name}>{member.name}</SelectItem>
+                              ))}
+                              {members.length === 0 && <SelectItem value="no-members" disabled>No members in project</SelectItem>}
+                           </SelectContent>
+                        </Select>
+                   </div>
+                     {/* Status */}
+                    <div className="md:col-span-1 col-span-1">
+                        <Label htmlFor={`status-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Status</Label>
+                         <Select
+                           value={row.status}
+                           onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'status', value)}
+                            disabled={disabled}
+                         >
+                            <SelectTrigger id={`status-${type}-${row._internalId}`} className="h-9">
+                              <SelectValue placeholder="Select Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                               {taskStatuses.map(statusOption => (
+                                 <SelectItem key={statusOption} value={statusOption}>{statusOption}</SelectItem>
+                               ))}
+                            </SelectContent>
+                         </Select>
+                    </div>
+                     {/* Start Date */}
+                     <div className="md:col-span-1 col-span-1">
+                        <Label htmlFor={`startDate-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Start Date*</Label>
+                        {renderDatePicker(type, row, 'startDate', disabled)}
+                     </div>
+                     {/* Delete Button */}
+                    <div className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeTaskRow(type, row._internalId)}
+                            className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                            aria-label={`Remove ${type} task row`}
+                             disabled={disabled}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+                ))}
+            </div>
+             {!disabled && (
+                <Button
+                  type="button"
+                  onClick={() => addTaskRow(type)}
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                 >
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Add {type === 'new' ? 'New' : 'Spillover'} Task
+                </Button>
+             )}
         </div>
-         {/* Add button only if not disabled */}
-         {!disabled && (
-            <Button
-              type="button"
-              onClick={() => addTaskRow(type)}
-              variant="outline"
-              size="sm"
-              className="mt-4"
-             >
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Add {type === 'new' ? 'New' : 'Spillover'} Task
-            </Button>
-         )}
     </div>
   );
 
   const renderPlanningForm = (disabled: boolean) => (
      <>
-        {/* Sprint Goal */}
         <div className="space-y-2">
           <Label htmlFor="sprint-goal" className="text-base font-semibold">Sprint Goal</Label>
           <Textarea
@@ -730,7 +758,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           />
         </div>
 
-         {/* New Tasks Table */}
          <Card>
              <CardHeader>
                  <CardTitle>New Tasks</CardTitle>
@@ -739,11 +766,10 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                  {renderTaskTable('new', newTasks, disabled)}
              </CardContent>
              <CardFooter>
-                <p className="text-xs text-muted-foreground">* Required fields for timeline: Description, Est. Time, Start Date.</p>
+                <p className="text-xs text-muted-foreground">* Required fields for timeline: Description, Dev Est., QA Est., Buffer, Start Date.</p>
             </CardFooter>
          </Card>
 
-          {/* Spillover Tasks Table */}
          <Card>
              <CardHeader>
                  <CardTitle>Spillover Tasks</CardTitle>
@@ -752,11 +778,10 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                  {renderTaskTable('spillover', spilloverTasks, disabled)}
              </CardContent>
               <CardFooter>
-                <p className="text-xs text-muted-foreground">* Required fields for timeline: Description, Est. Time, Start Date.</p>
+                <p className="text-xs text-muted-foreground">* Required fields for timeline: Description, Dev Est., QA Est., Buffer, Start Date.</p>
             </CardFooter>
          </Card>
 
-        {/* Definition of Done */}
         <div className="space-y-2">
           <Label htmlFor="definition-of-done" className="text-base font-semibold">Definition of Done (DoD)</Label>
           <Textarea
@@ -769,7 +794,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           />
         </div>
 
-        {/* Testing Strategy */}
         <div className="space-y-2">
           <Label htmlFor="testing-strategy" className="text-base font-semibold">Testing Strategy</Label>
           <Textarea
@@ -782,11 +806,10 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           />
         </div>
 
-        {/* Sprint Timeline Chart - Always Render based on current state */}
         <Card>
            <CardHeader>
                <CardTitle className="flex items-center gap-2"><GanttChartSquare className="h-5 w-5 text-muted-foreground" /> Sprint Timeline</CardTitle>
-               <CardDescription>Visualization of planned tasks. Add start dates and estimated times to tasks to see them here.</CardDescription>
+               <CardDescription>Visualization of planned tasks based on Dev Estimate Time. Add start dates and dev estimates to see tasks here.</CardDescription>
            </CardHeader>
            <CardContent className="min-h-[200px]">
                 {tasksForChart.length > 0 ? (
@@ -794,12 +817,12 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                        tasks={tasksForChart}
                        sprintStartDate={currentSprintStartDate}
                        sprintEndDate={currentSprintEndDate}
-                       members={members} // Pass members for coloring
+                       members={members}
                     />
                 ) : (
                     <div className="flex items-center justify-center text-muted-foreground h-full p-4 text-center">
                         <Info className="mr-2 h-5 w-5" />
-                        Add tasks with Start Date and Estimated Time to visualize the timeline.
+                        Add tasks with Start Date and Dev Est. Time to visualize the timeline.
                     </div>
                 )}
            </CardContent>
@@ -810,7 +833,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 
   return (
     <div className="space-y-6">
-        {/* Section to Create New Sprint */}
         <Card>
             <CardHeader>
                 <div className="flex justify-between items-center">
@@ -830,7 +852,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
             </CardHeader>
             {isCreatingNewSprint && (
                 <CardContent className="space-y-6">
-                     {/* New Sprint Basic Details */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                         <div>
                             <Label htmlFor="new-sprint-number">Sprint Number*</Label>
@@ -885,8 +906,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                          </div>
                      </div>
 
-                     {/* Render Planning Form for New Sprint */}
-                     {renderPlanningForm(false)} {/* Planning form is enabled for new sprint */}
+                     {renderPlanningForm(false)}
 
                 </CardContent>
             )}
@@ -898,7 +918,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
         </Card>
 
 
-      {/* Section for Existing Sprints */}
       {!isCreatingNewSprint && (
           <Card>
             <CardHeader>
@@ -947,11 +966,9 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                                        variant="ghost"
                                        size="icon"
                                        onClick={() => {
-                                          // Ensure the correct sprint is selected before starting
                                           if (selectedSprintNumber !== sprint.sprintNumber) {
                                                handleSelectExistingSprint(sprint.sprintNumber);
                                           }
-                                          // Use a timeout to allow state update before calling start
                                           setTimeout(() => handleStartSprint(), 0);
                                        }}
                                        aria-label={`Start Sprint ${sprint.sprintNumber}`}
@@ -971,7 +988,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
              </CardContent>
 
 
-            {/* Planning Details Area for Selected Sprint */}
              {selectedSprint && (
                 <>
                     <CardContent className="space-y-6 border-t pt-6 mt-6">
@@ -996,3 +1012,4 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     </div>
   );
 }
+

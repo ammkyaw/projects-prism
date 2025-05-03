@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Task, Member } from '@/types/sprint-data';
@@ -9,23 +10,22 @@ import { useMemo } from 'react';
 import { cn } from "@/lib/utils";
 
 // Define a temporary type for chart data that includes the calculated endDate
-interface TaskWithEndDate extends Task {
-  endDate: string; // This is added just for the chart
-}
+// interface TaskWithEndDate extends Task {
+//   endDate: string; // This is added just for the chart
+// }
+// No longer using TaskWithEndDate as chart component calculates ranges directly
 
 interface SprintTimelineChartProps {
-  tasks: TaskWithEndDate[]; // Expect tasks with the calculated endDate
+  tasks: Task[]; // Expect tasks with original data
   sprintStartDate?: string;
   sprintEndDate?: string;
-  members: Member[]; // Kept for potential future use but not used for coloring now
+  members: Member[];
 }
 
 const weekendColor = 'hsl(var(--muted) / 0.2)'; // Very light gray for weekend background
 const taskBarColor = 'hsl(var(--primary))'; // Use primary color (blue) for all task bars
-const defaultColor = 'hsl(var(--muted-foreground))'; // Gray for unassigned/default - maybe used elsewhere
 
-
-// --- Helper Functions (Copied from planning-tab.tsx for now) ---
+// --- Helper Functions (Moved here or imported) ---
 
 // Helper function to parse estimated time string (e.g., "2d", "1w 3d") into days
 const parseEstimatedTimeToDays = (timeString: string | undefined): number | null => {
@@ -35,12 +35,11 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
 
   const parts = timeString.match(/(\d+w)?\s*(\d+d)?/);
   if (!parts || (parts[1] === undefined && parts[2] === undefined)) {
-      // Try parsing just a number as days
       const simpleDays = parseInt(timeString, 10);
       if (!isNaN(simpleDays) && simpleDays >= 0) {
           return simpleDays;
       }
-      return null; // No valid parts found
+      return null;
   }
 
   const weekPart = parts[1];
@@ -49,7 +48,7 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
   if (weekPart) {
     const weeks = parseInt(weekPart.replace('w', ''), 10);
     if (!isNaN(weeks)) {
-      totalDays += weeks * 5; // Assuming 5 working days per week
+      totalDays += weeks * 5;
     }
   }
 
@@ -60,14 +59,12 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
     }
   }
 
-  // Allow just "5" or "3" to mean days
   if (totalDays === 0 && /^\d+$/.test(timeString)) {
        const simpleDays = parseInt(timeString, 10);
        if (!isNaN(simpleDays) && simpleDays >= 0) {
             return simpleDays;
        }
   }
-
 
   return totalDays > 0 ? totalDays : null;
 };
@@ -78,28 +75,22 @@ const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number):
   let daysAdded = 0;
   let workingDaysCounted = 0;
 
-  // If duration is 0 or less, return the start date
   if (workingDays <= 0) return startDate;
 
-  // Loop until we have counted the required number of working days
   while (workingDaysCounted < workingDays) {
     currentDate = addDays(startDate, daysAdded);
-    const dayOfWeek = getDay(currentDate); // 0=Sun, 6=Sat
+    const dayOfWeek = getDay(currentDate);
 
     if (dayOfWeek !== 0 && dayOfWeek !== 6) {
       workingDaysCounted++;
     }
-    // If we haven't reached the target working days, increment daysAdded to check the next day
-    // IMPORTANT: Increment daysAdded *after* checking the current day, otherwise we skip the first day.
-    // But if the target is met, we don't need to check the next day.
      if (workingDaysCounted < workingDays) {
-        daysAdded++;
+         daysAdded++;
      } else {
-        // If we just counted the last working day, this currentDate is the end date.
-        break;
+         break;
      }
   }
-  return currentDate; // The final end date
+  return currentDate;
 };
 
 // --- End Helper Functions ---
@@ -117,37 +108,51 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
     return tasks
         .map((task, index) => {
-            if (!task.startDate || !task.estimatedTime || !isValid(parseISO(task.startDate))) return null; // Skip tasks without valid start date or estimate
+            // Use devEstimatedTime for the timeline block
+            if (!task.startDate || !task.devEstimatedTime || !isValid(parseISO(task.startDate))) return null;
 
             const taskStartObj = parseISO(task.startDate!);
-            const workingDays = parseEstimatedTimeToDays(task.estimatedTime);
+            const devWorkingDays = parseEstimatedTimeToDays(task.devEstimatedTime);
 
-            if (workingDays === null || workingDays <= 0) return null; // Skip tasks with invalid or zero duration
+            if (devWorkingDays === null || devWorkingDays <= 0) return null;
 
-            // Calculate the actual end date skipping weekends
-            const actualEndDateObj = calculateEndDateSkippingWeekends(taskStartObj, workingDays);
+            // Calculate the end date based *only* on dev time
+            const devEndDateObj = calculateEndDateSkippingWeekends(taskStartObj, devWorkingDays);
 
             // Calculate day indices relative to the sprint start
             const startDayIndex = differenceInDays(taskStartObj, sprintStartObj);
-            const endDayIndex = differenceInDays(actualEndDateObj, sprintStartObj);
+            const endDayIndex = differenceInDays(devEndDateObj, sprintStartObj);
+
+            // Ensure startDayIndex is not negative (task starts before sprint)
+            const validStartDayIndex = Math.max(0, startDayIndex);
 
              // The bar should visually cover the end day.
              // Recharts Bar draws from range[0] up to (but not including) range[1] visually in intervals.
              // To make it cover the block for endDayIndex, the range end needs to be endDayIndex + 1.
             const barEndIndex = endDayIndex + 1;
 
+             // Tooltip to show more details
+             const tooltipContent = [
+                `${task.description || 'Task'} (${task.status || 'N/A'})`,
+                `Dev Est: ${task.devEstimatedTime || '?'}`,
+                task.qaEstimatedTime ? `QA Est: ${task.qaEstimatedTime}` : '',
+                task.bufferTime ? `Buffer: ${task.bufferTime}` : '',
+                task.assignee ? `Assignee: ${task.assignee}` : '',
+                task.reviewer ? `Reviewer: ${task.reviewer}` : '',
+                `Dates: [${format(taskStartObj, 'MM/dd')} - ${format(devEndDateObj, 'MM/dd')}] (Dev)`,
+            ].filter(Boolean).join(' | ');
+
             return {
                 name: task.description || `Task ${task.id}`,
-                taskIndex: index, // Use index for Y-axis positioning
-                // range should be [start_day_index, end_day_index + 1] for correct visual span
-                range: [startDayIndex, barEndIndex],
-                fill: taskBarColor, // Use fixed blue color for all bars
-                tooltip: `${task.description || 'Task'} (${task.status || 'N/A'}) - Est. ${task.estimatedTime || '?'} ${task.assignee ? '(' + task.assignee + ')' : '(Unassigned)'} [${format(taskStartObj, 'MM/dd')} - ${format(actualEndDateObj, 'MM/dd')}]` // Updated tooltip shows calculated end date
+                taskIndex: index,
+                // range only represents the dev duration now
+                range: [validStartDayIndex, barEndIndex],
+                fill: taskBarColor, // Fixed blue color for dev bar
+                tooltip: tooltipContent,
             };
-        }).filter(item => item !== null && item.range[0] < item.range[1]); // Remove null items and invalid ranges (start must be before end)
+        }).filter(item => item !== null && item.range[0] < item.range[1]); // Remove null items and invalid ranges
   }, [tasks, sprintStartDate, sprintEndDate]);
 
-  // Calculate weekend days within the sprint range
    const weekendIndices = useMemo(() => {
        if (!sprintStartDate || !sprintEndDate || !isValid(parseISO(sprintStartDate)) || !isValid(parseISO(sprintEndDate))) return [];
        const start = parseISO(sprintStartDate);
@@ -155,13 +160,13 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
        const indices: number[] = [];
        try {
            eachDayOfInterval({ start, end }).forEach((date) => {
-               const dayOfWeek = getDay(date); // 0 = Sunday, 6 = Saturday
+               const dayOfWeek = getDay(date);
                if (dayOfWeek === 0 || dayOfWeek === 6) {
                    indices.push(differenceInDays(date, start));
                }
            });
        } catch (e) {
-         console.error("Error calculating weekend indices:", e); // Handle potential date errors
+         console.error("Error calculating weekend indices:", e);
          return [];
        }
        return indices;
@@ -169,87 +174,97 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
 
   if (chartData.length === 0) {
-    return <div className="flex items-center justify-center h-full text-muted-foreground">No tasks with valid start date and estimate to display.</div>;
+    return <div className="flex items-center justify-center h-full text-muted-foreground">No tasks with valid start date and dev estimate to display.</div>;
   }
 
    let sprintDays = 0;
    try {
-     // Get the number of calendar days in the sprint for the axis domain
      sprintDays = differenceInDays(parseISO(sprintEndDate!), parseISO(sprintStartDate!)) + 1;
    } catch (e) {
       console.error("Error calculating sprint days:", e);
       return <div className="flex items-center justify-center h-full text-destructive">Error calculating sprint duration.</div>;
    }
-   const sprintDayIndices = Array.from({ length: sprintDays }, (_, i) => i); // 0 to sprintDays-1
+   const sprintDayIndices = Array.from({ length: sprintDays }, (_, i) => i);
 
-  // Generate ticks for X-axis (e.g., every few days)
    const xTicks = sprintDayIndices.map(i => {
        try {
            const date = addDays(parseISO(sprintStartDate!), i);
-           // Show tick maybe every 2 days or based on sprint length
            if (i % (sprintDays > 14 ? 2 : 1) === 0 || i === 0 || i === sprintDays -1) {
                return format(date, 'MM/dd');
            }
        } catch (e) {
           console.error("Error formatting X tick:", e);
        }
-       return ''; // Return empty string for non-labeled ticks
+       return '';
    });
 
 
   const chartConfig = {
-    value: { label: 'Duration', color: taskBarColor }, // Use the blue color
+    value: { label: 'Duration', color: taskBarColor },
   } satisfies ChartConfig;
 
   return (
-    <ChartContainer config={chartConfig} className="h-[250px] w-full"> {/* Adjust height as needed */}
+    <ChartContainer config={chartConfig} className="h-[250px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           layout="vertical"
           data={chartData}
-          margin={{ top: 5, right: 20, left: 100, bottom: 20 }} // Adjust margins
-          barCategoryGap="20%" // Adjust gap between bars
+          margin={{ top: 5, right: 20, left: 100, bottom: 20 }}
+          barCategoryGap="20%"
         >
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
           <XAxis
              type="number"
-             // Use a dummy key here since the bar position is determined by the range
-             dataKey="taskIndex" // Needs a dataKey, but not used for position
+             dataKey="taskIndex" // Still needs a key, but not used for x-position
              scale="linear"
-             domain={[0, sprintDays ]} // Domain from day 0 to sprintDays
-             ticks={sprintDayIndices} // Ticks for each day index
-             tickFormatter={(tick) => xTicks[tick] ?? ''} // Format ticks to dates
+             domain={[0, sprintDays ]}
+             ticks={sprintDayIndices}
+             tickFormatter={(tick) => xTicks[tick] ?? ''}
              tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
              axisLine={false}
              tickLine={true}
-             interval={0} // Ensure all ticks are considered for rendering based on formatter
+             interval={0}
              allowDuplicatedCategory={false}
            />
-           {/* Add ReferenceLines for Weekend Highlighting */}
            {weekendIndices.map((index) => (
-               // Use ReferenceLine, representing the *start* of the weekend day block
                <ReferenceLine
                  key={`weekend-line-${index}`}
-                 x={index} // Position at the start of the weekend day index
-                 stroke={weekendColor} // Use very light gray for weekends
-                 strokeWidth={10} // Adjust width visually - MAY NEED TUNING
-                 strokeDasharray="1 0" // Make it solid, not dashed
-                 ifOverflow="extendDomain" // Ensure it covers the full height
-                 // Vertical segment from top to bottom of chart area
+                 x={index}
+                 stroke={weekendColor}
+                 strokeWidth={10}
+                 strokeDasharray="1 0"
+                 ifOverflow="extendDomain"
+                 // Segment needs to cover the whole day block visually
+                 // Using index to index+1 covers the area *before* the next day starts
                  segment={[{ x: index, y: -1 }, { x: index, y: chartData.length + 1 }]}
+                 shape={(props) => {
+                    // Custom shape to render a rectangle background for the weekend day
+                    const { x, y, width, height, viewBox } = props;
+                     // Calculate the actual width of one day block on the chart
+                    const dayWidth = viewBox && viewBox.width && sprintDays > 0 ? viewBox.width / sprintDays : 10; // Default width if calculation fails
+                    return (
+                      <rect
+                        x={x} // Start at the calculated x position for the day index
+                        y={viewBox?.y ?? 0} // Start from the top of the chart area
+                        width={dayWidth} // Width representing one day
+                        height={viewBox?.height ?? 200} // Full height of the chart area
+                        fill={weekendColor}
+                      />
+                    );
+                 }}
                />
            ))}
 
           <YAxis
             dataKey="taskIndex"
             type="number"
-            domain={[-0.5, chartData.length - 0.5]} // Adjust domain slightly for padding
-            tickFormatter={(index) => chartData[index]?.name ?? ''} // Use task names as labels
-            tick={{ fontSize: 10, width: 90, textAnchor: 'end' }} // Adjust width and anchor
+            domain={[-0.5, chartData.length - 0.5]}
+            tickFormatter={(index) => chartData[index]?.name ?? ''}
+            tick={{ fontSize: 10, width: 90, textAnchor: 'end' }}
             axisLine={false}
             tickLine={false}
-            interval={0} // Show all ticks
-            reversed={true} // Display tasks from top to bottom
+            interval={0}
+            reversed={true}
             />
            <Tooltip
               cursor={{ fill: 'hsl(var(--muted) / 0.3)' }}
@@ -257,8 +272,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  if (payload && payload.length > 0 && payload[0].payload) {
                      const data = payload[0].payload;
                      return (
-                         <div className="text-xs bg-background border rounded px-2 py-1 shadow-sm max-w-xs">
-                             {/* Use fixed color style from taskBarColor */}
+                         <div className="text-xs bg-background border rounded px-2 py-1 shadow-sm max-w-md"> {/* Increased max-width */}
                              <p className="font-semibold break-words" style={{ color: taskBarColor }}>{data.tooltip}</p>
                          </div>
                      );
@@ -266,11 +280,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  return null;
               }}
              />
-           <Legend content={null} /> {/* Hide default legend */}
-           {/* Bar dataKey uses range [startDayIndex, endDayIndex + 1].
-               The Bar component uses this to determine position and length.
-               It effectively positions the bar starting at range[0] with a length of range[1] - range[0].
-            */}
+           <Legend content={null} />
+           {/* Bar represents only the Dev Estimated Time */}
            <Bar dataKey="range" radius={2} barSize={10} fill={taskBarColor} />
 
         </BarChart>
@@ -278,4 +289,3 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     </ChartContainer>
   );
 }
-
