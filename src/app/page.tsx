@@ -195,8 +195,8 @@ export default function Home() {
 
   const handleDataProcessed = (data: SprintData) => {
     setSprintData(data);
-    toast({ title: "Success", description: "Sprint data processed." });
-    setActiveTab("reports"); // Switch to reports tab after processing
+    toast({ title: "Success", description: "Sprint data saved." }); // Updated message
+    setActiveTab("home"); // Switch to home tab after saving
   };
 
 

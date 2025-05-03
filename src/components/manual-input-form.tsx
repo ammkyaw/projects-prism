@@ -392,7 +392,7 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
                  <PlusCircle className="mr-2 h-4 w-4" />
                  Add Row
                </Button>
-               <Button type="submit">Generate Reports</Button>
+               <Button type="submit">Save</Button> {/* Updated button text */}
             </div>
           </form>
         </CardContent>
