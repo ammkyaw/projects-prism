@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -232,7 +231,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 
   const resetForms = useCallback(() => {
       setPlanningData(initialSprintPlanning);
-      setNewTasks([createEmptyTaskRow()]);
+      setNewTasks([]); // Start with empty new tasks (will be added from backlog)
       setSpilloverTasks([]); // Initialize spillover as empty
   }, []);
 
@@ -269,25 +268,21 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       setNewTasks((loadedPlanning.newTasks || []).map((task, index) => mapTaskToRow(task, index, 'new')));
       setSpilloverTasks((loadedPlanning.spilloverTasks || []).map((task, index) => mapTaskToRow(task, index, 'spill')));
 
-      // Ensure at least one empty new task row if not completed
-      if (!isSprintCompleted && (loadedPlanning.newTasks || []).length === 0) {
-          setNewTasks([createEmptyTaskRow()]);
-      } else if (isSprintCompleted && (loadedPlanning.newTasks || []).length === 0) {
-          setNewTasks([]); // Show empty if completed and no tasks
+      // Ensure newTasks is empty if no tasks were loaded (no initial empty row needed)
+      if ((loadedPlanning.newTasks || []).length === 0) {
+          setNewTasks([]);
       }
 
-      // No default empty row for spillover
-       if (isSprintCompleted && (loadedPlanning.spilloverTasks || []).length === 0) {
+      // Ensure spilloverTasks is empty if none loaded
+       if ((loadedPlanning.spilloverTasks || []).length === 0) {
           setSpilloverTasks([]);
-       } else if (!isSprintCompleted && (loadedPlanning.spilloverTasks || []).length === 0) {
-           setSpilloverTasks([]); // Also ensure it's empty if not completed but no spillover loaded
        }
 
 
     } else if (!isCreatingNewSprint) {
         resetForms();
     }
-  }, [selectedSprint, isCreatingNewSprint, isSprintCompleted, resetForms]);
+  }, [selectedSprint, isCreatingNewSprint, resetForms]); // Removed isSprintCompleted as dependency, handled inside if
 
 
   useEffect(() => {
@@ -326,8 +321,14 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 
   const addTaskRow = (type: 'new' | 'spillover') => {
      if (isSprintCompleted && !isCreatingNewSprint) return;
-    const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
-    updater(prev => [...prev, createEmptyTaskRow()]);
+    // Only allow adding spillover tasks manually
+    if (type === 'spillover') {
+        setSpilloverTasks(prev => [...prev, createEmptyTaskRow()]);
+    } else {
+        // Optionally, show a toast or log if trying to add new task manually
+        console.warn("New tasks should be added from the backlog.");
+        toast({ variant: "default", title: "Info", description: "Add new tasks using the 'Add from Backlog' button." });
+    }
   };
 
   const removeTaskRow = (type: 'new' | 'spillover', internalId: string) => {
@@ -335,10 +336,10 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     updater(prevRows => {
         const newRows = prevRows.filter(row => row._internalId !== internalId);
-        // Keep at least one empty row for 'new' tasks if all are removed
-        if (type === 'new' && newRows.length === 0) {
-            return [createEmptyTaskRow()];
-        }
+        // No longer need to keep an empty row for 'new' tasks
+        // if (type === 'new' && newRows.length === 0) {
+        //     return [createEmptyTaskRow()];
+        // }
         return newRows;
     });
   };
@@ -450,8 +451,8 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
        }));
 
      setNewTasks(prev => {
-       // Remove the initial empty row if it exists and items are being added
-       const filteredPrev = prev.length === 1 && !prev[0].ticketNumber ? [] : prev;
+       // Filter out any placeholder/empty rows if adding items
+       const filteredPrev = prev.filter(p => p.ticketNumber?.trim() || p.storyPoints?.toString().trim());
        return [...filteredPrev, ...itemsToAdd];
      });
 
@@ -465,30 +466,20 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       const errors: string[] = [];
       taskRows.forEach((row, index) => {
           const taskPrefix = `${taskType === 'new' ? 'New' : 'Spillover'} Task (Row ${index + 1})`;
-          // Skip completely empty rows silently, unless it's the only row in 'new' tasks
+          // Skip rows that appear empty (essential fields missing)
           if (
-              taskRows.length > 1 &&
-              !row.ticketNumber && !row.storyPoints && !row.assignee && // Check ticketNumber
-              row.status === 'To Do' && !row.devEstimatedTime &&
-              row.qaEstimatedTime === '2d' && row.bufferTime === '1d' && // Check default values too
-              !row.startDate && !row.reviewer
+              !row.ticketNumber?.trim() &&
+              !row.storyPoints?.toString().trim() &&
+              !row.devEstimatedTime?.trim() &&
+              !row.startDate
           ) {
-              return;
-          }
-          // Special check for the single row case in 'new' tasks
-          if (
-              taskType === 'new' && taskRows.length === 1 &&
-              !row.ticketNumber && !row.storyPoints && !row.assignee && // Check ticketNumber
-              row.status === 'To Do' && !row.devEstimatedTime &&
-              row.qaEstimatedTime === '2d' && row.bufferTime === '1d' &&
-              !row.startDate && !row.reviewer
-          ) {
-              // If it's the *only* new task row and it's empty, don't include it
+              // Allow saving if it's the only row and it's empty, but don't add it to finalTasks
+              if (taskRows.length === 1) return;
+              // Otherwise, skip this effectively empty row
               return;
           }
 
-
-          const ticketNumber = row.ticketNumber?.trim(); // Use ticketNumber
+          const ticketNumber = row.ticketNumber?.trim();
           const storyPointsRaw = row.storyPoints?.toString().trim();
           const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
           const devEstimatedTime = row.devEstimatedTime?.trim() || undefined;
@@ -502,13 +493,12 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           const description = row.description?.trim(); // Include description
           const priority = row.priority; // Include priority
 
-          if (!ticketNumber) errors.push(`${taskPrefix}: Ticket # is required.`); // Updated validation message
+          if (!ticketNumber) errors.push(`${taskPrefix}: Ticket # is required.`);
           if (!startDate) errors.push(`${taskPrefix}: Start Date is required for timeline.`);
 
           if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
                errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
           }
-           // Validate estimate formats
            if (devEstimatedTime && parseEstimatedTimeToDays(devEstimatedTime) === null) {
                 errors.push(`${taskPrefix}: Invalid Dev Est. Time. Use formats like '2d', '1w 3d', '5'.`);
            }
@@ -525,15 +515,15 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 
           finalTasks.push({
               id: row.id || `task_${selectedSprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
-              ticketNumber: ticketNumber || '', // Use ticketNumber
+              ticketNumber: ticketNumber || '',
               title: title,
               description: description,
               storyPoints: storyPoints,
               devEstimatedTime: devEstimatedTime,
-              qaEstimatedTime: qaEstimatedTime, // Save QA time
-              bufferTime: bufferTime, // Save Buffer time
+              qaEstimatedTime: qaEstimatedTime,
+              bufferTime: bufferTime,
               assignee: assignee,
-              reviewer: reviewer, // Save reviewer
+              reviewer: reviewer,
               status: status,
               startDate: startDate,
               priority: priority,
@@ -870,72 +860,76 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                     </div>
                 </div>
                 ))}
+                 {/* Conditionally render Add/Backlog buttons based on type */}
+                 {!disabled && (
+                     <div className="flex gap-2 mt-4">
+                         {/* Add Spillover button only for 'spillover' tasks section */}
+                         {type === 'spillover' && (
+                            <Button
+                                type="button"
+                                onClick={() => addTaskRow(type)}
+                                variant="outline"
+                                size="sm"
+                            >
+                                <PlusCircle className="mr-2 h-4 w-4" /> Add Spillover Task
+                            </Button>
+                         )}
+                         {/* Add Backlog button only for 'new' tasks section */}
+                         {type === 'new' && (
+                             <Dialog open={isBacklogDialogOpen} onOpenChange={setIsBacklogDialogOpen}>
+                                 <DialogTrigger asChild>
+                                     <Button
+                                         type="button"
+                                         variant="secondary"
+                                         size="sm"
+                                         disabled={disabled || backlog.length === 0}
+                                         // onClick={handleOpenBacklogDialog} // Moved onClick to trigger
+                                     >
+                                         <PackagePlus className="mr-2 h-4 w-4" /> Add from Backlog
+                                     </Button>
+                                 </DialogTrigger>
+                                  <DialogContent className="sm:max-w-[600px]">
+                                     <DialogHeader>
+                                         <DialogTitle>Add Tasks from Backlog</DialogTitle>
+                                         <DialogDescription>
+                                             Select items from the project backlog to add to this sprint plan. They will be added with 'To Do' status.
+                                         </DialogDescription>
+                                     </DialogHeader>
+                                     <ScrollArea className="h-72 w-full rounded-md border p-4">
+                                         {backlog.length > 0 ? (
+                                             backlog
+                                                 // .filter(t => t.status === 'Backlog' || t.status === 'To Do') // Assuming backlog items don't have status set this way
+                                                 .sort((a, b) => (taskPriorities.indexOf(a.priority || 'Medium') - taskPriorities.indexOf(b.priority || 'Medium')) || (a.ticketNumber ?? '').localeCompare(b.ticketNumber ?? ''))
+                                                 .map(task => (
+                                                     <div key={task.id} className="flex items-center space-x-2 py-2 border-b last:border-b-0">
+                                                         <Checkbox
+                                                             id={`backlog-${task.id}`}
+                                                             checked={selectedBacklogIds.has(task.id)}
+                                                             onCheckedChange={(checked) => handleBacklogItemToggle(task.id, !!checked)}
+                                                         />
+                                                         <Label htmlFor={`backlog-${task.id}`} className="flex-1 cursor-pointer">
+                                                              <span className="font-medium">{task.backlogId}</span> {task.title && `- ${task.title}`}
+                                                              <span className="text-xs text-muted-foreground ml-2">({task.priority ?? 'Medium'})</span>
+                                                         </Label>
+                                                     </div>
+                                                 ))
+                                         ) : (
+                                             <p className="text-center text-muted-foreground italic">No items currently in the backlog.</p>
+                                         )}
+                                     </ScrollArea>
+                                     <DialogFooter>
+                                          <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+                                         <Button onClick={handleAddSelectedBacklogItems} disabled={selectedBacklogIds.size === 0}>
+                                             Add Selected ({selectedBacklogIds.size})
+                                         </Button>
+                                     </DialogFooter>
+                                  </DialogContent>
+                              </Dialog>
+                         )}
+                     </div>
+                 )}
             </div>
-             {!disabled && (
-                 <div className="flex gap-2 mt-4">
-                    <Button
-                        type="button"
-                        onClick={() => addTaskRow(type)}
-                        variant="outline"
-                        size="sm"
-                    >
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Add {type === 'new' ? 'New Task' : 'Spillover Task'}
-                    </Button>
-                    {/* Add Backlog button only for 'new' tasks section */}
-                    {type === 'new' && (
-                        <Dialog open={isBacklogDialogOpen} onOpenChange={setIsBacklogDialogOpen}>
-                            <DialogTrigger asChild>
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    size="sm"
-                                    disabled={disabled || backlog.length === 0}
-                                    onClick={handleOpenBacklogDialog}
-                                >
-                                    <PackagePlus className="mr-2 h-4 w-4" /> Add from Backlog
-                                </Button>
-                            </DialogTrigger>
-                             <DialogContent className="sm:max-w-[600px]">
-                                <DialogHeader>
-                                    <DialogTitle>Add Tasks from Backlog</DialogTitle>
-                                    <DialogDescription>
-                                        Select items from the project backlog to add to this sprint plan. They will be added with 'To Do' status.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <ScrollArea className="h-72 w-full rounded-md border p-4">
-                                    {backlog.filter(t => t.status === 'Backlog' || t.status === 'To Do').length > 0 ? (
-                                        backlog
-                                            .filter(t => t.status === 'Backlog' || t.status === 'To Do') // Only show relevant items
-                                            .sort((a, b) => (taskPriorities.indexOf(a.priority) - taskPriorities.indexOf(b.priority)) || a.ticketNumber.localeCompare(b.ticketNumber))
-                                            .map(task => (
-                                                <div key={task.id} className="flex items-center space-x-2 py-2 border-b last:border-b-0">
-                                                    <Checkbox
-                                                        id={`backlog-${task.id}`}
-                                                        checked={selectedBacklogIds.has(task.id)}
-                                                        onCheckedChange={(checked) => handleBacklogItemToggle(task.id, !!checked)}
-                                                    />
-                                                    <Label htmlFor={`backlog-${task.id}`} className="flex-1 cursor-pointer">
-                                                         <span className="font-medium">{task.ticketNumber}</span> {task.title && `- ${task.title}`}
-                                                         <span className="text-xs text-muted-foreground ml-2">({task.priority ?? 'Medium'})</span>
-                                                    </Label>
-                                                </div>
-                                            ))
-                                    ) : (
-                                        <p className="text-center text-muted-foreground italic">No items currently in the backlog.</p>
-                                    )}
-                                </ScrollArea>
-                                <DialogFooter>
-                                     <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-                                    <Button onClick={handleAddSelectedBacklogItems} disabled={selectedBacklogIds.size === 0}>
-                                        Add Selected ({selectedBacklogIds.size})
-                                    </Button>
-                                </DialogFooter>
-                             </DialogContent>
-                         </Dialog>
-                    )}
-                </div>
-             )}
+
         </div>
     </div>
   );
@@ -956,7 +950,8 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 
          <Card>
              <CardHeader>
-                 <CardTitle>New Tasks</CardTitle>
+                 <CardTitle>New Tasks (from Backlog)</CardTitle>
+                 <CardDescription>Tasks pulled from the backlog for this sprint.</CardDescription>
              </CardHeader>
              <CardContent>
                  {renderTaskTable('new', newTasks, disabled)}
@@ -969,6 +964,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
          <Card>
              <CardHeader>
                  <CardTitle>Spillover Tasks (Optional)</CardTitle>
+                 <CardDescription>Tasks carried over from the previous sprint.</CardDescription>
              </CardHeader>
              <CardContent>
                  {renderTaskTable('spillover', spilloverTasks, disabled)}
@@ -1210,3 +1206,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     </div>
   );
 }
+
+
+    
