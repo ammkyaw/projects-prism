@@ -81,22 +81,23 @@ const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number):
    }
 
    // Loop until the required number of working days are counted
+   // Need to count the start day itself if it's a working day
    while (workingDaysCounted < workingDays) {
-      const dayOfWeek = getDay(currentDate);
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-          workingDaysCounted++;
-      }
-
-      // Only advance the date if we haven't reached the target number of working days yet
-      // Important: If it's the last working day, don't advance further
-      if (workingDaysCounted < workingDays) {
-          currentDate = addDays(currentDate, 1);
-          // Skip subsequent weekends while advancing
-          while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
-              currentDate = addDays(currentDate, 1);
-          }
-      }
+        const dayOfWeek = getDay(currentDate);
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Skip Sunday (0) and Saturday (6)
+            workingDaysCounted++;
+        }
+        // Only advance the date if we haven't reached the target number of working days yet
+        // Important: If it's the last working day, don't advance further
+        if (workingDaysCounted < workingDays) {
+            currentDate = addDays(currentDate, 1);
+        }
    }
+
+    // After counting the working days, skip any potential weekend at the end
+    while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
+      currentDate = addDays(currentDate, 1);
+    }
 
   return currentDate;
 };
@@ -160,6 +161,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  while (getDay(devStartDateObj) === 0 || getDay(devStartDateObj) === 6) {
                    devStartDateObj = addDays(devStartDateObj, 1);
                  }
+                 // Calculate end date based on WORKING days
                  devEndDateObj = calculateEndDateSkippingWeekends(devStartDateObj, devWorkingDays);
 
                  devStartDayIndex = differenceInDays(devStartDateObj, sprintStartObj);
@@ -175,9 +177,17 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  devPhaseValid = true;
                  console.log(`Task ${index + 1}: Dev Phase - Start: ${format(devStartDateObj, 'yyyy-MM-dd')}, End: ${format(devEndDateObj, 'yyyy-MM-dd')}, Indices: [${devStartDayIndex}, ${devEndDayIndex}]`);
             } else {
-                console.warn(`Task ${index + 1}: Invalid Dev estimate.`);
+                console.warn(`Task ${index + 1}: Invalid or zero Dev estimate.`);
                  // If dev is invalid, QA/Buffer should still try starting from task start date
-                 lastPhaseEndDateObj = taskStartObj;
+                 // But if dev was 0 days, QA/Buffer should start immediately after the adjusted start date
+                 if (devWorkingDays === 0) {
+                    while (getDay(devStartDateObj) === 0 || getDay(devStartDateObj) === 6) {
+                       devStartDateObj = addDays(devStartDateObj, 1);
+                     }
+                     lastPhaseEndDateObj = devStartDateObj;
+                 } else {
+                     lastPhaseEndDateObj = taskStartObj; // Fallback to original task start if estimate invalid
+                 }
             }
 
 
@@ -191,7 +201,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             let qaPhaseValid = false;
 
              if (qaWorkingDays !== null && qaWorkingDays >= 0) {
-                 qaStartDateObj = getNextWorkingDay(lastPhaseEndDateObj); // QA starts the next working day
+                 // QA starts the next working day *after* the previous phase ended
+                 qaStartDateObj = getNextWorkingDay(lastPhaseEndDateObj);
                  qaEndDateObj = calculateEndDateSkippingWeekends(qaStartDateObj, qaWorkingDays);
 
                  qaStartDayIndex = differenceInDays(qaStartDateObj, sprintStartObj);
@@ -205,8 +216,9 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  qaPhaseValid = true;
                  console.log(`Task ${index + 1}: QA Phase - Start: ${format(qaStartDateObj, 'yyyy-MM-dd')}, End: ${format(qaEndDateObj, 'yyyy-MM-dd')}, Indices: [${qaStartDayIndex}, ${qaEndDayIndex}]`);
              } else {
-                 console.warn(`Task ${index + 1}: Invalid QA estimate.`);
-                 // If QA is invalid, buffer starts after the last valid phase (which might be Dev or the initial task start)
+                 console.warn(`Task ${index + 1}: Invalid or zero QA estimate.`);
+                 // If QA is invalid or 0, buffer starts after the last valid phase (Dev or task start)
+                 // lastPhaseEndDateObj remains unchanged from previous phase
              }
 
 
@@ -220,7 +232,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             let bufferPhaseValid = false;
 
             if (bufferWorkingDays !== null && bufferWorkingDays >= 0) {
-                bufferStartDateObj = getNextWorkingDay(lastPhaseEndDateObj); // Buffer starts the next working day
+                // Buffer starts the next working day *after* the previous phase ended
+                bufferStartDateObj = getNextWorkingDay(lastPhaseEndDateObj);
                 bufferEndDateObj = calculateEndDateSkippingWeekends(bufferStartDateObj, bufferWorkingDays);
 
                 bufferStartDayIndex = differenceInDays(bufferStartDateObj, sprintStartObj);
@@ -233,7 +246,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 bufferPhaseValid = true;
                 console.log(`Task ${index + 1}: Buffer Phase - Start: ${format(bufferStartDateObj, 'yyyy-MM-dd')}, End: ${format(bufferEndDateObj, 'yyyy-MM-dd')}, Indices: [${bufferStartDayIndex}, ${bufferEndDayIndex}]`);
             } else {
-                console.warn(`Task ${index + 1}: Invalid Buffer estimate.`);
+                console.warn(`Task ${index + 1}: Invalid or zero Buffer estimate.`);
+                 // If Buffer is invalid or 0, we don't add a buffer phase
             }
 
 
@@ -253,6 +267,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 taskIndex: index,
                 // range is for the bar component, needs start and end+1 (to cover the full end day)
                 // Ensure indices are valid and end >= start before creating range
+                // +1 makes the range inclusive of the end day index
                 devRange: devPhaseValid && devEndDayIndex >= devStartDayIndex ? [devStartDayIndex, devEndDayIndex + 1] : undefined,
                 qaRange: qaPhaseValid && qaEndDayIndex >= qaStartDayIndex ? [qaStartDayIndex, qaEndDayIndex + 1] : undefined,
                 bufferRange: bufferPhaseValid && bufferEndDayIndex >= bufferStartDayIndex ? [bufferStartDayIndex, bufferEndDayIndex + 1] : undefined,
@@ -335,7 +350,6 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
           margin={{ top: 5, right: 20, left: 100, bottom: 20 }}
           barCategoryGap="30%" // Adjust gap between tasks
           barGap={2} // Adjust gap between bars within the same task
-          stackOffset="none" // Ensure bars are side-by-side if overlapping conceptually
         >
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
           <XAxis
@@ -402,15 +416,13 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
               }}
              />
            <Legend content={null} /> {/* Hide default legend */}
-           {/* Render bars for each phase. `stackId` ensures they are grouped per task but `stackOffset="none"` places them based on their range */}
-           <Bar dataKey="devRange" radius={2} barSize={10} fill={chartConfig.dev.color} name="Development" stackId="task" />
-           <Bar dataKey="qaRange" radius={2} barSize={10} fill={chartConfig.qa.color} name="QA" stackId="task" />
-           <Bar dataKey="bufferRange" radius={2} barSize={10} fill={chartConfig.buffer.color} name="Buffer" stackId="task" />
+           {/* Render bars for each phase. Removed stackId to ensure independent positioning */}
+           <Bar dataKey="devRange" radius={2} barSize={10} fill={chartConfig.dev.color} name="Development" />
+           <Bar dataKey="qaRange" radius={2} barSize={10} fill={chartConfig.qa.color} name="QA" />
+           <Bar dataKey="bufferRange" radius={2} barSize={10} fill={chartConfig.buffer.color} name="Buffer" />
 
         </BarChart>
       </ResponsiveContainer>
     </ChartContainer>
   );
 }
-
-    
