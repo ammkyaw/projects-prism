@@ -4,7 +4,7 @@ import type { SprintData, Sprint } from '@/types/sprint-data'; // Import Sprint 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge" // Import Badge
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Import AlertDialog components
 import { Info, Edit, Circle, Trash2 } from 'lucide-react'; // Import Circle for status indicator and Trash2 for delete
 import Link from 'next/link'; // Import Link
