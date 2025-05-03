@@ -484,52 +484,53 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
         <Accordion type="multiple" className="w-full space-y-4" defaultValue={calendars.map(c => c._internalId)}>
           {calendars.map((calendar) => (
             <AccordionItem value={calendar._internalId} key={calendar._internalId} className="border rounded-lg bg-card overflow-hidden">
-               <div className="flex items-center pr-4">
-                  <AccordionTrigger className="flex-1 px-4 py-2 hover:no-underline">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                         <Input
-                            value={calendar.name}
-                            onChange={(e) => handleCalendarInputChange(calendar._internalId, 'name', e.target.value)}
-                            placeholder="Calendar Name (e.g., US Holidays)"
-                            className="h-8 text-base font-medium flex-1 mr-2 border-0 shadow-none focus-visible:ring-0 focus:bg-muted/50"
-                            onClick={(e) => e.stopPropagation()} // Prevent Accordion trigger
-                         />
-                          {/* Country Select Dropdown */}
-                           <Select value={calendar.countryCode || 'none'} onValueChange={(value) => handleCountryChange(calendar._internalId, value)}>
-                                <SelectTrigger
-                                    className="h-8 w-40 text-sm border-0 shadow-none focus-visible:ring-0 focus:bg-muted/50"
-                                    onClick={(e) => e.stopPropagation()} // Prevent Accordion trigger
-                                >
-                                    <Globe className="mr-2 h-4 w-4 text-muted-foreground" />
-                                    <SelectValue placeholder="Select Country" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        <SelectLabel>Country (Optional)</SelectLabel>
-                                        <SelectItem value="none" className="text-muted-foreground">-- None (Custom) --</SelectItem>
-                                        {countryOptions.map(country => (
-                                            <SelectItem key={country.code} value={country.code}>
-                                                {country.name} ({country.code})
-                                            </SelectItem>
-                                        ))}
-                                    </SelectGroup>
-                                </SelectContent>
-                           </Select>
-                      </div>
-                  </AccordionTrigger>
-                  <Button
-                       type="button"
-                       variant="ghost"
-                       size="icon"
-                       onClick={() => handleRemoveCalendar(calendar._internalId)}
-                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                       aria-label="Remove calendar"
-                  >
-                      <Trash2 className="h-4 w-4" />
-                  </Button>
+               {/* Moved Input and Select outside of AccordionTrigger */}
+               <div className="flex items-center justify-between px-4 py-2 border-b">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                     <Input
+                        value={calendar.name}
+                        onChange={(e) => handleCalendarInputChange(calendar._internalId, 'name', e.target.value)}
+                        placeholder="Calendar Name (e.g., US Holidays)"
+                        className="h-8 text-base font-medium flex-1 mr-2 border-0 shadow-none focus-visible:ring-0 focus:bg-muted/50"
+                     />
+                       <Select value={calendar.countryCode || 'none'} onValueChange={(value) => handleCountryChange(calendar._internalId, value)}>
+                           <SelectTrigger
+                               className="h-8 w-40 text-sm border-0 shadow-none focus-visible:ring-0 focus:bg-muted/50"
+                           >
+                               <Globe className="mr-2 h-4 w-4 text-muted-foreground" />
+                               <SelectValue placeholder="Select Country" />
+                           </SelectTrigger>
+                           <SelectContent>
+                               <SelectGroup>
+                                   <SelectLabel>Country (Optional)</SelectLabel>
+                                   <SelectItem value="none" className="text-muted-foreground">-- None (Custom) --</SelectItem>
+                                   {countryOptions.map(country => (
+                                       <SelectItem key={country.code} value={country.code}>
+                                           {country.name} ({country.code})
+                                       </SelectItem>
+                                   ))}
+                               </SelectGroup>
+                           </SelectContent>
+                       </Select>
+                  </div>
+                   <div className="flex items-center gap-2">
+                      <AccordionTrigger className="p-2" aria-label={`Toggle ${calendar.name}`}>
+                          {/* Icon moved inside trigger, or remove chevron if header click isn't needed */}
+                      </AccordionTrigger>
+                       <Button
+                           type="button"
+                           variant="ghost"
+                           size="icon"
+                           onClick={() => handleRemoveCalendar(calendar._internalId)}
+                           className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                           aria-label="Remove calendar"
+                       >
+                           <Trash2 className="h-4 w-4" />
+                       </Button>
+                  </div>
                 </div>
 
-              <AccordionContent className="border-t px-4 pt-4 pb-2">
+              <AccordionContent className="px-4 pt-4 pb-2">
                  {/* Display Info message if country-based */}
                  {calendar.isCountryBased && (
                       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700 flex items-center gap-2">
