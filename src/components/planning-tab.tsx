@@ -59,6 +59,7 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
 
   const parts = timeString.match(/(\d+w)?\s*(\d+d)?/);
   if (!parts || (parts[1] === undefined && parts[2] === undefined)) {
+      // Try parsing as just days if no 'w' or 'd' found
       const simpleDays = parseInt(timeString, 10);
       if (!isNaN(simpleDays) && simpleDays >= 0) {
           return simpleDays;
@@ -72,7 +73,7 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
   if (weekPart) {
     const weeks = parseInt(weekPart.replace('w', ''), 10);
     if (!isNaN(weeks)) {
-      totalDays += weeks * 5;
+      totalDays += weeks * 5; // Assuming 5 working days per week
     }
   }
 
@@ -83,6 +84,7 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
     }
   }
 
+  // Handle case where only a number is entered (treat as days)
   if (totalDays === 0 && /^\d+$/.test(timeString)) {
        const simpleDays = parseInt(timeString, 10);
        if (!isNaN(simpleDays) && simpleDays >= 0) {
@@ -101,20 +103,29 @@ const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number):
 
   if (workingDays <= 0) return startDate;
 
-  while (workingDaysCounted < workingDays) {
-    currentDate = addDays(startDate, daysAdded);
-    const dayOfWeek = getDay(currentDate);
+  // Adjust initial date if it's a weekend
+  while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
+     currentDate = addDays(currentDate, 1);
+  }
 
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+  // We need to count the start date as the first working day if it's not a weekend
+  // So we need to achieve workingDays - 1 additional steps
+  while (workingDaysCounted < workingDays) {
+    const currentDayOfWeek = getDay(currentDate);
+    if (currentDayOfWeek !== 0 && currentDayOfWeek !== 6) {
       workingDaysCounted++;
     }
-     // Increment daysAdded only if we haven't met the target working days
-     if (workingDaysCounted < workingDays) {
-         daysAdded++;
-     } else {
-         // Target met, this currentDate is the end date
-         break;
-     }
+    // Only advance the date if we haven't reached the target number of working days
+    if (workingDaysCounted < workingDays) {
+        currentDate = addDays(currentDate, 1);
+        // Skip weekends while advancing
+        while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
+           currentDate = addDays(currentDate, 1);
+        }
+    } else {
+        // Target met, this currentDate is the end date
+        break;
+    }
   }
   return currentDate;
 };
@@ -206,7 +217,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
   const resetForms = useCallback(() => {
       setPlanningData(initialSprintPlanning);
       setNewTasks([createEmptyTaskRow()]);
-      setSpilloverTasks([createEmptyTaskRow()]);
+      setSpilloverTasks([]); // Initialize spillover as empty
   }, []);
 
   const parseDateString = (dateString: string | undefined): Date | undefined => {
@@ -241,17 +252,23 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       setNewTasks((loadedPlanning.newTasks || []).map((task, index) => mapTaskToRow(task, index, 'new')));
       setSpilloverTasks((loadedPlanning.spilloverTasks || []).map((task, index) => mapTaskToRow(task, index, 'spill')));
 
-      if (!isSprintCompleted) {
-        if ((loadedPlanning.newTasks || []).length === 0) setNewTasks([createEmptyTaskRow()]);
-        if ((loadedPlanning.spilloverTasks || []).length === 0) setSpilloverTasks([createEmptyTaskRow()]);
-      } else {
-        if ((loadedPlanning.newTasks || []).length === 0) setNewTasks([]);
-        if ((loadedPlanning.spilloverTasks || []).length === 0) setSpilloverTasks([]);
+      // Ensure at least one empty new task row if not completed
+      if (!isSprintCompleted && (loadedPlanning.newTasks || []).length === 0) {
+          setNewTasks([createEmptyTaskRow()]);
+      } else if (isSprintCompleted && (loadedPlanning.newTasks || []).length === 0) {
+          setNewTasks([]); // Show empty if completed and no tasks
       }
+
+      // No default empty row for spillover
+      if (isSprintCompleted && (loadedPlanning.spilloverTasks || []).length === 0) {
+          setSpilloverTasks([]);
+      }
+
     } else if (!isCreatingNewSprint) {
         resetForms();
     }
   }, [selectedSprint, isCreatingNewSprint, isSprintCompleted, resetForms]);
+
 
   useEffect(() => {
     if (isCreatingNewSprint) {
@@ -298,9 +315,14 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     updater(prevRows => {
         const newRows = prevRows.filter(row => row._internalId !== internalId);
-        return newRows.length > 0 ? newRows : [createEmptyTaskRow()];
+        // Keep at least one empty row for 'new' tasks if all are removed
+        if (type === 'new' && newRows.length === 0) {
+            return [createEmptyTaskRow()];
+        }
+        return newRows;
     });
   };
+
 
   const handleTaskInputChange = (
     type: 'new' | 'spillover',
@@ -341,12 +363,28 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       const errors: string[] = [];
       taskRows.forEach((row, index) => {
           const taskPrefix = `${taskType === 'new' ? 'New' : 'Spillover'} Task (Row ${index + 1})`;
-           if (taskRows.length > 1 && !row.description && !row.storyPoints && !row.assignee && row.status === 'To Do' && !row.devEstimatedTime && !row.qaEstimatedTime && !row.bufferTime && !row.startDate && !row.reviewer) {
+          // Skip completely empty rows silently, unless it's the only row in 'new' tasks
+          if (
+              taskRows.length > 1 &&
+              !row.description && !row.storyPoints && !row.assignee &&
+              row.status === 'To Do' && !row.devEstimatedTime &&
+              row.qaEstimatedTime === '2d' && row.bufferTime === '1d' && // Check default values too
+              !row.startDate && !row.reviewer
+          ) {
               return;
-           }
-            if (taskRows.length === 1 && !row.description && !row.storyPoints && !row.assignee && row.status === 'To Do' && !row.devEstimatedTime && !row.qaEstimatedTime && !row.bufferTime && !row.startDate && !row.reviewer) {
-                return;
-            }
+          }
+          // Special check for the single row case in 'new' tasks
+          if (
+              taskType === 'new' && taskRows.length === 1 &&
+              !row.description && !row.storyPoints && !row.assignee &&
+              row.status === 'To Do' && !row.devEstimatedTime &&
+              row.qaEstimatedTime === '2d' && row.bufferTime === '1d' &&
+              !row.startDate && !row.reviewer
+          ) {
+              // If it's the *only* new task row and it's empty, don't include it
+              return;
+          }
+
 
           const description = row.description?.trim();
           const storyPointsRaw = row.storyPoints?.toString().trim();
@@ -772,7 +810,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 
          <Card>
              <CardHeader>
-                 <CardTitle>Spillover Tasks</CardTitle>
+                 <CardTitle>Spillover Tasks (Optional)</CardTitle>
              </CardHeader>
              <CardContent>
                  {renderTaskTable('spillover', spilloverTasks, disabled)}
@@ -1012,4 +1050,3 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     </div>
   );
 }
-
