@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { PlusCircle, Trash2, CalendarDays, Save, Edit, XCircle } from 'lucide-react';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"; // Import Select components
+import { PlusCircle, Trash2, CalendarDays, Save, Edit, XCircle, Globe } from 'lucide-react'; // Added Globe icon
 import type { HolidayCalendar, PublicHoliday } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -33,11 +34,26 @@ interface EditableHoliday extends PublicHoliday {
   dateObj?: Date | undefined; // For date picker state
 }
 
+// Simplified list of countries for the dropdown
+const countryOptions = [
+    { code: 'US', name: 'United States' },
+    { code: 'GB', name: 'United Kingdom' },
+    { code: 'CA', name: 'Canada' },
+    { code: 'AU', name: 'Australia' },
+    { code: 'DE', name: 'Germany' },
+    { code: 'FR', name: 'France' },
+    { code: 'IN', name: 'India' },
+    { code: 'JP', name: 'Japan' },
+    { code: 'BR', name: 'Brazil' },
+    // Add more countries as needed
+];
+
+
 const createEmptyCalendar = (): EditableCalendar => ({
   _internalId: `cal_${Date.now()}_${Math.random()}`,
   id: '', // Will be assigned on save
   name: 'New Calendar',
-  countryCode: '',
+  countryCode: '', // Initialize country code as empty string
   holidays: [createEmptyHoliday()],
 });
 
@@ -69,6 +85,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
   useEffect(() => {
     const mappedCalendars = initialCalendars.map((cal, calIndex) => ({
         ...cal,
+        countryCode: cal.countryCode || '', // Ensure countryCode is string or empty string
         _internalId: cal.id || `initial_cal_${calIndex}_${Date.now()}`,
         holidays: (cal.holidays || []).map((holiday, holIndex) => ({
             ...holiday,
@@ -119,12 +136,21 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
     });
   };
 
-  const handleCalendarInputChange = (internalId: string, field: keyof Omit<HolidayCalendar, 'id' | 'holidays'>, value: string) => {
+  const handleCalendarInputChange = (internalId: string, field: keyof Omit<HolidayCalendar, 'id' | 'holidays' | 'countryCode'>, value: string) => {
     setCalendars(prev =>
       prev.map(cal =>
         cal._internalId === internalId ? { ...cal, [field]: value } : cal
       )
     );
+  };
+
+  // Handler specifically for country code change from Select
+  const handleCountryChange = (internalId: string, value: string) => {
+      setCalendars(prev =>
+          prev.map(cal =>
+              cal._internalId === internalId ? { ...cal, countryCode: value === 'none' ? '' : value } : cal
+          )
+      );
   };
 
   const handleAddHoliday = (calendarInternalId: string) => {
@@ -224,8 +250,6 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
                     selected={dateValue}
                     onSelect={(date) => handleHolidayDateChange(calendarInternalId, holidayInternalId, date)}
                     initialFocus
-                    // Optional: Add constraints if needed, e.g., disable past dates
-                    // disabled={(date) => date < new Date("1900-01-01")}
                 />
             </PopoverContent>
         </Popover>
@@ -243,7 +267,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
       }
 
       const calendarName = cal.name.trim();
-      const countryCode = cal.countryCode?.trim() || undefined;
+      const countryCode = cal.countryCode?.trim() || undefined; // Save as undefined if empty
 
       if (!calendarName) {
         toast({ variant: "destructive", title: `Error in Calendar ${calIndex + 1}`, description: "Calendar name is required." });
@@ -324,6 +348,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
     setCalendars(finalCalendars.map((cal, calIndex) => ({
         ...cal,
         _internalId: cal.id || `saved_cal_${calIndex}_${Date.now()}`,
+        countryCode: cal.countryCode || '', // Ensure string for state
         holidays: cal.holidays.map((hol, holIndex) => ({
             ...hol,
             _internalId: hol.id || `saved_hol_${cal.id}_${holIndex}_${Date.now()}`,
@@ -362,14 +387,27 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
                             className="h-8 text-base font-medium flex-1 mr-2 border-0 shadow-none focus-visible:ring-0 focus:bg-muted/50"
                             onClick={(e) => e.stopPropagation()} // Prevent Accordion trigger
                          />
-                          {/* Optional Country Code Input */}
-                          {/* <Input
-                            value={calendar.countryCode ?? ''}
-                            onChange={(e) => handleCalendarInputChange(calendar._internalId, 'countryCode', e.target.value)}
-                            placeholder="Code (e.g., US)"
-                            className="h-8 text-sm w-24 border-0 shadow-none focus-visible:ring-0 focus:bg-muted/50"
-                            onClick={(e) => e.stopPropagation()}
-                          /> */}
+                          {/* Country Select Dropdown */}
+                           <Select value={calendar.countryCode || 'none'} onValueChange={(value) => handleCountryChange(calendar._internalId, value)}>
+                                <SelectTrigger
+                                    className="h-8 w-40 text-sm border-0 shadow-none focus-visible:ring-0 focus:bg-muted/50"
+                                    onClick={(e) => e.stopPropagation()} // Prevent Accordion trigger
+                                >
+                                    <Globe className="mr-2 h-4 w-4 text-muted-foreground" />
+                                    <SelectValue placeholder="Select Country" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        <SelectLabel>Country (Optional)</SelectLabel>
+                                        <SelectItem value="none" className="text-muted-foreground">-- None --</SelectItem>
+                                        {countryOptions.map(country => (
+                                            <SelectItem key={country.code} value={country.code}>
+                                                {country.name} ({country.code})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectGroup>
+                                </SelectContent>
+                           </Select>
                       </div>
                   </AccordionTrigger>
                   <Button

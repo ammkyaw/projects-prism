@@ -14,7 +14,7 @@ export interface PublicHoliday {
 export interface HolidayCalendar {
   id: string; // Unique ID for the calendar
   name: string; // e.g., "US Holidays", "UK Holidays", "Team Alpha Custom"
-  countryCode?: string; // Optional: ISO 3166-1 alpha-2 country code (e.g., "US", "GB")
+  countryCode?: string; // Optional: ISO 3166-1 alpha-2 country code (e.g., "US", "GB") or empty string
   holidays: PublicHoliday[];
 }
 
