@@ -12,15 +12,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info } from 'lucide-react'; // Renamed CalendarIcon to avoid clash
+import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info, PackagePlus } from 'lucide-react'; // Renamed CalendarIcon, Added PackagePlus
 import type { Sprint, SprintPlanning, Task, Member, SprintStatus, HolidayCalendar, Team } from '@/types/sprint-data'; // Added HolidayCalendar, Team
-import { initialSprintPlanning, taskStatuses, predefinedRoles } from '@/types/sprint-data';
+import { initialSprintPlanning, taskStatuses, predefinedRoles, taskPriorities } from '@/types/sprint-data'; // Added taskPriorities
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isValid, differenceInDays, getDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import SprintTimelineChart from '@/components/charts/sprint-timeline-chart';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"; // Added Dialog components
+import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox
+import { ScrollArea } from '@/components/ui/scroll-area'; // Added ScrollArea
 
 const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
 
@@ -142,6 +145,7 @@ interface PlanningTabProps {
   members: Member[];
   holidayCalendars: HolidayCalendar[]; // Add holiday calendars prop
   teams: Team[]; // Add teams prop
+  backlog: Task[]; // Add backlog prop
 }
 
 interface TaskRow extends Task {
@@ -171,13 +175,15 @@ const createEmptyTaskRow = (): TaskRow => ({
 });
 
 
-export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars, teams }: PlanningTabProps) {
+export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars, teams, backlog }: PlanningTabProps) {
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | null>(null);
   const [planningData, setPlanningData] = useState<SprintPlanning>(initialSprintPlanning);
   const [newTasks, setNewTasks] = useState<TaskRow[]>([]);
   const [spilloverTasks, setSpilloverTasks] = useState<TaskRow[]>([]);
   const [isCreatingNewSprint, setIsCreatingNewSprint] = useState(false);
   const [newSprintForm, setNewSprintForm] = useState<NewSprintFormState>({ sprintNumber: '', startDate: undefined, duration: '' });
+  const [isBacklogDialogOpen, setIsBacklogDialogOpen] = useState(false); // State for backlog dialog
+  const [selectedBacklogIds, setSelectedBacklogIds] = useState<Set<string>>(new Set()); // State for selected backlog item IDs
   const { toast } = useToast();
 
   const selectedSprint = useMemo(() => sprints.find(s => s.sprintNumber === selectedSprintNumber), [sprints, selectedSprintNumber]);
@@ -403,6 +409,57 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       );
   };
 
+   // Handler for opening the backlog selection dialog
+   const handleOpenBacklogDialog = () => {
+     if (isSprintCompleted && !isCreatingNewSprint) return;
+     setSelectedBacklogIds(new Set()); // Reset selection
+     setIsBacklogDialogOpen(true);
+   };
+
+   // Handler for selecting/deselecting backlog items in the dialog
+   const handleBacklogItemToggle = (taskId: string, isChecked: boolean) => {
+     setSelectedBacklogIds(prev => {
+       const newSelection = new Set(prev);
+       if (isChecked) {
+         newSelection.add(taskId);
+       } else {
+         newSelection.delete(taskId);
+       }
+       return newSelection;
+     });
+   };
+
+   // Handler for adding selected backlog items to the 'newTasks'
+   const handleAddSelectedBacklogItems = () => {
+     if (selectedBacklogIds.size === 0) {
+       toast({ variant: "default", title: "No items selected", description: "Please select items from the backlog to add." });
+       return;
+     }
+
+     const itemsToAdd = backlog
+       .filter(task => selectedBacklogIds.has(task.id))
+       .map((task): TaskRow => ({ // Convert Task to TaskRow
+         ...task,
+         _internalId: `backlog_added_${task.id}_${Date.now()}`,
+         status: 'To Do', // Set status to 'To Do' when moved from backlog
+         startDate: undefined, // Clear start date, needs planning
+         startDateObj: undefined,
+         storyPoints: task.storyPoints?.toString() ?? '', // Ensure string
+         qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Apply defaults if missing
+         bufferTime: task.bufferTime ?? '1d',
+       }));
+
+     setNewTasks(prev => {
+       // Remove the initial empty row if it exists and items are being added
+       const filteredPrev = prev.length === 1 && !prev[0].ticketNumber ? [] : prev;
+       return [...filteredPrev, ...itemsToAdd];
+     });
+
+     toast({ title: "Items Added", description: `${itemsToAdd.length} backlog item(s) added to the sprint plan.` });
+     setIsBacklogDialogOpen(false); // Close dialog
+   };
+
+
   const finalizeTasks = (taskRows: TaskRow[], taskType: 'new' | 'spillover'): { tasks: Task[], errors: string[] } => {
       const finalTasks: Task[] = [];
       const errors: string[] = [];
@@ -441,6 +498,9 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           const reviewer = row.reviewer?.trim() || undefined; // Added reviewer
           const status = row.status?.trim() as Task['status'];
           const startDate = row.startDate;
+          const title = row.title?.trim(); // Include title
+          const description = row.description?.trim(); // Include description
+          const priority = row.priority; // Include priority
 
           if (!ticketNumber) errors.push(`${taskPrefix}: Ticket # is required.`); // Updated validation message
           if (!startDate) errors.push(`${taskPrefix}: Start Date is required for timeline.`);
@@ -466,6 +526,8 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           finalTasks.push({
               id: row.id || `task_${selectedSprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
               ticketNumber: ticketNumber || '', // Use ticketNumber
+              title: title,
+              description: description,
               storyPoints: storyPoints,
               devEstimatedTime: devEstimatedTime,
               qaEstimatedTime: qaEstimatedTime, // Save QA time
@@ -474,6 +536,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
               reviewer: reviewer, // Save reviewer
               status: status,
               startDate: startDate,
+              priority: priority,
           });
       });
       return { tasks: finalTasks, errors };
@@ -649,7 +712,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
          {/* Adjusted grid layout for narrower Ticket # and other fields */}
          <div className="min-w-[1150px] space-y-4"> {/* Adjusted min-width */}
              {/* Grid column definitions */}
-            <div className="hidden md:grid grid-cols-[150px_70px_100px_100px_100px_150px_150px_120px_100px_40px] gap-x-2 items-center pb-2 border-b">
+            <div className="hidden md:grid grid-cols-[100px_70px_100px_100px_100px_150px_150px_120px_100px_40px] gap-x-2 items-center pb-2 border-b"> {/* Reduced Ticket # width */}
                 <Label className="text-xs font-medium text-muted-foreground">Ticket #*</Label>
                 <Label className="text-xs font-medium text-muted-foreground text-right">Story Pts</Label>
                 <Label className="text-xs font-medium text-muted-foreground text-right">Dev Est</Label>
@@ -664,7 +727,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
             <div className="space-y-4 md:space-y-2">
                 {taskRows.map((row) => (
                 // Match the grid column definition here
-                <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[150px_70px_100px_100px_100px_150px_150px_120px_100px_40px] gap-x-2 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
+                <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[100px_70px_100px_100px_100px_150px_150px_120px_100px_40px] gap-x-2 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0"> {/* Reduced Ticket # width */}
                      {/* Ticket Number */}
                     <div className="md:col-span-1 col-span-2">
                         <Label htmlFor={`ticket-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Ticket #*</Label>
@@ -809,16 +872,69 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                 ))}
             </div>
              {!disabled && (
-                <Button
-                  type="button"
-                  onClick={() => addTaskRow(type)}
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
-                 >
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Add {type === 'new' ? 'New' : 'Spillover'} Task
-                </Button>
+                 <div className="flex gap-2 mt-4">
+                    <Button
+                        type="button"
+                        onClick={() => addTaskRow(type)}
+                        variant="outline"
+                        size="sm"
+                    >
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Add {type === 'new' ? 'New Task' : 'Spillover Task'}
+                    </Button>
+                    {/* Add Backlog button only for 'new' tasks section */}
+                    {type === 'new' && (
+                        <Dialog open={isBacklogDialogOpen} onOpenChange={setIsBacklogDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    disabled={disabled || backlog.length === 0}
+                                    onClick={handleOpenBacklogDialog}
+                                >
+                                    <PackagePlus className="mr-2 h-4 w-4" /> Add from Backlog
+                                </Button>
+                            </DialogTrigger>
+                             <DialogContent className="sm:max-w-[600px]">
+                                <DialogHeader>
+                                    <DialogTitle>Add Tasks from Backlog</DialogTitle>
+                                    <DialogDescription>
+                                        Select items from the project backlog to add to this sprint plan. They will be added with 'To Do' status.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <ScrollArea className="h-72 w-full rounded-md border p-4">
+                                    {backlog.filter(t => t.status === 'Backlog' || t.status === 'To Do').length > 0 ? (
+                                        backlog
+                                            .filter(t => t.status === 'Backlog' || t.status === 'To Do') // Only show relevant items
+                                            .sort((a, b) => (taskPriorities.indexOf(a.priority) - taskPriorities.indexOf(b.priority)) || a.ticketNumber.localeCompare(b.ticketNumber))
+                                            .map(task => (
+                                                <div key={task.id} className="flex items-center space-x-2 py-2 border-b last:border-b-0">
+                                                    <Checkbox
+                                                        id={`backlog-${task.id}`}
+                                                        checked={selectedBacklogIds.has(task.id)}
+                                                        onCheckedChange={(checked) => handleBacklogItemToggle(task.id, !!checked)}
+                                                    />
+                                                    <Label htmlFor={`backlog-${task.id}`} className="flex-1 cursor-pointer">
+                                                         <span className="font-medium">{task.ticketNumber}</span> {task.title && `- ${task.title}`}
+                                                         <span className="text-xs text-muted-foreground ml-2">({task.priority ?? 'Medium'})</span>
+                                                    </Label>
+                                                </div>
+                                            ))
+                                    ) : (
+                                        <p className="text-center text-muted-foreground italic">No items currently in the backlog.</p>
+                                    )}
+                                </ScrollArea>
+                                <DialogFooter>
+                                     <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+                                    <Button onClick={handleAddSelectedBacklogItems} disabled={selectedBacklogIds.size === 0}>
+                                        Add Selected ({selectedBacklogIds.size})
+                                    </Button>
+                                </DialogFooter>
+                             </DialogContent>
+                         </Dialog>
+                    )}
+                </div>
              )}
         </div>
     </div>
@@ -1050,6 +1166,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                                           if (selectedSprintNumber !== sprint.sprintNumber) {
                                                handleSelectExistingSprint(sprint.sprintNumber);
                                           }
+                                          // Use setTimeout to ensure state update happens before calling start sprint
                                           setTimeout(() => handleStartSprint(), 0);
                                        }}
                                        aria-label={`Start Sprint ${sprint.sprintNumber}`}

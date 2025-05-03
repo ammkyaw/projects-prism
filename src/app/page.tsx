@@ -7,7 +7,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound } from 'lucide-react'; // Added UsersRound
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package } from 'lucide-react'; // Added UsersRound, Package
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -23,11 +23,12 @@ import PlanningTab from '@/components/planning-tab';
 import MembersTab from '@/components/members-tab';
 import HolidaysTab from '@/components/holidays-tab';
 import TeamsTab from '@/components/teams-tab'; // Import TeamsTab
+import BacklogTab from '@/components/backlog-tab'; // Import BacklogTab
 import AddMembersDialog from '@/components/add-members-dialog';
 
 
 import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember } from '@/types/sprint-data'; // Added Task, HolidayCalendar, Team, TeamMember types
-import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam } from '@/types/sprint-data';
+import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam, initialBacklogTask } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isPast, isValid } from 'date-fns';
@@ -65,6 +66,7 @@ const calculateSprintMetrics = (startDateStr: string | undefined, duration: stri
 // Helper to create an empty task row for validation/defaults
 const createEmptyTaskRow = (): Task => ({
   id: '',
+  ticketNumber: '',
   description: '',
   status: 'To Do',
   qaEstimatedTime: '2d',
@@ -188,7 +190,6 @@ export default function Home() {
                });
              } else {
                // Allow missing holidayCalendars, default to empty array later
-               // console.warn(`Project ${projectData.id} has invalid or missing 'holidayCalendars' array.`);
              }
 
               // --- Validate and Sanitize Teams ---
@@ -235,6 +236,40 @@ export default function Home() {
                 // Allow missing teams, default to empty array later
               }
 
+              // --- Validate and Sanitize Backlog ---
+             const validatedBacklog: Task[] = [];
+             if (Array.isArray(projectData.backlog)) {
+                 projectData.backlog.forEach((taskData: any) => {
+                     if (
+                         taskData && typeof taskData === 'object' &&
+                         taskData.id && typeof taskData.id === 'string' &&
+                         taskData.ticketNumber && typeof taskData.ticketNumber === 'string' // Changed from description
+                         // Other fields are optional or validated below
+                     ) {
+                         validatedBacklog.push({
+                             id: taskData.id,
+                             ticketNumber: taskData.ticketNumber, // Use ticketNumber
+                             title: typeof taskData.title === 'string' ? taskData.title : undefined,
+                             description: typeof taskData.description === 'string' ? taskData.description : undefined,
+                             storyPoints: (typeof taskData.storyPoints === 'number' || typeof taskData.storyPoints === 'string') ? taskData.storyPoints : undefined,
+                             devEstimatedTime: typeof taskData.devEstimatedTime === 'string' ? taskData.devEstimatedTime : undefined,
+                             qaEstimatedTime: typeof taskData.qaEstimatedTime === 'string' ? taskData.qaEstimatedTime : undefined,
+                             bufferTime: typeof taskData.bufferTime === 'string' ? taskData.bufferTime : undefined,
+                             assignee: typeof taskData.assignee === 'string' ? taskData.assignee : undefined,
+                             reviewer: typeof taskData.reviewer === 'string' ? taskData.reviewer : undefined,
+                             status: typeof taskData.status === 'string' && taskStatuses.includes(taskData.status as any) ? taskData.status : 'Backlog', // Default to Backlog
+                             startDate: typeof taskData.startDate === 'string' && isValid(parseISO(taskData.startDate)) ? taskData.startDate : undefined,
+                             priority: typeof taskData.priority === 'string' ? taskData.priority as Task['priority'] : undefined,
+                             dependsOn: Array.isArray(taskData.dependsOn) ? taskData.dependsOn.filter((dep: any): dep is string => typeof dep === 'string') : undefined,
+                         });
+                     } else {
+                         console.warn(`Skipping invalid backlog task data in project ${projectData.id}:`, taskData);
+                     }
+                 });
+             } else {
+                 // Allow missing backlog, default to empty array later
+             }
+
 
              // --- Validate and Sanitize SprintData ---
              let validatedSprintData: SprintData = { ...initialSprintData }; // Start with defaults
@@ -265,7 +300,9 @@ export default function Home() {
                                        if (!taskData || typeof taskData !== 'object') return null; // Skip invalid task data
                                        return {
                                            id: typeof taskData.id === 'string' ? taskData.id : `task_load_${Date.now()}_${Math.random()}`,
-                                           description: typeof taskData.description === 'string' ? taskData.description : emptyTask.description,
+                                           ticketNumber: typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : emptyTask.ticketNumber, // Use ticketNumber
+                                           title: typeof taskData.title === 'string' ? taskData.title : undefined,
+                                           description: typeof taskData.description === 'string' ? taskData.description : undefined,
                                            storyPoints: (typeof taskData.storyPoints === 'number' || typeof taskData.storyPoints === 'string') ? taskData.storyPoints : emptyTask.storyPoints,
                                            devEstimatedTime: typeof taskData.devEstimatedTime === 'string' ? taskData.devEstimatedTime : emptyTask.devEstimatedTime,
                                            qaEstimatedTime: typeof taskData.qaEstimatedTime === 'string' ? taskData.qaEstimatedTime : emptyTask.qaEstimatedTime,
@@ -274,8 +311,9 @@ export default function Home() {
                                            reviewer: typeof taskData.reviewer === 'string' ? taskData.reviewer : emptyTask.reviewer,
                                            status: typeof taskData.status === 'string' && taskStatuses.includes(taskData.status as any) ? taskData.status : emptyTask.status,
                                            startDate: typeof taskData.startDate === 'string' && isValid(parseISO(taskData.startDate)) ? taskData.startDate : emptyTask.startDate,
+                                           priority: typeof taskData.priority === 'string' ? taskData.priority as Task['priority'] : undefined,
+                                           dependsOn: Array.isArray(taskData.dependsOn) ? taskData.dependsOn.filter((dep: any): dep is string => typeof dep === 'string') : undefined,
                                            // Legacy fields - keep optional for compatibility
-                                           ticketNumber: typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : undefined,
                                            devTime: typeof taskData.devTime === 'string' ? taskData.devTime : undefined,
                                        };
                                    }).filter((task): task is Task => task !== null); // Filter out nulls
@@ -355,6 +393,7 @@ export default function Home() {
                members: validatedMembers.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
                holidayCalendars: validatedCalendars.sort((a, b) => a.name.localeCompare(b.name)), // Keep sorted
                teams: validatedTeams.sort((a, b) => a.name.localeCompare(b.name)), // Add validated teams, sorted
+               backlog: validatedBacklog.sort((a, b) => (a.priority ?? '').localeCompare(b.priority ?? '') || a.ticketNumber.localeCompare(b.ticketNumber)), // Add validated backlog, sorted by priority then ticket #
                sprintData: validatedSprintData,
              });
              console.log(`Successfully validated and added project: ${projectData.name}`);
@@ -917,6 +956,32 @@ export default function Home() {
      toast({ title: "Success", description: `Teams updated for project '${currentProjectName}'.` });
    }, [selectedProjectId, toast, projects]);
 
+    // Handler to save backlog data for the selected project
+   const handleSaveBacklog = useCallback((updatedBacklog: Task[]) => {
+       if (!selectedProjectId) {
+           toast({ variant: "destructive", title: "Error", description: "No project selected." });
+           return;
+       }
+       const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+       setProjects(prevProjects => {
+           const updatedProjects = prevProjects.map(p => {
+               if (p.id === selectedProjectId) {
+                   // Validate tasks before saving? (Ensure IDs, required fields, etc.)
+                   const validatedBacklog = updatedBacklog.map(task => ({
+                       ...task,
+                       id: task.id || `backlog_save_${Date.now()}_${Math.random()}`, // Ensure ID
+                       status: task.status ?? 'Backlog', // Ensure status
+                       priority: task.priority ?? 'Medium', // Ensure priority
+                   }));
+                   return { ...p, backlog: validatedBacklog };
+               }
+               return p;
+           });
+           return updatedProjects;
+       });
+       toast({ title: "Success", description: `Backlog updated for project '${currentProjectName}'.` });
+   }, [selectedProjectId, toast, projects]);
+
 
   // Handler to add members to the *newly created* project (from dialog)
    const handleAddMembersToNewProject = useCallback((addedMembers: Member[]) => {
@@ -972,7 +1037,7 @@ export default function Home() {
 
   // Export data for the currently selected project
   const handleExport = () => {
-    if (!selectedProject || (!selectedProject.sprintData?.sprints?.length && !selectedProject.members?.length && !selectedProject.holidayCalendars?.length && !selectedProject.teams?.length)) {
+    if (!selectedProject || (!selectedProject.sprintData?.sprints?.length && !selectedProject.members?.length && !selectedProject.holidayCalendars?.length && !selectedProject.teams?.length && !selectedProject.backlog?.length)) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -1037,6 +1102,8 @@ export default function Home() {
                       'SprintNumber': sprint.sprintNumber,
                       'Type': type,
                       'TaskID': task.id,
+                      'TicketNumber': task.ticketNumber, // Use ticketNumber
+                      'Title': task.title,
                       'Description': task.description,
                       'StoryPoints': task.storyPoints,
                       'DevEstTime': task.devEstimatedTime,
@@ -1046,8 +1113,8 @@ export default function Home() {
                       'Reviewer': task.reviewer,
                       'Status': task.status,
                       'StartDate': task.startDate,
+                      'Priority': task.priority,
                       // Include legacy fields if they exist, marked as legacy
-                      'TicketNumber (Legacy)': task.ticketNumber,
                       'DevTime (Legacy)': task.devTime,
                     });
 
@@ -1065,6 +1132,27 @@ export default function Home() {
                XLSX.utils.book_append_sheet(wb, wsPlanningTasks, 'Planning Tasks');
             }
        }
+
+        // Backlog Sheet
+        if (selectedProject.backlog && selectedProject.backlog.length > 0) {
+            const backlogData = selectedProject.backlog.map(task => ({
+                'TaskID': task.id,
+                'TicketNumber': task.ticketNumber,
+                'Title': task.title,
+                'Description': task.description,
+                'StoryPoints': task.storyPoints,
+                'DevEstTime': task.devEstimatedTime,
+                'QAEstTime': task.qaEstimatedTime,
+                'BufferTime': task.bufferTime,
+                'Assignee': task.assignee,
+                'Reviewer': task.reviewer,
+                'Status': task.status,
+                'Priority': task.priority,
+                 // No start date for backlog items generally
+            }));
+            const wsBacklog = XLSX.utils.json_to_sheet(backlogData);
+            XLSX.utils.book_append_sheet(wb, wsBacklog, 'Backlog');
+        }
 
        // Members Sheet
        if (selectedProject.members && selectedProject.members.length > 0) {
@@ -1167,6 +1255,7 @@ export default function Home() {
       members: [], // Initialize with empty members array
       holidayCalendars: [], // Initialize with empty holiday calendars
       teams: [], // Initialize with empty teams array
+      backlog: [], // Initialize with empty backlog array
     };
 
     // Update projects state first
@@ -1254,7 +1343,7 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-4">
-          {selectedProject && (selectedProject.sprintData?.sprints?.length > 0 || selectedProject.members?.length > 0 || selectedProject.holidayCalendars?.length > 0 || selectedProject.teams?.length > 0) && (
+          {selectedProject && (selectedProject.sprintData?.sprints?.length > 0 || selectedProject.members?.length > 0 || selectedProject.holidayCalendars?.length > 0 || selectedProject.teams?.length > 0 || selectedProject.backlog?.length > 0) && (
             <Button onClick={handleExport} variant="outline" size="sm">
               <Download className="mr-2 h-4 w-4" />
               Export Project Data
@@ -1283,12 +1372,13 @@ export default function Home() {
              </Card>
          ) : selectedProject ? (
              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-               <TabsList className="grid w-full grid-cols-7 mb-6"> {/* Updated grid-cols to 7 */}
+               <TabsList className="grid w-full grid-cols-8 mb-6"> {/* Updated grid-cols to 8 */}
                  <TabsTrigger value="home"><HomeIcon className="mr-2 h-4 w-4" />Home</TabsTrigger>
+                 <TabsTrigger value="backlog"><Package className="mr-2 h-4 w-4" />Backlog</TabsTrigger> {/* Added Backlog Trigger */}
                  <TabsTrigger value="entry"><ListPlus className="mr-2 h-4 w-4" />Entry (Legacy)</TabsTrigger>
                  <TabsTrigger value="planning"><NotebookPen className="mr-2 h-4 w-4" />Planning</TabsTrigger>
                  <TabsTrigger value="members"><Users className="mr-2 h-4 w-4" />Members</TabsTrigger>
-                 <TabsTrigger value="teams"><UsersRound className="mr-2 h-4 w-4" />Teams</TabsTrigger> {/* Added Teams Trigger */}
+                 <TabsTrigger value="teams"><UsersRound className="mr-2 h-4 w-4" />Teams</TabsTrigger>
                  <TabsTrigger value="holidays"><CalendarDays className="mr-2 h-4 w-4" />Holidays</TabsTrigger>
                  <TabsTrigger value="reports"><BarChart className="mr-2 h-4 w-4" />Reports</TabsTrigger>
                </TabsList>
@@ -1299,6 +1389,16 @@ export default function Home() {
                       sprintData={selectedProject.sprintData}
                       projectName={selectedProject.name}
                       onDeleteSprint={handleDeleteSprint} // Pass delete handler
+                  />
+               </TabsContent>
+
+               <TabsContent value="backlog">
+                  <BacklogTab
+                    projectId={selectedProject.id}
+                    projectName={selectedProject.name}
+                    initialBacklog={selectedProject.backlog ?? []}
+                    onSaveBacklog={handleSaveBacklog}
+                    members={selectedProject.members ?? []} // Pass members for assignee dropdown
                   />
                </TabsContent>
 
@@ -1321,6 +1421,7 @@ export default function Home() {
                      members={selectedProject.members ?? []}
                      holidayCalendars={selectedProject.holidayCalendars ?? []}
                      teams={selectedProject.teams ?? []} // Pass teams data
+                     backlog={selectedProject.backlog ?? []} // Pass backlog data
                    />
                 </TabsContent>
 
