@@ -1,4 +1,24 @@
 
+
+// Represents a single task within a sprint plan
+export interface Task {
+  id: string; // Unique ID for the task item
+  description: string;
+  storyPoints?: number | string; // Can be number or empty string from input
+  assignee?: string;
+  status?: string; // e.g., 'To Do', 'In Progress', 'Done'
+}
+
+// Represents the planning data for a single sprint
+export interface SprintPlanning {
+  goal: string;
+  newTasks: Task[];
+  spilloverTasks: Task[];
+  definitionOfDone: string;
+  testingStrategy: string;
+}
+
+
 export interface SprintDetailItem {
   id: string; // Unique ID for the detail item
   ticketNumber: string;
@@ -16,6 +36,7 @@ export interface Sprint {
   endDate: string; // YYYY-MM-DD format, derived from startDate and duration
   duration: string; // e.g., "1 Week", "2 Weeks"
   details?: SprintDetailItem[]; // Optional array for detailed ticket info
+  planning?: SprintPlanning; // Optional object for planning details
 }
 
 // Represents the data specific to a single sprint cycle within a project
@@ -40,4 +61,13 @@ export const initialSprintData: SprintData = {
   sprints: [],
   totalStoryPoints: 0,
   daysInSprint: 0,
+};
+
+// Initial empty state for SprintPlanning within a sprint
+export const initialSprintPlanning: SprintPlanning = {
+  goal: '',
+  newTasks: [],
+  spilloverTasks: [],
+  definitionOfDone: '',
+  testingStrategy: '',
 };

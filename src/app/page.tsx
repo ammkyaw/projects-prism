@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -6,7 +7,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle } from 'lucide-react'; // Removed Edit icon
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen } from 'lucide-react'; // Added NotebookPen for Planning
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -16,10 +17,11 @@ import { Label } from "@/components/ui/label"
 import HomeTab from '@/components/home-tab';
 import EntryTab from '@/components/entry-tab';
 import ReportsTab from '@/components/reports-tab';
-// Removed import for EditSprintDetailsDialog
+import PlanningTab from '@/components/planning-tab'; // Import PlanningTab
 
-import type { SprintData, Sprint, AppData, Project, SprintDetailItem } from '@/types/sprint-data';
-import { initialSprintData } from '@/types/sprint-data'; // Import initialSprintData
+
+import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning } from '@/types/sprint-data';
+import { initialSprintData, initialSprintPlanning } from '@/types/sprint-data'; // Import initialSprintData and initialSprintPlanning
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO } from 'date-fns';
@@ -56,9 +58,6 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<string>("home");
   const [newProjectName, setNewProjectName] = useState<string>('');
   const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState<boolean>(false);
-  // Removed state for edit dialog and editing sprint
-  // const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
-  // const [editingSprint, setEditingSprint] = useState<Sprint | null>(null);
   const { toast } = useToast();
   const [resetManualFormKey, setResetManualFormKey] = useState(0); // State to trigger form reset
 
@@ -70,7 +69,7 @@ export default function Home() {
         const parsedData: AppData = JSON.parse(savedData);
         // Basic validation for the new structure
         if (Array.isArray(parsedData) && parsedData.every(p => p.id && p.name && p.sprintData && Array.isArray(p.sprintData.sprints))) {
-           // Ensure details array exists on loaded sprints
+           // Ensure details and planning arrays exist on loaded sprints
            const validatedData = parsedData.map(project => ({
               ...project,
               sprintData: {
@@ -78,14 +77,13 @@ export default function Home() {
                  sprints: project.sprintData.sprints.map(sprint => ({
                     ...sprint,
                     details: sprint.details ?? [], // Ensure details array exists
+                    planning: sprint.planning ?? initialSprintPlanning, // Ensure planning object exists
                  })),
               },
            }));
           setProjects(validatedData);
           // Select the first project if available, or null otherwise
           setSelectedProjectId(validatedData.length > 0 ? validatedData[0].id : null);
-          // Toast removed from here, let components handle specific load messages if needed
-          // toast({ title: "Data Loaded", description: "Loaded previously saved project data." });
         } else {
           console.warn("Invalid data found in localStorage.");
           localStorage.removeItem('appData'); // Clear invalid data
@@ -213,6 +211,7 @@ export default function Home() {
             committedPoints: commitment,
             completedPoints: delivered,
             details: [], // Initialize details array
+            planning: initialSprintPlanning, // Initialize planning object
             totalDays,
         });
     });
@@ -241,7 +240,7 @@ export default function Home() {
       const updatedProjects = prevProjects.map(p => {
          if (p.id === selectedProjectId) {
            projectNameForToast = p.name; // Get name for toast
-           // Preserve existing details when saving basic sprint data
+           // Preserve existing details and planning when saving basic sprint data
            const updatedSprints = newSprintData.sprints.map(newSprint => {
              const existingSprint = p.sprintData.sprints.find(
                oldSprint => oldSprint.sprintNumber === newSprint.sprintNumber
@@ -249,6 +248,7 @@ export default function Home() {
              return {
                ...newSprint,
                details: existingSprint?.details ?? [], // Keep old details or initialize empty array
+               planning: existingSprint?.planning ?? initialSprintPlanning, // Keep old planning or initialize
              };
            });
 
@@ -268,6 +268,38 @@ export default function Home() {
     toast({ title: "Success", description: `Sprint data saved to project '${projectNameForToast}'.` });
     setActiveTab("home"); // Switch to home tab after saving
     setResetManualFormKey(prevKey => prevKey + 1); // Trigger form reset
+  }, [selectedProjectId, toast]);
+
+
+  // Handler to save planning data for a specific sprint
+  const handleSavePlanning = useCallback((sprintNumber: number, planningData: SprintPlanning) => {
+     if (!selectedProjectId) {
+        toast({ variant: "destructive", title: "Error", description: "No project selected." });
+        return;
+     }
+     let projectNameForToast = 'N/A';
+     setProjects(prevProjects => {
+       const updatedProjects = prevProjects.map(p => {
+         if (p.id === selectedProjectId) {
+           projectNameForToast = p.name;
+           const updatedSprints = p.sprintData.sprints.map(s =>
+             s.sprintNumber === sprintNumber ? { ...s, planning: planningData } : s
+           );
+           return {
+             ...p,
+             sprintData: {
+               ...p.sprintData,
+               sprints: updatedSprints,
+             },
+           };
+         }
+         return p;
+       });
+       return updatedProjects;
+     });
+      toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber} in project '${projectNameForToast}'.` });
+      // Optionally switch tab or stay on planning tab
+      // setActiveTab("planning");
   }, [selectedProjectId, toast]);
 
 
@@ -314,6 +346,45 @@ export default function Home() {
            XLSX.utils.book_append_sheet(wb, wsDetails, 'Sprint Details');
        }
 
+       // Export planning data if it exists
+       const planningExists = selectedProject.sprintData.sprints.some(s => s.planning && (s.planning.goal || s.planning.newTasks.length > 0 || s.planning.spilloverTasks.length > 0 || s.planning.definitionOfDone || s.planning.testingStrategy));
+       if (planningExists) {
+           const planningSummaryData: any[] = [];
+           const planningTasksData: any[] = [];
+           selectedProject.sprintData.sprints.forEach(sprint => {
+               if (sprint.planning) {
+                   planningSummaryData.push({
+                      'SprintNumber': sprint.sprintNumber,
+                      'Goal': sprint.planning.goal,
+                      'DefinitionOfDone': sprint.planning.definitionOfDone,
+                      'TestingStrategy': sprint.planning.testingStrategy,
+                   });
+                   sprint.planning.newTasks.forEach(task => planningTasksData.push({
+                      'SprintNumber': sprint.sprintNumber,
+                      'Type': 'New',
+                      'TaskID': task.id,
+                      'Description': task.description,
+                      'StoryPoints': task.storyPoints,
+                      'Assignee': task.assignee,
+                      'Status': task.status,
+                   }));
+                    sprint.planning.spilloverTasks.forEach(task => planningTasksData.push({
+                      'SprintNumber': sprint.sprintNumber,
+                      'Type': 'Spillover',
+                      'TaskID': task.id,
+                      'Description': task.description,
+                      'StoryPoints': task.storyPoints,
+                      'Assignee': task.assignee,
+                      'Status': task.status,
+                   }));
+               }
+           });
+           const wsPlanningSummary = XLSX.utils.json_to_sheet(planningSummaryData);
+           XLSX.utils.book_append_sheet(wb, wsPlanningSummary, 'Planning Summary');
+            const wsPlanningTasks = XLSX.utils.json_to_sheet(planningTasksData);
+           XLSX.utils.book_append_sheet(wb, wsPlanningTasks, 'Planning Tasks');
+       }
+
 
       // Add project name to filename for clarity
       const projectNameSlug = selectedProject.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -353,10 +424,6 @@ export default function Home() {
     setIsNewProjectDialogOpen(false); // Close dialog
     toast({ title: "Project Created", description: `Project "${trimmedName}" created successfully.` });
   };
-
-  // Removed handleEditSprint function
-
-  // Removed handleUpdateSprintDetails function
 
 
   return (
@@ -436,9 +503,10 @@ export default function Home() {
       <main className="flex-1 p-6">
          {selectedProject ? (
              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-6">
+              <TabsList className="grid w-full grid-cols-4 mb-6"> {/* Updated grid-cols to 4 */}
                 <TabsTrigger value="home"><HomeIcon className="mr-2 h-4 w-4" />Home</TabsTrigger>
                 <TabsTrigger value="entry"><ListPlus className="mr-2 h-4 w-4" />Entry</TabsTrigger>
+                <TabsTrigger value="planning"><NotebookPen className="mr-2 h-4 w-4" />Planning</TabsTrigger> {/* Added Planning Trigger */}
                 <TabsTrigger value="reports"><BarChart className="mr-2 h-4 w-4" />Reports</TabsTrigger>
               </TabsList>
 
@@ -448,7 +516,6 @@ export default function Home() {
                      projectId={selectedProject.id} // Pass projectId
                      sprintData={selectedProject.sprintData}
                      projectName={selectedProject.name}
-                     // Removed onEditSprint prop
                  />
               </TabsContent>
 
@@ -462,6 +529,16 @@ export default function Home() {
                     projectName={selectedProject.name}
                 />
               </TabsContent>
+
+                <TabsContent value="planning">
+                   {/* Pass project's sprints and the save handler */}
+                  <PlanningTab
+                    sprints={selectedProject.sprintData.sprints}
+                    onSavePlanning={handleSavePlanning}
+                    projectName={selectedProject.name}
+                  />
+               </TabsContent>
+
 
               <TabsContent value="reports">
                  {/* Pass only the selected project's sprintData */}
@@ -478,7 +555,7 @@ export default function Home() {
          )}
       </main>
 
-      {/* Edit Sprint Details Dialog Removed */}
+
 
 
       <footer className="text-center p-4 text-xs text-muted-foreground border-t">
