@@ -10,7 +10,7 @@ import { format, parseISO, differenceInDays, addDays, isWithinInterval, getDay, 
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from "@/lib/utils";
 
-const weekendColor = 'hsl(var(--muted) / 0.2)'; // Very light gray for weekend background
+const weekendColor = 'hsl(0 0% 10% / 0.3)'; // Dark gray/black for weekend background
 const holidayColor = 'hsl(0 72% 51% / 0.2)'; // Darker Red for holiday background (adjust opacity/saturation as needed)
 const devTaskBarColor = 'hsl(var(--primary))'; // Use primary color (blue) for dev task bars
 const qaTaskBarColor = 'hsl(var(--accent))'; // Use accent color (gold/pink) for QA task bars
@@ -116,6 +116,13 @@ const getNextWorkingDay = (date: Date, memberHolidays: Set<string>): Date => {
 
 // --- End Helper Functions ---
 
+interface SprintTimelineChartProps {
+    tasks: Task[];
+    sprintStartDate: string | undefined;
+    sprintEndDate: string | undefined;
+    members: Member[];
+    holidayCalendars: HolidayCalendar[];
+}
 
 export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndDate, members, holidayCalendars }: SprintTimelineChartProps) {
    const [clientNow, setClientNow] = useState<Date | null>(null);
@@ -191,7 +198,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                  lastPhaseEndDateObj = devEndDateObj; // Update the end date for the next phase dependency
                  devPhaseValid = true;
-                 console.log(`Task ${index + 1} (${task.id}): Dev Phase - Start: ${format(devStartDateObj, 'yyyy-MM-dd')}, End: ${format(devEndDateObj, 'yyyy-MM-dd')}, Indices: [${devStartDayIndex}, ${devEndDayIndex}], Days: ${devWorkingDays}`);
+                 // console.log(`Task ${index + 1} (${task.id}): Dev Phase - Start: ${format(devStartDateObj, 'yyyy-MM-dd')}, End: ${format(devEndDateObj, 'yyyy-MM-dd')}, Indices: [${devStartDayIndex}, ${devEndDayIndex}], Days: ${devWorkingDays}`);
              } else {
                  // If dev days are 0 or null, the phase doesn't exist, lastPhaseEndDateObj remains devStartDateObj (the adjusted task start)
                  console.warn(`Task ${index + 1} (${task.id}): Dev estimate is zero or invalid. Skipping Dev phase.`);
@@ -219,7 +226,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                  lastPhaseEndDateObj = qaEndDateObj; // Update the end date for the next phase dependency
                  qaPhaseValid = true;
-                 console.log(`Task ${index + 1} (${task.id}): QA Phase - Start: ${format(qaStartDateObj, 'yyyy-MM-dd')}, End: ${format(qaEndDateObj, 'yyyy-MM-dd')}, Indices: [${qaStartDayIndex}, ${qaEndDayIndex}], Days: ${qaWorkingDays}`);
+                 // console.log(`Task ${index + 1} (${task.id}): QA Phase - Start: ${format(qaStartDateObj, 'yyyy-MM-dd')}, End: ${format(qaEndDateObj, 'yyyy-MM-dd')}, Indices: [${qaStartDayIndex}, ${qaEndDayIndex}], Days: ${qaWorkingDays}`);
              } else {
                   console.warn(`Task ${index + 1} (${task.id}): QA estimate is zero or invalid. Skipping QA phase.`);
                  // No change to lastPhaseEndDateObj here
@@ -246,7 +253,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                  // No update to lastPhaseEndDateObj needed after buffer
                 bufferPhaseValid = true;
-                 console.log(`Task ${index + 1} (${task.id}): Buffer Phase - Start: ${format(bufferStartDateObj, 'yyyy-MM-dd')}, End: ${format(bufferEndDateObj, 'yyyy-MM-dd')}, Indices: [${bufferStartDayIndex}, ${bufferEndDayIndex}], Days: ${bufferWorkingDays}`);
+                 // console.log(`Task ${index + 1} (${task.id}): Buffer Phase - Start: ${format(bufferStartDateObj, 'yyyy-MM-dd')}, End: ${format(bufferEndDateObj, 'yyyy-MM-dd')}, Indices: [${bufferStartDayIndex}, ${bufferEndDayIndex}], Days: ${bufferWorkingDays}`);
             } else {
                  console.warn(`Task ${index + 1} (${task.id}): Buffer estimate is zero or invalid. Skipping Buffer phase.`);
             }
@@ -274,12 +281,12 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 tooltip: tooltipContent,
                 assignee: task.assignee, // Pass assignee for potential holiday highlighting
             };
-             console.log(`Task ${index + 1} (${task.id}): Final Chart Data`, result);
+             // console.log(`Task ${index + 1} (${task.id}): Final Chart Data`, result);
              // Include if *any* range is valid
              return result.devRange || result.qaRange || result.bufferRange ? result : null;
         }).filter(item => item !== null);
 
-      console.log("Final Chart Data:", processedTasks);
+      // console.log("Final Chart Data:", processedTasks);
       return processedTasks as any[]; // Cast to any[] because TS struggles with the filtering type inference
 
   }, [tasks, sprintStartDate, sprintEndDate, clientNow, memberHolidayMap]); // Add clientNow and memberHolidayMap dependency
