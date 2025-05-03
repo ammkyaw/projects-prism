@@ -318,36 +318,37 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-             {/* Table Header */}
-              <div className="hidden md:grid grid-cols-[80px_1fr_1fr_1fr_1fr_2fr_auto] gap-2 items-center pb-2 border-b">
+             {/* Table Header - Visible only on medium screens and up */}
+              <div className="hidden md:grid grid-cols-[auto_minmax(130px,1fr)_minmax(130px,1fr)_auto_auto_minmax(150px,2fr)_auto] gap-x-3 items-center pb-2 border-b">
                  <Label className="text-xs font-medium text-muted-foreground">Sprint #*</Label>
                  <Label className="text-xs font-medium text-muted-foreground">Start Date*</Label>
                  <Label className="text-xs font-medium text-muted-foreground">Duration*</Label>
                  <Label className="text-xs font-medium text-muted-foreground text-right">Commitment*</Label>
                  <Label className="text-xs font-medium text-muted-foreground text-right">Delivered*</Label>
                  <Label className="text-xs font-medium text-muted-foreground">Details</Label>
-                 <div /> {/* Placeholder for delete button */}
+                 <div /> {/* Placeholder for delete button column */}
              </div>
 
             {/* Input Rows */}
-            <div className="space-y-3">
+            <div className="space-y-4 md:space-y-2">
               {rows.map((row, index) => (
-                 <div key={row.id} className="grid grid-cols-1 md:grid-cols-[80px_1fr_1fr_1fr_1fr_2fr_auto] gap-2 items-start">
+                 // Grid layout for each row - adapts for mobile and desktop
+                 <div key={row.id} className="grid grid-cols-2 md:grid-cols-[auto_minmax(130px,1fr)_minmax(130px,1fr)_auto_auto_minmax(150px,2fr)_auto] gap-x-3 gap-y-2 items-start">
                    {/* Sprint Number */}
-                   <div>
+                   <div className="md:col-span-1 col-span-1">
                      <Label htmlFor={`sprintNumber-${row.id}`} className="md:hidden text-xs font-medium">Sprint #*</Label>
-                     <Input id={`sprintNumber-${row.id}`} type="number" placeholder="#" value={row.sprintNumber} onChange={e => handleInputChange(row.id, 'sprintNumber', e.target.value)} required className="h-9 w-full md:w-auto"/> {/* Adjusted width */}
+                     <Input id={`sprintNumber-${row.id}`} type="number" placeholder="#" value={row.sprintNumber} onChange={e => handleInputChange(row.id, 'sprintNumber', e.target.value)} required className="h-9 w-full"/>
                    </div>
                    {/* Start Date */}
-                   <div>
+                   <div className="md:col-span-1 col-span-1">
                      <Label htmlFor={`startDate-${row.id}`} className="md:hidden text-xs font-medium">Start Date*</Label>
-                     <Input id={`startDate-${row.id}`} type="date" value={row.startDate} onChange={e => handleInputChange(row.id, 'startDate', e.target.value)} required className="h-9"/>
+                     <Input id={`startDate-${row.id}`} type="date" value={row.startDate} onChange={e => handleInputChange(row.id, 'startDate', e.target.value)} required className="h-9 w-full"/>
                    </div>
                    {/* Duration */}
-                    <div>
+                    <div className="md:col-span-1 col-span-2">
                          <Label htmlFor={`duration-${row.id}`} className="md:hidden text-xs font-medium">Duration*</Label>
                         <Select value={row.duration} onValueChange={(value) => handleDurationChange(row.id, value)} required>
-                          <SelectTrigger id={`duration-${row.id}`} className="h-9">
+                          <SelectTrigger id={`duration-${row.id}`} className="h-9 w-full">
                             <SelectValue placeholder="Select Duration" />
                           </SelectTrigger>
                           <SelectContent>
@@ -358,26 +359,27 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
                         </Select>
                     </div>
                    {/* Commitment */}
-                   <div>
+                   <div className="md:col-span-1 col-span-1">
                      <Label htmlFor={`commitment-${row.id}`} className="md:hidden text-xs font-medium">Commitment*</Label>
-                     <Input id={`commitment-${row.id}`} type="number" placeholder="Points" value={row.totalCommitment} onChange={e => handleInputChange(row.id, 'totalCommitment', e.target.value)} required className="h-9 text-right"/>
+                     <Input id={`commitment-${row.id}`} type="number" placeholder="Points" value={row.totalCommitment} onChange={e => handleInputChange(row.id, 'totalCommitment', e.target.value)} required className="h-9 text-right w-full"/>
                    </div>
                    {/* Delivered */}
-                   <div>
+                   <div className="md:col-span-1 col-span-1">
                      <Label htmlFor={`delivered-${row.id}`} className="md:hidden text-xs font-medium">Delivered*</Label>
-                     <Input id={`delivered-${row.id}`} type="number" placeholder="Points" value={row.totalDelivered} onChange={e => handleInputChange(row.id, 'totalDelivered', e.target.value)} required className="h-9 text-right"/>
+                     <Input id={`delivered-${row.id}`} type="number" placeholder="Points" value={row.totalDelivered} onChange={e => handleInputChange(row.id, 'totalDelivered', e.target.value)} required className="h-9 text-right w-full"/>
                    </div>
                    {/* Details */}
-                   <div>
+                   <div className="md:col-span-1 col-span-2">
                      <Label htmlFor={`details-${row.id}`} className="md:hidden text-xs font-medium">Details</Label>
-                     <Input id={`details-${row.id}`} placeholder="Optional notes..." value={row.details} onChange={e => handleInputChange(row.id, 'details', e.target.value)} className="h-9"/>
+                     <Input id={`details-${row.id}`} placeholder="Optional notes..." value={row.details} onChange={e => handleInputChange(row.id, 'details', e.target.value)} className="h-9 w-full"/>
                    </div>
 
-
-                   {/* Delete Button */}
-                   <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveRow(row.id)} className="h-9 w-9 text-muted-foreground hover:text-destructive self-center mt-1 md:mt-0" aria-label="Remove row">
-                     <Trash2 className="h-4 w-4" />
-                   </Button>
+                   {/* Delete Button - Aligned to the end on all screens */}
+                   <div className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
+                        <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveRow(row.id)} className="h-9 w-9 text-muted-foreground hover:text-destructive" aria-label="Remove row">
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                   </div>
                  </div>
               ))}
             </div>
