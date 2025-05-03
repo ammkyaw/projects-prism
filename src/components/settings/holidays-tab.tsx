@@ -616,4 +616,3 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
     </Card>
   );
 }
-

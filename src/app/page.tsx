@@ -19,7 +19,7 @@ import DashboardTab from '@/components/dashboard-tab'; // Renamed from HomeTab
 import BacklogTab from '@/components/backlog-tab';
 // PlanningTab is now part of Sprints section
 import MembersTab from '@/components/teams/members-tab'; // Updated path
-import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
+import HolidaysTab from '@/components/settings/holidays-tab'; // Corrected path
 import TeamsTab from '@/components/teams/teams-tab'; // Updated path
 import AddMembersDialog from '@/components/add-members-dialog';
 
@@ -28,7 +28,7 @@ import SprintSummaryTab from '@/components/sprints/sprint-summary-tab'; // Updat
 import SprintPlanningTab from '@/components/sprints/sprint-planning-tab'; // New component for planning
 import SprintRetrospectiveTab from '@/components/sprints/sprint-retrospective-tab'; // Updated path
 import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Updated path
-import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Updated path
+import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
 import AnalyticsChartsTab from '@/components/analytics-charts-tab';
 import AnalyticsReportsTab from '@/components/analytics-reports-tab'; // Updated path
 
@@ -86,7 +86,7 @@ export default function Home() {
   // Combined state for active main and sub tab. Format: "main/sub" or just "main"
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [newProjectName, setNewProjectName] = useState<string>('');
-  const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState<boolean>(isSprintStatus==='Completed');
+  const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState<boolean>(false); // Set default to false
   const [isAddMembersDialogOpen, setIsAddMembersDialogOpen] = useState<boolean>(false);
   const [newlyCreatedProjectId, setNewlyCreatedProjectId] = useState<string | null>(null); // Track ID for Add Members dialog
   const { toast } = useToast();
@@ -161,9 +161,9 @@ export default function Home() {
                projectData.members.forEach((memberData: any) => {
                  if (
                    memberData && typeof memberData === 'object' &&
-                   memberData.id && typeof memberData.id !== 'string' &&
-                   memberData.name && typeof memberData.name !== 'string' &&
-                   memberData.role && typeof memberData.role !== 'string'
+                   memberData.id && typeof memberData.id === 'string' && // Corrected type check
+                   memberData.name && typeof memberData.name === 'string' &&
+                   memberData.role && typeof memberData.role === 'string'
                  ) {
                    validatedMembers.push({
                      id: memberData.id,
@@ -938,7 +938,7 @@ export default function Home() {
           toast({ title: "Members Added", description: `Members added to project '${newProjectName}'.` });
           setIsAddMembersDialogOpen(false); // Close the dialog
           setNewlyCreatedProjectId(null); // Reset the tracked ID
-       }, 0);
+       }, 10); // Use small timeout
    }, [newlyCreatedProjectId, toast, projects]);
 
   // Handler to delete a sprint
@@ -1530,7 +1530,3 @@ export default function Home() {
     </div>
   );
 }
-
-
-
-
