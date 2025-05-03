@@ -1,5 +1,4 @@
 
-
 import type { SprintData, Sprint } from '@/types/sprint-data'; // Import Sprint type
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -64,7 +63,7 @@ export default function HomeTab({ sprintData, projectName, projectId, onDeleteSp
                     <TableHead>Status</TableHead>{/* Add Status Header */}
                     <TableHead className="text-right">Commitment</TableHead>
                     <TableHead className="text-right">Delivered</TableHead>
-                    <TableHead className="w-[100px] text-center">Actions</TableHead> {/* Adjusted width for two icons */}
+                    <TableHead className="w-[100px] text-center">Actions</TableHead>{/* Adjusted width for two icons */}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -104,10 +103,9 @@ export default function HomeTab({ sprintData, projectName, projectId, onDeleteSp
                            >
                              <a><Edit className="h-4 w-4" /></a>
                            </Button>
-                         </Link>
-
-                         {/* Delete Button with Confirmation */}
-                         <AlertDialog>
+                         </Link>{/*
+                         Delete Button with Confirmation
+                         */}<AlertDialog>
                            <AlertDialogTrigger asChild>
                               <Button
                                 variant="ghost"
