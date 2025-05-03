@@ -20,7 +20,7 @@ interface ManualInputFormProps {
   initialData?: Sprint[]; // Optional initial sprint data
 }
 
-// Updated row structure for manual entry
+// Updated row structure for manual entry - Removed details
 interface ManualEntryRow {
   id: number; // Use for React key, persistent across renders
   sprintNumber: string;
@@ -28,7 +28,7 @@ interface ManualEntryRow {
   duration: string; // e.g., "1 Week", "2 Weeks"
   totalCommitment: string;
   totalDelivered: string;
-  details: string;
+  // removed details: string;
 }
 
 const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
@@ -60,7 +60,7 @@ const calculateSprintMetrics = (startDateStr: string, duration: string): { total
     }
 };
 
-// Helper to convert Sprint to ManualEntryRow
+// Helper to convert Sprint to ManualEntryRow - Removed details
 const sprintToRow = (sprint: Sprint, index: number): ManualEntryRow => ({
   id: Date.now() + index, // Assign a unique ID for the row
   sprintNumber: sprint.sprintNumber.toString(),
@@ -68,8 +68,20 @@ const sprintToRow = (sprint: Sprint, index: number): ManualEntryRow => ({
   duration: sprint.duration,
   totalCommitment: sprint.committedPoints.toString(),
   totalDelivered: sprint.completedPoints.toString(),
-  details: sprint.details || '',
+  // removed details: sprint.details || '',
 });
+
+// Helper to create an empty row - Removed details
+const createEmptyRow = (): ManualEntryRow => ({
+    id: Date.now(),
+    sprintNumber: '',
+    startDate: '',
+    duration: '',
+    totalCommitment: '',
+    totalDelivered: '',
+    // removed details: '',
+});
+
 
 export default function ManualInputForm({ onSubmit, initialData = [] }: ManualInputFormProps) {
   const [rows, setRows] = useState<ManualEntryRow[]>([]);
@@ -82,19 +94,19 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
       setRows(initialData.map(sprintToRow));
     } else {
       // Ensure there's always at least one empty row if initialData is empty
-      setRows([{ id: Date.now(), sprintNumber: '', startDate: '', duration: '', totalCommitment: '', totalDelivered: '', details: '' }]);
+      setRows([createEmptyRow()]);
     }
   }, [initialData]); // Re-run effect if initialData changes
 
   const handleAddRow = () => {
-     setRows([...rows, { id: Date.now(), sprintNumber: '', startDate: '', duration: '', totalCommitment: '', totalDelivered: '', details: '' }]);
+     setRows([...rows, createEmptyRow()]);
   };
 
   const handleRemoveRow = (id: number) => {
     setRows(prevRows => {
        const newRows = prevRows.filter(row => row.id !== id);
        // If removing the last row, add a new empty one back
-       return newRows.length > 0 ? newRows : [{ id: Date.now(), sprintNumber: '', startDate: '', duration: '', totalCommitment: '', totalDelivered: '', details: '' }];
+       return newRows.length > 0 ? newRows : [createEmptyRow()];
     });
   };
 
@@ -117,7 +129,8 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
     }
 
     const lines = pasteData.trim().split('\n');
-    const expectedHeaders = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered', 'Details'];
+    // Removed 'Details' from expectedHeaders
+    const expectedHeaders = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered'];
     const requiredHeaders = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered'];
     const newRows: ManualEntryRow[] = [];
     let headerLine = '';
@@ -173,7 +186,7 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
                     case 'Duration': newRow.duration = value; break;
                     case 'TotalCommitment': newRow.totalCommitment = value; break;
                     case 'TotalDelivered': newRow.totalDelivered = value; break;
-                    case 'Details': newRow.details = value; break;
+                    // case 'Details': newRow.details = value; break; // Removed details assignment
                 }
              }
          });
@@ -206,8 +219,8 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
     const sprintNumbers = new Set<number>(); // To check for duplicate sprint numbers
 
     rows.forEach((row, index) => {
-        // Skip completely empty rows silently
-        if (!row.sprintNumber && !row.startDate && !row.duration && !row.totalCommitment && !row.totalDelivered && !row.details) {
+        // Skip completely empty rows silently - Removed details check
+        if (!row.sprintNumber && !row.startDate && !row.duration && !row.totalCommitment && !row.totalDelivered) {
             return;
         }
 
@@ -216,7 +229,7 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
         const duration = row.duration.trim();
         const commitment = parseInt(row.totalCommitment, 10);
         const delivered = parseInt(row.totalDelivered, 10);
-        const details = row.details?.trim();
+        // Removed details: const details = row.details?.trim();
 
         let rowErrors: string[] = [];
         if (isNaN(sprintNumber) || sprintNumber <= 0) rowErrors.push("Invalid Sprint #");
@@ -258,7 +271,7 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
             duration,
             committedPoints: commitment,
             completedPoints: delivered,
-            details,
+            // removed details,
             totalDays,
             endDate
         });
@@ -294,11 +307,13 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
        <Card>
           <CardHeader>
               <CardTitle>Paste Data (Optional)</CardTitle>
-               <CardDescription>Paste tab-separated data to replace current entries. Columns: SprintNumber, StartDate (YYYY-MM-DD), Duration ('1 Week', '2 Weeks', etc.), TotalCommitment, TotalDelivered, Details (optional).</CardDescription>
+              {/* Updated description for paste area */}
+               <CardDescription>Paste tab-separated data to replace current entries. Columns: SprintNumber, StartDate (YYYY-MM-DD), Duration ('1 Week', '2 Weeks', etc.), TotalCommitment, TotalDelivered.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <Textarea
-               placeholder="SprintNumber	StartDate	Duration	TotalCommitment	TotalDelivered	Details..."
+               // Updated placeholder
+               placeholder="SprintNumber	StartDate	Duration	TotalCommitment	TotalDelivered"
                value={pasteData}
                onChange={handlePasteChange}
                rows={5}
@@ -319,23 +334,22 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
              {/* Table Header - Visible only on medium screens and up */}
-              {/* Grid Definition: Adjust column sizes explicitly */}
-              <div className="hidden md:grid grid-cols-[80px_140px_140px_100px_100px_1fr_40px] gap-x-3 items-center pb-2 border-b">
+              {/* Adjusted Grid Definition: Removed 1fr for details, kept 40px for delete */}
+              <div className="hidden md:grid grid-cols-[80px_140px_140px_100px_100px_40px] gap-x-3 items-center pb-2 border-b">
                  <Label className="text-xs font-medium text-muted-foreground">Sprint #*</Label>
                  <Label className="text-xs font-medium text-muted-foreground">Start Date*</Label>
                  <Label className="text-xs font-medium text-muted-foreground">Duration*</Label>
                  <Label className="text-xs font-medium text-muted-foreground text-right">Commitment*</Label>
                  <Label className="text-xs font-medium text-muted-foreground text-right">Delivered*</Label>
-                 <Label className="text-xs font-medium text-muted-foreground">Details</Label>
+                 {/* Removed Details Label */}
                  <div /> {/* Placeholder for delete button column */}
              </div>
 
             {/* Input Rows */}
             <div className="space-y-4 md:space-y-2">
               {rows.map((row, index) => (
-                 // Grid layout for each row - adapts for mobile and desktop
-                 // Adjusted grid definition to match header
-                 <div key={row.id} className="grid grid-cols-2 md:grid-cols-[80px_140px_140px_100px_100px_1fr_40px] gap-x-3 gap-y-2 items-start">
+                 // Adjusted grid layout for each row - removed details column
+                 <div key={row.id} className="grid grid-cols-2 md:grid-cols-[80px_140px_140px_100px_100px_40px] gap-x-3 gap-y-2 items-start">
                    {/* Sprint Number */}
                    <div className="md:col-span-1 col-span-1">
                      <Label htmlFor={`sprintNumber-${row.id}`} className="md:hidden text-xs font-medium">Sprint #*</Label>
@@ -370,13 +384,10 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
                      <Label htmlFor={`delivered-${row.id}`} className="md:hidden text-xs font-medium">Delivered*</Label>
                      <Input id={`delivered-${row.id}`} type="number" placeholder="Points" value={row.totalDelivered} onChange={e => handleInputChange(row.id, 'totalDelivered', e.target.value)} required className="h-9 text-right w-full"/>
                    </div>
-                   {/* Details */}
-                   <div className="md:col-span-1 col-span-2">
-                     <Label htmlFor={`details-${row.id}`} className="md:hidden text-xs font-medium">Details</Label>
-                     <Input id={`details-${row.id}`} placeholder="Optional notes..." value={row.details} onChange={e => handleInputChange(row.id, 'details', e.target.value)} className="h-9 w-full"/>
-                   </div>
+                   {/* Removed Details Input */}
 
                    {/* Delete Button - Aligned to the end on all screens */}
+                   {/* Adjusted col-span for mobile to 2 */}
                    <div className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
                         <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveRow(row.id)} className="h-9 w-9 text-muted-foreground hover:text-destructive" aria-label="Remove row">
                             <Trash2 className="h-4 w-4" />
@@ -402,4 +413,3 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
     </div>
   );
 }
-

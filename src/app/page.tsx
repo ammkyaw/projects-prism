@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle } from 'lucide-react';
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, Edit } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -125,7 +125,7 @@ export default function Home() {
         const duration = row.Duration?.toString().trim();
         const commitment = parseInt(row.TotalCommitment, 10);
         const delivered = parseInt(row.TotalDelivered, 10);
-        const details = row.Details?.toString().trim();
+        // Removed details parsing: const details = row.Details?.toString().trim();
 
         if (isNaN(sprintNumber) || !startDateValue || !duration || isNaN(commitment) || isNaN(delivered)) {
             console.warn(`Skipping invalid row ${rowIndex + 2}: Missing essential data.`, row);
@@ -180,7 +180,7 @@ export default function Home() {
             duration,
             committedPoints: commitment,
             completedPoints: delivered,
-            details,
+            // removed details,
             totalDays,
         });
     });
@@ -236,7 +236,7 @@ export default function Home() {
          'Duration': s.duration,
          'TotalCommitment': s.committedPoints,
          'TotalDelivered': s.completedPoints,
-         'Details': s.details || '',
+         // Removed 'Details': s.details || '',
        }));
        const wsSummary = XLSX.utils.json_to_sheet(summaryData);
        XLSX.utils.book_append_sheet(wb, wsSummary, 'Sprint Data');
@@ -278,6 +278,17 @@ export default function Home() {
     setNewProjectName(''); // Clear input
     setIsNewProjectDialogOpen(false); // Close dialog
     toast({ title: "Project Created", description: `Project "${trimmedName}" created successfully.` });
+  };
+
+  // Handle clicking the Edit button on the Home tab
+  const handleEditSprint = (sprintNumber: number) => {
+     // Simply switch to the Entry tab. The ManualInputForm will load the current data.
+     // Future enhancement: Could scroll to the specific row in the Entry tab.
+     setActiveTab("entry");
+     toast({
+        title: "Editing Sprint",
+        description: `Switched to Entry tab to edit Sprint ${sprintNumber}. Find the row and make your changes.`,
+     });
   };
 
   return (
@@ -360,8 +371,12 @@ export default function Home() {
               </TabsList>
 
               <TabsContent value="home">
-                 {/* Pass only the selected project's sprintData */}
-                 <HomeTab sprintData={selectedProject.sprintData} projectName={selectedProject.name} />
+                 {/* Pass only the selected project's sprintData and the edit handler */}
+                 <HomeTab
+                     sprintData={selectedProject.sprintData}
+                     projectName={selectedProject.name}
+                     onEditSprint={handleEditSprint} // Pass the handler
+                 />
               </TabsContent>
 
               <TabsContent value="entry">
@@ -395,4 +410,3 @@ export default function Home() {
     </div>
   );
 }
-

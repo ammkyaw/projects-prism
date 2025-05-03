@@ -38,7 +38,7 @@ export default function EntryTab({ onSaveSprints, initialSprintData, parseSprint
              <CardTitle>Data Entry for Project: {projectName}</CardTitle>
              <CardDescription>
                 Enter or paste sprint data for the selected project. Click 'Save' when done.
-                Required columns: SprintNumber, StartDate (YYYY-MM-DD), Duration (e.g., '2 Weeks'), TotalCommitment, TotalDelivered. Optional: Details.
+                Required columns: SprintNumber, StartDate (YYYY-MM-DD), Duration (e.g., '2 Weeks'), TotalCommitment, TotalDelivered.
              </CardDescription>
           </CardHeader>
           <CardContent>

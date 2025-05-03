@@ -2,14 +2,16 @@
 import type { SprintData } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Info } from 'lucide-react'; // Keep Info icon for empty state
+import { Button } from '@/components/ui/button';
+import { Info, Edit } from 'lucide-react'; // Keep Info icon, Add Edit icon
 
 interface HomeTabProps {
   sprintData: SprintData | null;
   projectName: string; // Add project name prop
+  onEditSprint?: (sprintNumber: number) => void; // Optional callback for edit
 }
 
-export default function HomeTab({ sprintData, projectName }: HomeTabProps) {
+export default function HomeTab({ sprintData, projectName, onEditSprint }: HomeTabProps) {
   return (
     <Card>
       <CardHeader>
@@ -32,10 +34,10 @@ export default function HomeTab({ sprintData, projectName }: HomeTabProps) {
                     <TableHead className="w-[100px]">Sprint #</TableHead>
                     <TableHead>Start Date</TableHead>
                     <TableHead>End Date</TableHead>
-                    {/* Removed Duration */}
                     <TableHead className="text-right">Commitment</TableHead>
                     <TableHead className="text-right">Delivered</TableHead>
-                     <TableHead>Details</TableHead>
+                    {/* Removed Details header */}
+                    <TableHead className="w-[50px]">Actions</TableHead> {/* Added Actions header */}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -46,7 +48,18 @@ export default function HomeTab({ sprintData, projectName }: HomeTabProps) {
                       <TableCell>{sprint.endDate || 'N/A'}</TableCell>
                       <TableCell className="text-right">{sprint.committedPoints}</TableCell>
                       <TableCell className="text-right">{sprint.completedPoints}</TableCell>
-                       <TableCell>{sprint.details || '-'}</TableCell>
+                      {/* Removed Details cell */}
+                       {/* Added Actions cell with Edit button */}
+                       <TableCell>
+                         <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onEditSprint?.(sprint.sprintNumber)} // Call callback on click
+                            aria-label={`Edit Sprint ${sprint.sprintNumber}`}
+                         >
+                           <Edit className="h-4 w-4" />
+                         </Button>
+                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

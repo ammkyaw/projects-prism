@@ -7,7 +7,7 @@ export interface Sprint {
   startDate: string; // YYYY-MM-DD format
   endDate: string; // YYYY-MM-DD format, derived from startDate and duration
   duration: string; // e.g., "1 Week", "2 Weeks"
-  details?: string; // Optional details field
+  // removed details?: string;
 }
 
 // Represents the data specific to a single sprint cycle within a project
