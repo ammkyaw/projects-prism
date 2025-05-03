@@ -7,25 +7,26 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2 } from 'lucide-react'; // Added Users, NotebookPen, Trash2
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays } from 'lucide-react'; // Added CalendarDays
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Import AlertDialog components
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 
 import HomeTab from '@/components/home-tab';
 import EntryTab from '@/components/entry-tab';
 import ReportsTab from '@/components/reports-tab';
 import PlanningTab from '@/components/planning-tab';
-import MembersTab from '@/components/members-tab'; // Import MembersTab
-import AddMembersDialog from '@/components/add-members-dialog'; // Import AddMembersDialog
+import MembersTab from '@/components/members-tab';
+import HolidaysTab from '@/components/holidays-tab'; // Import HolidaysTab
+import AddMembersDialog from '@/components/add-members-dialog';
 
 
-import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task } from '@/types/sprint-data'; // Added Task type
-import { initialSprintData, initialSprintPlanning } from '@/types/sprint-data'; // Import initialSprintData and initialSprintPlanning
+import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar } from '@/types/sprint-data'; // Added Task, HolidayCalendar types
+import { initialSprintData, initialSprintPlanning } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isPast } from 'date-fns';
@@ -62,7 +63,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<string>("home");
   const [newProjectName, setNewProjectName] = useState<string>('');
   const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState<boolean>(false);
-  const [isAddMembersDialogOpen, setIsAddMembersDialogOpen] = useState<boolean>(false); // State for Add Members dialog
+  const [isAddMembersDialogOpen, setIsAddMembersDialogOpen] = useState<boolean>(false);
   const [newlyCreatedProjectId, setNewlyCreatedProjectId] = useState<string | null>(null); // Track ID for Add Members dialog
   const { toast } = useToast();
   const [resetManualFormKey, setResetManualFormKey] = useState(0); // State to trigger form reset
@@ -80,9 +81,9 @@ export default function Home() {
     if (savedData) {
       try {
         const parsedData: AppData = JSON.parse(savedData);
-        // Basic validation for the new structure including members and status
+        // Basic validation for the new structure including members, status, and holidayCalendars
         if (Array.isArray(parsedData) && parsedData.every(p => p.id && p.name && p.sprintData && Array.isArray(p.sprintData.sprints) && Array.isArray(p.members))) {
-           // Ensure details, planning arrays, members, and status exist
+           // Ensure details, planning arrays, members, holidayCalendars, and status exist
            const validatedData = parsedData.map(project => ({
               ...project,
               sprintData: {
@@ -104,7 +105,8 @@ export default function Home() {
                     };
                  }),
               },
-              members: project.members ?? [], // Ensure members array exists
+              members: project.members?.map(m => ({ ...m, holidayCalendarId: m.holidayCalendarId ?? null })) ?? [], // Ensure members array exists and holidayCalendarId
+              holidayCalendars: project.holidayCalendars ?? [], // Ensure holidayCalendars array exists
            }));
           setProjects(validatedData);
           setSelectedProjectId(validatedData.length > 0 ? validatedData[0].id : null);
@@ -461,6 +463,35 @@ export default function Home() {
     toast({ title: "Success", description: `Members updated for project '${projectNameForToast}'.` });
   }, [selectedProjectId, toast]);
 
+   // Handler to save holiday calendars for the *selected* project
+   const handleSaveHolidayCalendars = useCallback((updatedCalendars: HolidayCalendar[]) => {
+       if (!selectedProjectId) {
+           toast({ variant: "destructive", title: "Error", description: "No project selected." });
+           return;
+       }
+       let projectNameForToast = 'N/A';
+       setProjects(prevProjects => {
+           const updatedProjects = prevProjects.map(p => {
+               if (p.id === selectedProjectId) {
+                   projectNameForToast = p.name;
+                    // Also need to check if any member's assigned calendar was deleted
+                    const updatedMembers = (p.members || []).map(member => {
+                        if (member.holidayCalendarId && !updatedCalendars.some(cal => cal.id === member.holidayCalendarId)) {
+                           toast({ variant: "warning", title: "Calendar Unassigned", description: `Holiday calendar assigned to ${member.name} was deleted.` });
+                           return { ...member, holidayCalendarId: null }; // Unassign deleted calendar
+                        }
+                        return member;
+                    });
+
+                   return { ...p, holidayCalendars: updatedCalendars, members: updatedMembers };
+               }
+               return p;
+           });
+           return updatedProjects;
+       });
+       toast({ title: "Success", description: `Holiday calendars updated for project '${projectNameForToast}'.` });
+   }, [selectedProjectId, toast]);
+
   // Handler to add members to the *newly created* project (from dialog)
    const handleAddMembersToNewProject = useCallback((addedMembers: Member[]) => {
        if (!newlyCreatedProjectId) return;
@@ -512,7 +543,7 @@ export default function Home() {
 
   // Export data for the currently selected project
   const handleExport = () => {
-    if (!selectedProject || !selectedProject.sprintData || selectedProject.sprintData.sprints.length === 0) {
+    if (!selectedProject || (!selectedProject.sprintData.sprints.length && !selectedProject.members.length && !selectedProject.holidayCalendars?.length)) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -524,20 +555,22 @@ export default function Home() {
       const wb = XLSX.utils.book_new();
 
        // Sprint Summary Sheet
-       const summaryData = selectedProject.sprintData.sprints.map(s => ({
-         'SprintNumber': s.sprintNumber,
-         'StartDate': s.startDate,
-         'EndDate': s.endDate,
-         'Duration': s.duration,
-         'Status': s.status, // Include status
-         'TotalCommitment': s.committedPoints,
-         'TotalDelivered': s.completedPoints,
-       }));
-       const wsSummary = XLSX.utils.json_to_sheet(summaryData);
-       XLSX.utils.book_append_sheet(wb, wsSummary, 'Sprint Summary');
+       if (selectedProject.sprintData?.sprints?.length > 0) {
+           const summaryData = selectedProject.sprintData.sprints.map(s => ({
+             'SprintNumber': s.sprintNumber,
+             'StartDate': s.startDate,
+             'EndDate': s.endDate,
+             'Duration': s.duration,
+             'Status': s.status,
+             'TotalCommitment': s.committedPoints,
+             'TotalDelivered': s.completedPoints,
+           }));
+           const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+           XLSX.utils.book_append_sheet(wb, wsSummary, 'Sprint Summary');
+       }
 
        // Sprint Details Sheet
-       const detailsExist = selectedProject.sprintData.sprints.some(s => s.details && s.details.length > 0);
+       const detailsExist = selectedProject.sprintData?.sprints?.some(s => s.details && s.details.length > 0);
        if (detailsExist) {
            const allDetails: any[] = [];
            selectedProject.sprintData.sprints.forEach(sprint => {
@@ -545,7 +578,7 @@ export default function Home() {
                    allDetails.push({
                        'SprintNumber': sprint.sprintNumber,
                        'TicketNumber': detail.ticketNumber,
-                       'Developer': detail.developer, // This is member name
+                       'Developer': detail.developer,
                        'StoryPoints': detail.storyPoints,
                        'DevelopmentTime': detail.devTime,
                    });
@@ -558,7 +591,7 @@ export default function Home() {
        }
 
        // Planning Sheets (Summary and Tasks)
-       const planningExists = selectedProject.sprintData.sprints.some(s => s.planning && (s.planning.goal || s.planning.newTasks.length > 0 || s.planning.spilloverTasks.length > 0 || s.planning.definitionOfDone || s.planning.testingStrategy));
+       const planningExists = selectedProject.sprintData?.sprints?.some(s => s.planning && (s.planning.goal || s.planning.newTasks.length > 0 || s.planning.spilloverTasks.length > 0 || s.planning.definitionOfDone || s.planning.testingStrategy));
        if (planningExists) {
            const planningSummaryData: any[] = [];
            const planningTasksData: any[] = [];
@@ -571,18 +604,20 @@ export default function Home() {
                       'TestingStrategy': sprint.planning.testingStrategy,
                    });
                    // Helper function to map task to export row
-                   const mapTaskToRow = (task: SprintDetailItem | Task, type: 'New' | 'Spillover') => ({
+                   const mapTaskToRow = (task: Task, type: 'New' | 'Spillover') => ({
                       'SprintNumber': sprint.sprintNumber,
                       'Type': type,
                       'TaskID': task.id,
-                      'Description': 'description' in task ? task.description : '', // Handle both Task and potential legacy SprintDetailItem if needed
-                      'StoryPoints': 'storyPoints' in task ? task.storyPoints : undefined,
-                      'Est. Time': 'estimatedTime' in task ? task.estimatedTime : undefined, // Export Est Time
-                      'Assignee': 'assignee' in task ? task.assignee : ('developer' in task ? task.developer : undefined), // Handle assignee/developer
-                      'Status': 'status' in task ? task.status : undefined,
-                      'Start Date': 'startDate' in task ? task.startDate : undefined, // Export Start Date
-                      'TicketNumber': 'ticketNumber' in task ? task.ticketNumber : undefined, // Include if exists
-                      'DevelopmentTime': 'devTime' in task ? task.devTime : undefined, // Include if exists (legacy)
+                      'Description': task.description,
+                      'StoryPoints': task.storyPoints,
+                      'DevEstTime': task.devEstimatedTime, // Updated field name
+                      'QAEstTime': task.qaEstimatedTime, // Added field
+                      'BufferTime': task.bufferTime, // Added field
+                      'Assignee': task.assignee,
+                      'Reviewer': task.reviewer, // Added field
+                      'Status': task.status,
+                      'StartDate': task.startDate,
+                      'TicketNumber': task.ticketNumber, // Include if exists (legacy)
                    });
 
                    sprint.planning.newTasks.forEach(task => planningTasksData.push(mapTaskToRow(task, 'New')));
@@ -605,9 +640,40 @@ export default function Home() {
                 'MemberID': m.id,
                 'Name': m.name,
                 'Role': m.role,
+                'HolidayCalendarID': m.holidayCalendarId, // Added holiday calendar ID
             }));
             const wsMembers = XLSX.utils.json_to_sheet(membersData);
             XLSX.utils.book_append_sheet(wb, wsMembers, 'Members');
+       }
+
+       // Holiday Calendars Sheet
+       if (selectedProject.holidayCalendars && selectedProject.holidayCalendars.length > 0) {
+           const calendarsData: any[] = [];
+           selectedProject.holidayCalendars.forEach(cal => {
+               cal.holidays.forEach(holiday => {
+                  calendarsData.push({
+                      'CalendarID': cal.id,
+                      'CalendarName': cal.name,
+                      'CountryCode': cal.countryCode,
+                      'HolidayID': holiday.id,
+                      'HolidayName': holiday.name,
+                      'HolidayDate': holiday.date,
+                  });
+               });
+               // Add row for calendar itself if it has no holidays
+               if (cal.holidays.length === 0) {
+                   calendarsData.push({
+                       'CalendarID': cal.id,
+                       'CalendarName': cal.name,
+                       'CountryCode': cal.countryCode,
+                       'HolidayID': '',
+                       'HolidayName': '',
+                       'HolidayDate': '',
+                   });
+               }
+           });
+            const wsHolidays = XLSX.utils.json_to_sheet(calendarsData);
+            XLSX.utils.book_append_sheet(wb, wsHolidays, 'Holiday Calendars');
        }
 
 
@@ -641,6 +707,7 @@ export default function Home() {
       name: trimmedName,
       sprintData: initialSprintData,
       members: [], // Initialize with empty members array
+      holidayCalendars: [], // Initialize with empty holiday calendars
     };
 
     setProjects(prevProjects => [...prevProjects, newProject]);
@@ -718,7 +785,7 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-4">
-          {selectedProject && (selectedProject.sprintData.sprints.length > 0 || selectedProject.members.length > 0) && (
+          {selectedProject && (selectedProject.sprintData.sprints.length > 0 || selectedProject.members.length > 0 || selectedProject.holidayCalendars?.length > 0) && (
             <Button onClick={handleExport} variant="outline" size="sm">
               <Download className="mr-2 h-4 w-4" />
               Export Project Data
@@ -740,11 +807,12 @@ export default function Home() {
       <main className="flex-1 p-6">
          {selectedProject ? (
              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-5 mb-6"> {/* Updated grid-cols to 5 */}
+              <TabsList className="grid w-full grid-cols-6 mb-6"> {/* Updated grid-cols to 6 */}
                 <TabsTrigger value="home"><HomeIcon className="mr-2 h-4 w-4" />Home</TabsTrigger>
                 <TabsTrigger value="entry"><ListPlus className="mr-2 h-4 w-4" />Entry (Legacy)</TabsTrigger>
                 <TabsTrigger value="planning"><NotebookPen className="mr-2 h-4 w-4" />Planning</TabsTrigger>
-                <TabsTrigger value="members"><Users className="mr-2 h-4 w-4" />Members</TabsTrigger> {/* Added Members Trigger */}
+                <TabsTrigger value="members"><Users className="mr-2 h-4 w-4" />Members</TabsTrigger>
+                <TabsTrigger value="holidays"><CalendarDays className="mr-2 h-4 w-4" />Holidays</TabsTrigger> {/* Added Holidays Trigger */}
                 <TabsTrigger value="reports"><BarChart className="mr-2 h-4 w-4" />Reports</TabsTrigger>
               </TabsList>
 
@@ -771,9 +839,10 @@ export default function Home() {
                   <PlanningTab
                     sprints={selectedProject.sprintData.sprints}
                     onSavePlanning={handleSavePlanningAndUpdateStatus}
-                    onCreateAndPlanSprint={handleCreateAndPlanSprint} // Pass new handler
+                    onCreateAndPlanSprint={handleCreateAndPlanSprint}
                     projectName={selectedProject.name}
                     members={selectedProject.members}
+                    holidayCalendars={selectedProject.holidayCalendars ?? []} // Pass holiday calendars
                   />
                </TabsContent>
 
@@ -783,6 +852,16 @@ export default function Home() {
                    projectName={selectedProject.name}
                    initialMembers={selectedProject.members}
                    onSaveMembers={handleSaveMembers}
+                   holidayCalendars={selectedProject.holidayCalendars ?? []} // Pass holiday calendars
+                 />
+               </TabsContent>
+
+               <TabsContent value="holidays">
+                 <HolidaysTab
+                   projectId={selectedProject.id}
+                   projectName={selectedProject.name}
+                   initialCalendars={selectedProject.holidayCalendars ?? []}
+                   onSaveCalendars={handleSaveHolidayCalendars}
                  />
                </TabsContent>
 

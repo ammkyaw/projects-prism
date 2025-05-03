@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -8,8 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Trash2, Users } from 'lucide-react';
-import type { Member } from '@/types/sprint-data';
+import { PlusCircle, Trash2, Users, CalendarDays } from 'lucide-react'; // Added CalendarDays
+import type { Member, HolidayCalendar } from '@/types/sprint-data'; // Import HolidayCalendar
 import { predefinedRoles } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ interface MembersTabProps {
   projectName: string;
   initialMembers: Member[];
   onSaveMembers: (members: Member[]) => void;
+  holidayCalendars: HolidayCalendar[]; // Add holiday calendars prop
 }
 
 // Internal state structure for editing rows
@@ -31,9 +33,10 @@ const createEmptyMemberRow = (): MemberRow => ({
   id: '', // Will be assigned based on internal ID or existing ID
   name: '',
   role: '',
+  holidayCalendarId: null, // Initialize with no calendar assigned
 });
 
-export default function MembersTab({ projectId, projectName, initialMembers, onSaveMembers }: MembersTabProps) {
+export default function MembersTab({ projectId, projectName, initialMembers, onSaveMembers, holidayCalendars }: MembersTabProps) {
   const [memberRows, setMemberRows] = useState<MemberRow[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const { toast } = useToast();
@@ -43,6 +46,7 @@ export default function MembersTab({ projectId, projectName, initialMembers, onS
     setMemberRows(
       initialMembers.map((member, index) => ({
         ...member,
+        holidayCalendarId: member.holidayCalendarId ?? null, // Ensure it's null if undefined
         _internalId: member.id || `initial_${index}_${Date.now()}`,
       }))
     );
@@ -55,11 +59,21 @@ export default function MembersTab({ projectId, projectName, initialMembers, onS
 
   // Track unsaved changes
    useEffect(() => {
-       // Simple comparison based on stringified representation
-       const originalMembersString = JSON.stringify(initialMembers.map(({ id, ...rest }) => ({ name: rest.name, role: rest.role })).sort((a,b) => a.name.localeCompare(b.name))); // Sort for consistent comparison
-       const currentMembersString = JSON.stringify(memberRows.map(({ _internalId, id, ...rest }) => ({ name: rest.name, role: rest.role }))
-           .filter(row => row.name || row.role) // Filter out completely empty rows
-           .sort((a,b) => a.name.localeCompare(b.name))); // Sort for consistent comparison
+       // Simple comparison based on stringified representation, sorting for consistency
+       const sortMembers = (m: Member[]) => m.slice().sort((a, b) => a.name.localeCompare(b.name));
+       const cleanMembers = (m: Member[]): Omit<Member, 'id'>[] =>
+           sortMembers(m).map(({ id, ...rest }) => ({
+              name: rest.name.trim(),
+              role: rest.role.trim(),
+              holidayCalendarId: rest.holidayCalendarId || null
+           }));
+
+       const originalMembersString = JSON.stringify(cleanMembers(initialMembers));
+       const currentMembersString = JSON.stringify(
+           cleanMembers(
+               memberRows.filter(row => row.name?.trim() || row.role?.trim()) // Filter out completely empty rows before comparing
+           )
+       );
 
        setHasUnsavedChanges(originalMembersString !== currentMembersString);
    }, [memberRows, initialMembers]);
@@ -77,7 +91,7 @@ export default function MembersTab({ projectId, projectName, initialMembers, onS
     });
   };
 
-  const handleInputChange = (internalId: string, field: keyof Omit<Member, 'id'>, value: string) => {
+  const handleInputChange = (internalId: string, field: keyof Omit<Member, 'id'>, value: string | null | undefined) => {
     setMemberRows(rows =>
       rows.map(row => (row._internalId === internalId ? { ...row, [field]: value } : row))
     );
@@ -87,6 +101,10 @@ export default function MembersTab({ projectId, projectName, initialMembers, onS
      handleInputChange(internalId, 'role', value);
   };
 
+  const handleCalendarChange = (internalId: string, value: string) => {
+      handleInputChange(internalId, 'holidayCalendarId', value === 'none' ? null : value);
+  };
+
   const handleSave = () => {
     let hasErrors = false;
     const finalMembers: Member[] = [];
@@ -94,22 +112,24 @@ export default function MembersTab({ projectId, projectName, initialMembers, onS
 
     memberRows.forEach((row, index) => {
       // Skip completely empty rows silently
-      if (!row.name && !row.role) {
+      if (!row.name?.trim() && !row.role?.trim()) {
         return;
       }
 
       const name = row.name.trim();
       const role = row.role.trim();
+      const holidayCalendarId = row.holidayCalendarId || null; // Ensure null if empty
 
       let rowErrors: string[] = [];
       if (!name) rowErrors.push("Name required");
       if (memberNames.has(name.toLowerCase())) rowErrors.push(`Duplicate name "${name}"`);
       if (!role) rowErrors.push("Role required");
-      if (!predefinedRoles.includes(role) && role) { // Check if the role is valid (and not empty)
-         // Allow custom roles, but maybe warn? For now, accept any non-empty string.
-         // rowErrors.push("Invalid Role selected");
+      if (!predefinedRoles.includes(role) && role) {
+         // Allow custom roles
       }
-
+       if (holidayCalendarId && !holidayCalendars.some(cal => cal.id === holidayCalendarId)) {
+          rowErrors.push("Assigned holiday calendar no longer exists.");
+       }
 
       if (rowErrors.length > 0) {
         toast({
@@ -127,6 +147,7 @@ export default function MembersTab({ projectId, projectName, initialMembers, onS
         id: row.id || row._internalId, // Preserve existing ID or use internal one
         name,
         role,
+        holidayCalendarId, // Save assigned calendar ID
       });
     });
 
@@ -156,7 +177,7 @@ export default function MembersTab({ projectId, projectName, initialMembers, onS
         <div className="flex justify-between items-center">
           <div>
             <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /> Project Members: {projectName}</CardTitle>
-            <CardDescription>Add or edit team members and their roles for this project.</CardDescription>
+            <CardDescription>Add or edit team members, their roles, and assign holiday calendars.</CardDescription>
           </div>
           <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
             Save Members
@@ -164,17 +185,18 @@ export default function MembersTab({ projectId, projectName, initialMembers, onS
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Table Header for larger screens */}
-        <div className="hidden md:grid grid-cols-[1fr_1fr_40px] gap-x-3 items-center pb-2 border-b">
+        {/* Updated Table Header */}
+        <div className="hidden md:grid grid-cols-[1fr_1fr_1fr_40px] gap-x-3 items-center pb-2 border-b">
           <Label className="text-xs font-medium text-muted-foreground">Name*</Label>
           <Label className="text-xs font-medium text-muted-foreground">Role*</Label>
+          <Label className="text-xs font-medium text-muted-foreground"><CalendarDays className="inline h-3 w-3 mr-1" />Holiday Calendar</Label>
           <div /> {/* Placeholder for delete */}
         </div>
 
         {/* Member Rows */}
         <div className="space-y-4 md:space-y-2">
           {memberRows.map((row) => (
-            <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[1fr_1fr_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
+            <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[1fr_1fr_1fr_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
               {/* Name */}
               <div className="md:col-span-1 col-span-2">
                 <Label htmlFor={`name-${row._internalId}`} className="md:hidden text-xs font-medium">Name*</Label>
@@ -187,7 +209,7 @@ export default function MembersTab({ projectId, projectName, initialMembers, onS
                 />
               </div>
               {/* Role */}
-              <div className="md:col-span-1 col-span-2">
+              <div className="md:col-span-1 col-span-1">
                  <Label htmlFor={`role-${row._internalId}`} className="md:hidden text-xs font-medium">Role*</Label>
                   <Select value={row.role} onValueChange={(value) => handleRoleChange(row._internalId, value)}>
                       <SelectTrigger id={`role-${row._internalId}`} className="h-9">
@@ -197,10 +219,26 @@ export default function MembersTab({ projectId, projectName, initialMembers, onS
                           {predefinedRoles.map(option => (
                               <SelectItem key={option} value={option}>{option}</SelectItem>
                           ))}
-                          {/* Optional: Allow custom roles?
-                          {row.role && !predefinedRoles.includes(row.role) && (
-                            <SelectItem value={row.role} disabled>Custom: {row.role}</SelectItem>
-                          )} */}
+                      </SelectContent>
+                  </Select>
+              </div>
+               {/* Holiday Calendar */}
+              <div className="md:col-span-1 col-span-1">
+                 <Label htmlFor={`calendar-${row._internalId}`} className="md:hidden text-xs font-medium"><CalendarDays className="inline h-3 w-3 mr-1" />Holiday Calendar</Label>
+                  <Select
+                    value={row.holidayCalendarId ?? 'none'}
+                    onValueChange={(value) => handleCalendarChange(row._internalId, value)}
+                    disabled={holidayCalendars.length === 0}
+                    >
+                      <SelectTrigger id={`calendar-${row._internalId}`} className="h-9">
+                          <SelectValue placeholder="Select Calendar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="none" className="text-muted-foreground">-- None --</SelectItem>
+                          {holidayCalendars.map(cal => (
+                              <SelectItem key={cal.id} value={cal.id}>{cal.name}</SelectItem>
+                          ))}
+                           {holidayCalendars.length === 0 && <SelectItem value="no-calendars" disabled>No calendars created</SelectItem>}
                       </SelectContent>
                   </Select>
               </div>

@@ -3,11 +3,27 @@
 // Represents the status of a sprint
 export type SprintStatus = 'Planned' | 'Active' | 'Completed';
 
+// Represents a single public holiday date
+export interface PublicHoliday {
+  id: string; // Unique ID for the holiday entry
+  name: string;
+  date: string; // YYYY-MM-DD format
+}
+
+// Represents a collection of public holidays, typically for a country or custom group
+export interface HolidayCalendar {
+  id: string; // Unique ID for the calendar
+  name: string; // e.g., "US Holidays", "UK Holidays", "Team Alpha Custom"
+  countryCode?: string; // Optional: ISO 3166-1 alpha-2 country code (e.g., "US", "GB")
+  holidays: PublicHoliday[];
+}
+
 // Represents a single team member
 export interface Member {
   id: string; // Unique ID for the member
   name: string;
   role: string; // e.g., 'Project Manager', 'Software Engineer'
+  holidayCalendarId?: string | null; // Optional: ID of the assigned HolidayCalendar
 }
 
 // Represents a single task within a sprint plan
@@ -72,6 +88,7 @@ export interface Project {
     name: string;
     sprintData: SprintData;
     members: Member[]; // Array of team members associated with the project
+    holidayCalendars?: HolidayCalendar[]; // Optional: Array of holiday calendars specific to this project
 }
 
 // The top-level data structure stored will be an array of Project objects

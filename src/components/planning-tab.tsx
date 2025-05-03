@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -10,8 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon, XCircle, GanttChartSquare, Info } from 'lucide-react';
-import type { Sprint, SprintPlanning, Task, Member, SprintStatus } from '@/types/sprint-data';
+import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info } from 'lucide-react'; // Renamed CalendarIcon to avoid clash
+import type { Sprint, SprintPlanning, Task, Member, SprintStatus, HolidayCalendar } from '@/types/sprint-data'; // Added HolidayCalendar
 import { initialSprintPlanning, taskStatuses, predefinedRoles } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -138,6 +139,7 @@ interface PlanningTabProps {
   onCreateAndPlanSprint: (sprintDetails: Omit<Sprint, 'details' | 'planning' | 'status' | 'committedPoints' | 'completedPoints'>, planningData: SprintPlanning) => void;
   projectName: string;
   members: Member[];
+  holidayCalendars: HolidayCalendar[]; // Add holiday calendars prop
 }
 
 interface TaskRow extends Task {
@@ -167,7 +169,7 @@ const createEmptyTaskRow = (): TaskRow => ({
 });
 
 
-export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members }: PlanningTabProps) {
+export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars }: PlanningTabProps) {
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | null>(null);
   const [planningData, setPlanningData] = useState<SprintPlanning>(initialSprintPlanning);
   const [newTasks, setNewTasks] = useState<TaskRow[]>([]);
@@ -268,7 +270,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       // No default empty row for spillover
        if (isSprintCompleted && (loadedPlanning.spilloverTasks || []).length === 0) {
           setSpilloverTasks([]);
-      } else if (!isSprintCompleted && (loadedPlanning.spilloverTasks || []).length === 0) {
+       } else if (!isSprintCompleted && (loadedPlanning.spilloverTasks || []).length === 0) {
            setSpilloverTasks([]); // Also ensure it's empty if not completed but no spillover loaded
        }
 
@@ -591,7 +593,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                     )}
                     disabled={disabled}
                 >
-                    <CalendarIcon className="mr-1 h-3 w-3" />
+                    <CalendarIconLucide className="mr-1 h-3 w-3" />
                     {dateValue ? format(dateValue, "MM/dd") : <span>Pick</span>}
                 </Button>
             </PopoverTrigger>
@@ -860,6 +862,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                        sprintStartDate={currentSprintStartDate}
                        sprintEndDate={currentSprintEndDate}
                        members={members}
+                       holidayCalendars={holidayCalendars} // Pass holiday calendars
                     />
                 ) : (
                     <div className="flex items-center justify-center text-muted-foreground h-full p-4 text-center">
@@ -919,7 +922,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                                                !newSprintForm.startDate && "text-muted-foreground"
                                            )}
                                        >
-                                           <CalendarIcon className="mr-2 h-4 w-4" />
+                                           <CalendarIconLucide className="mr-2 h-4 w-4" />
                                            {newSprintForm.startDate ? format(newSprintForm.startDate, "PPP") : <span>Pick a date</span>}
                                        </Button>
                                    </PopoverTrigger>
