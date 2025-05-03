@@ -4,10 +4,9 @@
 import type { Task, Member } from '@/types/sprint-data'; // Import Member
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from 'recharts';
 import { ChartConfig, ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
-import { format, parseISO, differenceInDays, addDays, isWithinInterval, getDay, eachDayOfInterval } from 'date-fns'; // Import getDay, eachDayOfInterval
+import { format, parseISO, differenceInDays, addDays, isWithinInterval, getDay, eachDayOfInterval, isValid } from 'date-fns'; // Import getDay, eachDayOfInterval, isValid
 import { useMemo } from 'react';
 import { cn } from "@/lib/utils";
-
 
 // Define a temporary type for chart data that includes the calculated endDate
 interface TaskWithEndDate extends Task {
@@ -45,6 +44,82 @@ const weekendColor = 'hsl(var(--muted) / 0.2)'; // Very light gray for weekend b
 
 const defaultColor = 'hsl(var(--muted-foreground))'; // Gray for unassigned/default
 
+
+// --- Helper Functions (Copied from planning-tab.tsx for now) ---
+
+// Helper function to parse estimated time string (e.g., "2d", "1w 3d") into days
+const parseEstimatedTimeToDays = (timeString: string | undefined): number | null => {
+  if (!timeString) return null;
+  timeString = timeString.trim().toLowerCase();
+  let totalDays = 0;
+
+  const parts = timeString.match(/(\d+w)?\s*(\d+d)?/);
+  if (!parts || (parts[1] === undefined && parts[2] === undefined)) {
+      // Try parsing just a number as days
+      const simpleDays = parseInt(timeString, 10);
+      if (!isNaN(simpleDays) && simpleDays >= 0) {
+          return simpleDays;
+      }
+      return null; // No valid parts found
+  }
+
+  const weekPart = parts[1];
+  const dayPart = parts[2];
+
+  if (weekPart) {
+    const weeks = parseInt(weekPart.replace('w', ''), 10);
+    if (!isNaN(weeks)) {
+      totalDays += weeks * 5; // Assuming 5 working days per week
+    }
+  }
+
+  if (dayPart) {
+    const days = parseInt(dayPart.replace('d', ''), 10);
+    if (!isNaN(days)) {
+      totalDays += days;
+    }
+  }
+
+  // Allow just "5" or "3" to mean days
+  if (totalDays === 0 && /^\d+$/.test(timeString)) {
+       const simpleDays = parseInt(timeString, 10);
+       if (!isNaN(simpleDays) && simpleDays >= 0) {
+            return simpleDays;
+       }
+  }
+
+
+  return totalDays > 0 ? totalDays : null;
+};
+
+// Helper function to calculate end date skipping weekends
+const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number): Date => {
+  let currentDate = startDate;
+  let daysAdded = 0;
+  let workingDaysCounted = 0;
+
+  // If duration is 0 or less, return the start date
+  if (workingDays <= 0) return startDate;
+
+  // Loop until we have counted the required number of working days
+  while (workingDaysCounted < workingDays) {
+    currentDate = addDays(startDate, daysAdded);
+    const dayOfWeek = getDay(currentDate); // 0=Sun, 6=Sat
+
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      workingDaysCounted++;
+    }
+    // If we haven't reached the target working days, increment daysAdded to check the next day
+    if (workingDaysCounted < workingDays) {
+        daysAdded++;
+    }
+  }
+  return currentDate; // The final end date
+};
+
+// --- End Helper Functions ---
+
+
 export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndDate, members }: SprintTimelineChartProps) {
 
   // Create a map for consistent assignee colors
@@ -58,63 +133,69 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
 
   const chartData = useMemo(() => {
-    if (!tasks || tasks.length === 0 || !sprintStartDate || !sprintEndDate) {
+    if (!tasks || tasks.length === 0 || !sprintStartDate || !sprintEndDate || !isValid(parseISO(sprintStartDate)) || !isValid(parseISO(sprintEndDate))) {
       return [];
     }
 
-    const start = parseISO(sprintStartDate);
-    const end = parseISO(sprintEndDate);
+    const sprintStartObj = parseISO(sprintStartDate);
+    const sprintEndObj = parseISO(sprintEndDate);
 
     return tasks
         .map((task, index) => {
-            if (!task.startDate) return null; // Skip tasks without start date
-            const taskStart = parseISO(task.startDate!);
-            const taskEnd = parseISO(task.endDate); // Use the calculated endDate
+            if (!task.startDate || !task.estimatedTime || !isValid(parseISO(task.startDate))) return null; // Skip tasks without valid start date or estimate
 
-            // Clamp task dates within sprint boundaries for visualization
-            const visStart = taskStart < start ? start : taskStart;
-            let visEnd = taskEnd > end ? end : taskEnd;
+            const taskStartObj = parseISO(task.startDate!);
+            const workingDays = parseEstimatedTimeToDays(task.estimatedTime);
 
-             // Ensure visEnd is not before visStart after clamping
-             if (visEnd < visStart) {
-               visEnd = visStart;
-             }
+            if (workingDays === null || workingDays <= 0) return null; // Skip tasks with invalid or zero duration
 
-            const startDayIndex = differenceInDays(visStart, start);
-            // Calculate duration in *days* for the bar length (inclusive)
-            const durationInDays = differenceInDays(visEnd, visStart) + 1;
-             // Ensure duration is at least 1 day for visualization
-            const visualDuration = Math.max(durationInDays, 1);
+            // Calculate the actual end date skipping weekends
+            const actualEndDateObj = calculateEndDateSkippingWeekends(taskStartObj, workingDays);
+
+            // Calculate day indices relative to the sprint start
+            const startDayIndex = differenceInDays(taskStartObj, sprintStartObj);
+            const endDayIndex = differenceInDays(actualEndDateObj, sprintStartObj);
+
+             // Ensure indices are within sprint boundaries (or handle visualization if needed)
+             // For simplicity, we might let bars extend slightly if domain allows, or clamp:
+             // const clampedStartDayIndex = Math.max(0, startDayIndex);
+             // const clampedEndDayIndex = Math.min(differenceInDays(sprintEndObj, sprintStartObj), endDayIndex);
 
 
-             // Assign color based on assignee first, fallback to status or default
-             const color = task.assignee && memberColorMap[task.assignee]
+            // Assign color based on assignee first, fallback to status or default
+            const color = task.assignee && memberColorMap[task.assignee]
                 ? memberColorMap[task.assignee]
                 : statusColors[task.status ?? ''] || defaultColor;
 
             return {
                 name: task.description || `Task ${task.id}`,
                 taskIndex: index, // Use index for Y-axis positioning
-                // range: [startDayIndex, startDayIndex + visualDuration -1], // [start_day_index, end_day_index]
-                range: [startDayIndex, startDayIndex + visualDuration -1], // Bar spans from start day index to end day index
+                // range should be [start_day_index, end_day_index]
+                // The bar will visually span from the start of startDayIndex to the end of endDayIndex
+                range: [startDayIndex, endDayIndex],
                 fill: color,
-                tooltip: `${task.description || 'Task'} (${task.status || 'N/A'}) - Est. ${task.estimatedTime || '?'} ${task.assignee ? '(' + task.assignee + ')' : '(Unassigned)'} [${format(taskStart, 'MM/dd')} - ${format(taskEnd, 'MM/dd')}]` // Updated tooltip
+                tooltip: `${task.description || 'Task'} (${task.status || 'N/A'}) - Est. ${task.estimatedTime || '?'} ${task.assignee ? '(' + task.assignee + ')' : '(Unassigned)'} [${format(taskStartObj, 'MM/dd')} - ${format(actualEndDateObj, 'MM/dd')}]` // Updated tooltip shows calculated end date
             };
-        }).filter(item => item !== null); // Remove null items
+        }).filter(item => item !== null && item.range[0] <= item.range[1]); // Remove null items and invalid ranges
   }, [tasks, sprintStartDate, sprintEndDate, memberColorMap]); // Add memberColorMap dependency
 
   // Calculate weekend days within the sprint range
    const weekendIndices = useMemo(() => {
-       if (!sprintStartDate || !sprintEndDate) return [];
+       if (!sprintStartDate || !sprintEndDate || !isValid(parseISO(sprintStartDate)) || !isValid(parseISO(sprintEndDate))) return [];
        const start = parseISO(sprintStartDate);
        const end = parseISO(sprintEndDate);
        const indices: number[] = [];
-       eachDayOfInterval({ start, end }).forEach((date) => {
-           const dayOfWeek = getDay(date); // 0 = Sunday, 6 = Saturday
-           if (dayOfWeek === 0 || dayOfWeek === 6) {
-               indices.push(differenceInDays(date, start));
-           }
-       });
+       try {
+           eachDayOfInterval({ start, end }).forEach((date) => {
+               const dayOfWeek = getDay(date); // 0 = Sunday, 6 = Saturday
+               if (dayOfWeek === 0 || dayOfWeek === 6) {
+                   indices.push(differenceInDays(date, start));
+               }
+           });
+       } catch (e) {
+         console.error("Error calculating weekend indices:", e); // Handle potential date errors
+         return [];
+       }
        return indices;
    }, [sprintStartDate, sprintEndDate]);
 
@@ -123,15 +204,25 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     return <div className="flex items-center justify-center h-full text-muted-foreground">No tasks with valid start date and estimate to display.</div>;
   }
 
-   const sprintDays = differenceInDays(parseISO(sprintEndDate!), parseISO(sprintStartDate!)) + 1;
+   let sprintDays = 0;
+   try {
+     sprintDays = differenceInDays(parseISO(sprintEndDate!), parseISO(sprintStartDate!)) + 1;
+   } catch (e) {
+      console.error("Error calculating sprint days:", e);
+      return <div className="flex items-center justify-center h-full text-destructive">Error calculating sprint duration.</div>;
+   }
    const sprintDayIndices = Array.from({ length: sprintDays }, (_, i) => i); // 0 to sprintDays-1
 
   // Generate ticks for X-axis (e.g., every few days)
    const xTicks = sprintDayIndices.map(i => {
-       const date = addDays(parseISO(sprintStartDate!), i);
-       // Show tick maybe every 2 days or based on sprint length
-       if (i % (sprintDays > 14 ? 2 : 1) === 0) {
-           return format(date, 'MM/dd');
+       try {
+           const date = addDays(parseISO(sprintStartDate!), i);
+           // Show tick maybe every 2 days or based on sprint length
+           if (i % (sprintDays > 14 ? 2 : 1) === 0 || i === 0 || i === sprintDays -1) {
+               return format(date, 'MM/dd');
+           }
+       } catch (e) {
+          console.error("Error formatting X tick:", e);
        }
        return ''; // Return empty string for non-labeled ticks
    });
@@ -153,7 +244,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
           <XAxis
              type="number"
-             dataKey="range[0]" // Use the start day index for positioning
+             dataKey="range[0]" // Position based on start day index
              domain={[0, sprintDays ]} // Domain from day 0 to sprintDays
              ticks={sprintDayIndices} // Ticks for each day index
              tickFormatter={(tick) => xTicks[tick] ?? ''} // Format ticks to dates
@@ -162,27 +253,20 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
              tickLine={true}
              interval={0} // Ensure all ticks are considered for rendering based on formatter
              allowDuplicatedCategory={false} // Prevent duplicate category labels if needed
-             // Reversed might not be needed for X-axis timeline
            />
            {/* Add ReferenceAreas for Weekend Highlighting */}
            {weekendIndices.map((index) => (
+               // Use ReferenceArea to cover the full day block
                <ReferenceLine
                  key={`weekend-line-${index}`}
-                 x={index + 0.5} // Position line slightly offset to cover the day block visually
+                 x={index} // Position at the start of the weekend day index
                  stroke={weekendColor} // Use very light gray for weekends
-                 strokeWidth={10} // Adjust width to cover the day visually - EXPERIMENT
-                 ifOverflow="extendDomain" // Extend domain if needed
-                 // label={{ value: "Weekend", position: 'insideTop', fontSize: 8, fill: 'hsl(var(--muted-foreground))', angle: -90, dy: -5 }}
+                 strokeWidth={10} // Adjust width visually - MAY NEED TUNING BASED ON BAR SIZE/GAPS
+                 ifOverflow="visible" // Allow drawing outside strict plot area if needed? Or hidden
+                 segment={[{ x: index, y: -1 }, { x: index, y: chartData.length }]} // Draw vertical line covering y-axis
+                 // Optional label:
+                 // label={{ value: "W", position: 'top', fontSize: 8, fill: 'hsl(var(--muted-foreground))', dy: -5 }}
                />
-               // Alternative: Use ReferenceArea - might require different setup
-               // <ReferenceArea
-               //   key={`weekend-area-${index}`}
-               //   x1={index}
-               //   x2={index + 1}
-               //   fill={weekendColor}
-               //   strokeOpacity={0} // No border for the area
-               //   ifOverflow="hidden" // Clip the area to the chart boundaries
-               // />
            ))}
 
           <YAxis
@@ -211,7 +295,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
               }}
              />
            <Legend content={null} /> {/* Hide default legend */}
-           {/* Use dataKey="range" which is [start, end]. Recharts automatically calculates width */}
+           {/* Bar dataKey uses range [startDayIndex, endDayIndex]. Bar length is endDayIndex - startDayIndex + 1 */}
            <Bar dataKey="range" radius={2} barSize={10} fill={(data) => data.payload.fill} />
 
         </BarChart>

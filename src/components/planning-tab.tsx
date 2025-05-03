@@ -104,24 +104,17 @@ const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number):
   // If duration is 0 or less, return the start date
   if (workingDays <= 0) return startDate;
 
-  // Count the start date if it's a weekday
-  const startDayOfWeek = getDay(startDate);
-  if (startDayOfWeek !== 0 && startDayOfWeek !== 6) {
-    workingDaysCounted = 1;
-  }
-
-  // If the duration is just 1 day and start date is a weekday, end date is the start date
-  if (workingDays === 1 && workingDaysCounted === 1) {
-      return startDate;
-  }
-
+  // Loop until we have counted the required number of working days
   while (workingDaysCounted < workingDays) {
-    daysAdded++;
     currentDate = addDays(startDate, daysAdded);
     const dayOfWeek = getDay(currentDate); // 0=Sun, 6=Sat
 
     if (dayOfWeek !== 0 && dayOfWeek !== 6) {
       workingDaysCounted++;
+    }
+    // If we haven't reached the target working days, increment daysAdded to check the next day
+    if (workingDaysCounted < workingDays) {
+        daysAdded++;
     }
   }
   return currentDate; // The final end date
@@ -1003,4 +996,3 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     </div>
   );
 }
-
