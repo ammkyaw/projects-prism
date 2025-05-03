@@ -15,13 +15,14 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 interface EntryTabProps {
+  key?: number; // Add key prop for resetting
   onSaveSprints: (data: SprintData) => void; // Renamed callback for clarity
   initialSprintData: SprintData | null; // Add prop for initial data
   parseSprintData: (jsonData: any[]) => SprintData; // Keep parser for paste functionality
   projectName: string; // Add project name prop
 }
 
-export default function EntryTab({ onSaveSprints, initialSprintData, parseSprintData, projectName }: EntryTabProps) {
+export default function EntryTab({ key, onSaveSprints, initialSprintData, parseSprintData, projectName }: EntryTabProps) {
   const { toast } = useToast();
 
   // Handler for manual data submission (passed to ManualInputForm)
@@ -42,8 +43,12 @@ export default function EntryTab({ onSaveSprints, initialSprintData, parseSprint
              </CardDescription>
           </CardHeader>
           <CardContent>
-             {/* Pass initial data and the renamed submit handler */}
-             <ManualInputForm onSubmit={handleManualDataSubmit} initialData={initialSprintData?.sprints ?? []} />
+             {/* Pass initial data, the renamed submit handler, and the key */}
+             <ManualInputForm
+                key={key} // Pass the key here
+                onSubmit={handleManualDataSubmit}
+                initialData={initialSprintData?.sprints ?? []}
+             />
           </CardContent>
            {/* <CardFooter>
                <p className="text-sm text-muted-foreground">

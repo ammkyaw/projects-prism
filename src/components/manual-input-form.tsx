@@ -16,6 +16,7 @@ import { addDays, format, parseISO } from 'date-fns';
 import { cn } from "@/lib/utils";
 
 interface ManualInputFormProps {
+  key?: number; // Accept key prop
   onSubmit: (data: SprintData) => void;
   initialData?: Sprint[]; // Optional initial sprint data
 }
@@ -28,7 +29,6 @@ interface ManualEntryRow {
   duration: string; // e.g., "1 Week", "2 Weeks"
   totalCommitment: string;
   totalDelivered: string;
-  // removed details: string;
 }
 
 const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
@@ -68,7 +68,6 @@ const sprintToRow = (sprint: Sprint, index: number): ManualEntryRow => ({
   duration: sprint.duration,
   totalCommitment: sprint.committedPoints.toString(),
   totalDelivered: sprint.completedPoints.toString(),
-  // removed details: sprint.details || '',
 });
 
 // Helper to create an empty row - Removed details
@@ -79,7 +78,6 @@ const createEmptyRow = (): ManualEntryRow => ({
     duration: '',
     totalCommitment: '',
     totalDelivered: '',
-    // removed details: '',
 });
 
 
@@ -93,10 +91,11 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
     if (initialData.length > 0) {
       setRows(initialData.map(sprintToRow));
     } else {
-      // Ensure there's always at least one empty row if initialData is empty
+      // Initialize with one empty row if initialData is empty or becomes empty
       setRows([createEmptyRow()]);
     }
   }, [initialData]); // Re-run effect if initialData changes
+
 
   const handleAddRow = () => {
      setRows([...rows, createEmptyRow()]);
@@ -186,7 +185,6 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
                     case 'Duration': newRow.duration = value; break;
                     case 'TotalCommitment': newRow.totalCommitment = value; break;
                     case 'TotalDelivered': newRow.totalDelivered = value; break;
-                    // case 'Details': newRow.details = value; break; // Removed details assignment
                 }
              }
          });
@@ -219,7 +217,7 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
     const sprintNumbers = new Set<number>(); // To check for duplicate sprint numbers
 
     rows.forEach((row, index) => {
-        // Skip completely empty rows silently - Removed details check
+        // Skip completely empty rows silently
         if (!row.sprintNumber && !row.startDate && !row.duration && !row.totalCommitment && !row.totalDelivered) {
             return;
         }
@@ -229,7 +227,6 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
         const duration = row.duration.trim();
         const commitment = parseInt(row.totalCommitment, 10);
         const delivered = parseInt(row.totalDelivered, 10);
-        // Removed details: const details = row.details?.trim();
 
         let rowErrors: string[] = [];
         if (isNaN(sprintNumber) || sprintNumber <= 0) rowErrors.push("Invalid Sprint #");
@@ -238,8 +235,6 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
          if (!duration || !DURATION_OPTIONS.includes(duration)) rowErrors.push("Invalid Duration");
         if (isNaN(commitment) || commitment < 0) rowErrors.push("Invalid Total Commitment");
         if (isNaN(delivered) || delivered < 0) rowErrors.push("Invalid Total Delivered");
-        // Allow delivered > commitment for flexibility, remove validation:
-        // if (!isNaN(delivered) && !isNaN(commitment) && delivered > commitment) rowErrors.push("Delivered cannot exceed Commitment");
 
 
         if (rowErrors.length > 0) {
@@ -271,7 +266,7 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
             duration,
             committedPoints: commitment,
             completedPoints: delivered,
-            // removed details,
+            details: [], // Initialize details array when submitting
             totalDays,
             endDate
         });
@@ -282,12 +277,6 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
         return;
     }
 
-    // Allow submitting empty data (to clear a project's sprints)
-    // if (sprints.length === 0) {
-    //     toast({ variant: "destructive", title: "Error", description: "No valid sprint data entered." });
-    //     return;
-    // }
-
     sprints.sort((a, b) => a.sprintNumber - b.sprintNumber);
 
     const finalData: SprintData = {
@@ -297,7 +286,7 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
     };
 
     onSubmit(finalData);
-    // Don't clear form here, parent component manages data persistence
+    // Form reset is handled by the parent component via the key prop
   };
 
 
@@ -307,12 +296,10 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
        <Card>
           <CardHeader>
               <CardTitle>Paste Data (Optional)</CardTitle>
-              {/* Updated description for paste area */}
                <CardDescription>Paste tab-separated data to replace current entries. Columns: SprintNumber, StartDate (YYYY-MM-DD), Duration ('1 Week', '2 Weeks', etc.), TotalCommitment, TotalDelivered.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <Textarea
-               // Updated placeholder
                placeholder="SprintNumber	StartDate	Duration	TotalCommitment	TotalDelivered"
                value={pasteData}
                onChange={handlePasteChange}
@@ -333,22 +320,18 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-             {/* Table Header - Visible only on medium screens and up */}
-              {/* Adjusted Grid Definition: Removed 1fr for details, kept 40px for delete */}
               <div className="hidden md:grid grid-cols-[80px_140px_140px_100px_100px_40px] gap-x-3 items-center pb-2 border-b">
                  <Label className="text-xs font-medium text-muted-foreground">Sprint #*</Label>
                  <Label className="text-xs font-medium text-muted-foreground">Start Date*</Label>
                  <Label className="text-xs font-medium text-muted-foreground">Duration*</Label>
                  <Label className="text-xs font-medium text-muted-foreground text-right">Commitment*</Label>
                  <Label className="text-xs font-medium text-muted-foreground text-right">Delivered*</Label>
-                 {/* Removed Details Label */}
                  <div /> {/* Placeholder for delete button column */}
              </div>
 
             {/* Input Rows */}
             <div className="space-y-4 md:space-y-2">
               {rows.map((row, index) => (
-                 // Adjusted grid layout for each row - removed details column
                  <div key={row.id} className="grid grid-cols-2 md:grid-cols-[80px_140px_140px_100px_100px_40px] gap-x-3 gap-y-2 items-start">
                    {/* Sprint Number */}
                    <div className="md:col-span-1 col-span-1">
@@ -384,10 +367,8 @@ export default function ManualInputForm({ onSubmit, initialData = [] }: ManualIn
                      <Label htmlFor={`delivered-${row.id}`} className="md:hidden text-xs font-medium">Delivered*</Label>
                      <Input id={`delivered-${row.id}`} type="number" placeholder="Points" value={row.totalDelivered} onChange={e => handleInputChange(row.id, 'totalDelivered', e.target.value)} required className="h-9 text-right w-full"/>
                    </div>
-                   {/* Removed Details Input */}
 
-                   {/* Delete Button - Aligned to the end on all screens */}
-                   {/* Adjusted col-span for mobile to 2 */}
+                   {/* Delete Button */}
                    <div className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
                         <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveRow(row.id)} className="h-9 w-9 text-muted-foreground hover:text-destructive" aria-label="Remove row">
                             <Trash2 className="h-4 w-4" />

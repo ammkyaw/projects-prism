@@ -2,7 +2,7 @@
 "use client";
 
 import type { ChangeEvent } from 'react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,8 +16,9 @@ import { Label } from "@/components/ui/label"
 import HomeTab from '@/components/home-tab';
 import EntryTab from '@/components/entry-tab';
 import ReportsTab from '@/components/reports-tab';
+import EditSprintDetailsDialog from '@/components/edit-sprint-details-dialog'; // Import the new dialog
 
-import type { SprintData, Sprint, AppData, Project } from '@/types/sprint-data';
+import type { SprintData, Sprint, AppData, Project, SprintDetailItem } from '@/types/sprint-data';
 import { initialSprintData } from '@/types/sprint-data'; // Import initialSprintData
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -55,7 +56,10 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<string>("home");
   const [newProjectName, setNewProjectName] = useState<string>('');
   const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState<boolean>(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false); // State for edit dialog
+  const [editingSprint, setEditingSprint] = useState<Sprint | null>(null); // State for the sprint being edited
   const { toast } = useToast();
+  const [resetManualFormKey, setResetManualFormKey] = useState(0); // State to trigger form reset
 
   // Effect to load data from localStorage on mount
   useEffect(() => {
@@ -65,17 +69,32 @@ export default function Home() {
         const parsedData: AppData = JSON.parse(savedData);
         // Basic validation for the new structure
         if (Array.isArray(parsedData) && parsedData.every(p => p.id && p.name && p.sprintData && Array.isArray(p.sprintData.sprints))) {
-          setProjects(parsedData);
+           // Ensure details array exists on loaded sprints
+           const validatedData = parsedData.map(project => ({
+              ...project,
+              sprintData: {
+                 ...project.sprintData,
+                 sprints: project.sprintData.sprints.map(sprint => ({
+                    ...sprint,
+                    details: sprint.details ?? [], // Ensure details array exists
+                 })),
+              },
+           }));
+          setProjects(validatedData);
           // Select the first project if available, or null otherwise
-          setSelectedProjectId(parsedData.length > 0 ? parsedData[0].id : null);
+          setSelectedProjectId(validatedData.length > 0 ? validatedData[0].id : null);
           toast({ title: "Data Loaded", description: "Loaded previously saved project data." });
         } else {
           console.warn("Invalid data found in localStorage.");
           localStorage.removeItem('appData'); // Clear invalid data
+          setProjects([]); // Reset projects state
+          setSelectedProjectId(null);
         }
       } catch (error) {
         console.error("Failed to parse project data from localStorage:", error);
         localStorage.removeItem('appData'); // Clear corrupted data
+        setProjects([]); // Reset projects state
+        setSelectedProjectId(null);
       }
     }
   }, [toast]);
@@ -125,7 +144,6 @@ export default function Home() {
         const duration = row.Duration?.toString().trim();
         const commitment = parseInt(row.TotalCommitment, 10);
         const delivered = parseInt(row.TotalDelivered, 10);
-        // Removed details parsing: const details = row.Details?.toString().trim();
 
         if (isNaN(sprintNumber) || !startDateValue || !duration || isNaN(commitment) || isNaN(delivered)) {
             console.warn(`Skipping invalid row ${rowIndex + 2}: Missing essential data.`, row);
@@ -180,7 +198,7 @@ export default function Home() {
             duration,
             committedPoints: commitment,
             completedPoints: delivered,
-            // removed details,
+            details: [], // Initialize details array
             totalDays,
         });
     });
@@ -199,21 +217,40 @@ export default function Home() {
   };
 
   // Handler to save processed sprint data to the *selected* project
-  const handleSaveSprints = (newSprintData: SprintData) => {
+  const handleSaveSprints = useCallback((newSprintData: SprintData) => {
     if (!selectedProjectId) {
        toast({ variant: "destructive", title: "Error", description: "No project selected." });
        return;
     }
     setProjects(prevProjects =>
-      prevProjects.map(p =>
-        p.id === selectedProjectId
-          ? { ...p, sprintData: newSprintData } // Replace sprintData for the selected project
-          : p
-      )
+      prevProjects.map(p => {
+        if (p.id === selectedProjectId) {
+           // Preserve existing details when saving basic sprint data
+           const updatedSprints = newSprintData.sprints.map(newSprint => {
+             const existingSprint = p.sprintData.sprints.find(
+               oldSprint => oldSprint.sprintNumber === newSprint.sprintNumber
+             );
+             return {
+               ...newSprint,
+               details: existingSprint?.details ?? [], // Keep old details or initialize empty array
+             };
+           });
+
+           return {
+              ...p,
+              sprintData: {
+                 ...newSprintData,
+                 sprints: updatedSprints,
+              },
+           };
+        }
+        return p;
+      })
     );
     toast({ title: "Success", description: `Sprint data saved to project '${selectedProject?.name ?? 'N/A'}'.` });
     setActiveTab("home"); // Switch to home tab after saving
-  };
+    setResetManualFormKey(prevKey => prevKey + 1); // Trigger form reset
+  }, [selectedProjectId, toast, selectedProject?.name]);
 
 
   // Export data for the currently selected project
@@ -236,10 +273,29 @@ export default function Home() {
          'Duration': s.duration,
          'TotalCommitment': s.committedPoints,
          'TotalDelivered': s.completedPoints,
-         // Removed 'Details': s.details || '',
        }));
        const wsSummary = XLSX.utils.json_to_sheet(summaryData);
-       XLSX.utils.book_append_sheet(wb, wsSummary, 'Sprint Data');
+       XLSX.utils.book_append_sheet(wb, wsSummary, 'Sprint Summary');
+
+       // Export details if they exist
+       const detailsExist = selectedProject.sprintData.sprints.some(s => s.details && s.details.length > 0);
+       if (detailsExist) {
+           const allDetails: any[] = [];
+           selectedProject.sprintData.sprints.forEach(sprint => {
+               (sprint.details || []).forEach(detail => {
+                   allDetails.push({
+                       'SprintNumber': sprint.sprintNumber,
+                       'TicketNumber': detail.ticketNumber,
+                       'Developer': detail.developer,
+                       'StoryPoints': detail.storyPoints,
+                       'DevelopmentTime': detail.devTime,
+                   });
+               });
+           });
+           const wsDetails = XLSX.utils.json_to_sheet(allDetails);
+           XLSX.utils.book_append_sheet(wb, wsDetails, 'Sprint Details');
+       }
+
 
       // Add project name to filename for clarity
       const projectNameSlug = selectedProject.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -282,13 +338,39 @@ export default function Home() {
 
   // Handle clicking the Edit button on the Home tab
   const handleEditSprint = (sprintNumber: number) => {
-     // Simply switch to the Entry tab. The ManualInputForm will load the current data.
-     // Future enhancement: Could scroll to the specific row in the Entry tab.
-     setActiveTab("entry");
-     toast({
-        title: "Editing Sprint",
-        description: `Switched to Entry tab to edit Sprint ${sprintNumber}. Find the row and make your changes.`,
-     });
+      const sprintToEdit = selectedProject?.sprintData.sprints.find(s => s.sprintNumber === sprintNumber);
+      if (sprintToEdit) {
+          setEditingSprint(sprintToEdit);
+          setIsEditDialogOpen(true); // Open the edit dialog
+      } else {
+          toast({ variant: "destructive", title: "Error", description: `Sprint ${sprintNumber} not found.` });
+      }
+  };
+
+  // Handle saving updated details from the dialog
+  const handleUpdateSprintDetails = (updatedDetails: SprintDetailItem[]) => {
+     if (!selectedProjectId || !editingSprint) return;
+
+     setProjects(prevProjects =>
+       prevProjects.map(p =>
+         p.id === selectedProjectId
+           ? {
+               ...p,
+               sprintData: {
+                 ...p.sprintData,
+                 sprints: p.sprintData.sprints.map(s =>
+                   s.sprintNumber === editingSprint.sprintNumber
+                     ? { ...s, details: updatedDetails }
+                     : s
+                 ),
+               },
+             }
+           : p
+       )
+     );
+     setIsEditDialogOpen(false); // Close the dialog
+     setEditingSprint(null); // Reset editing sprint
+     toast({ title: "Details Updated", description: `Details for Sprint ${editingSprint.sprintNumber} saved.` });
   };
 
   return (
@@ -299,7 +381,11 @@ export default function Home() {
              {/* Project Selector */}
              <Select
                value={selectedProjectId ?? undefined} // Handle null case for Select
-               onValueChange={(value) => setSelectedProjectId(value)}
+               onValueChange={(value) => {
+                   setSelectedProjectId(value);
+                   setActiveTab("home"); // Switch to home tab on project change
+                   setResetManualFormKey(prevKey => prevKey + 1); // Also reset entry form
+               }}
                disabled={projects.length === 0}
              >
                 <SelectTrigger className="w-[180px]">
@@ -380,8 +466,9 @@ export default function Home() {
               </TabsContent>
 
               <TabsContent value="entry">
-                 {/* Pass the save handler and initial data */}
+                 {/* Pass the save handler, initial data, parser, and reset key */}
                 <EntryTab
+                    key={resetManualFormKey} // Use key to force re-render and reset
                     onSaveSprints={handleSaveSprints}
                     initialSprintData={selectedProject.sprintData} // Pass existing data for editing
                     parseSprintData={parseSprintData} // Still needed for paste functionality
@@ -403,6 +490,18 @@ export default function Home() {
             </Card>
          )}
       </main>
+
+      {/* Edit Sprint Details Dialog */}
+      {editingSprint && selectedProject && (
+         <EditSprintDetailsDialog
+             isOpen={isEditDialogOpen}
+             onClose={() => { setIsEditDialogOpen(false); setEditingSprint(null); }}
+             sprint={editingSprint}
+             projectName={selectedProject.name}
+             onSave={handleUpdateSprintDetails}
+         />
+      )}
+
 
       <footer className="text-center p-4 text-xs text-muted-foreground border-t">
          Sprint Stats - Agile Reporting Made Easy

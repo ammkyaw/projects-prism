@@ -1,13 +1,21 @@
 
+export interface SprintDetailItem {
+  id: string; // Unique ID for the detail item
+  ticketNumber: string;
+  developer: string;
+  storyPoints: number;
+  devTime: string; // e.g., "2d", "4h", "1w"
+}
+
 export interface Sprint {
   sprintNumber: number;
   committedPoints: number;
-  completedPoints: number; // Renamed from totalDelivered for consistency with charts/previous naming
+  completedPoints: number;
   totalDays: number; // Derived from duration
   startDate: string; // YYYY-MM-DD format
   endDate: string; // YYYY-MM-DD format, derived from startDate and duration
   duration: string; // e.g., "1 Week", "2 Weeks"
-  // removed details?: string;
+  details?: SprintDetailItem[]; // Optional array for detailed ticket info
 }
 
 // Represents the data specific to a single sprint cycle within a project
