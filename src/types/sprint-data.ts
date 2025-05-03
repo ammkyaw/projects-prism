@@ -1,11 +1,18 @@
 
 
+// Represents a single team member
+export interface Member {
+  id: string; // Unique ID for the member
+  name: string;
+  role: string; // e.g., 'Project Manager', 'Software Engineer'
+}
+
 // Represents a single task within a sprint plan
 export interface Task {
   id: string; // Unique ID for the task item
   description: string;
   storyPoints?: number | string; // Can be number or empty string from input
-  assignee?: string;
+  assignee?: string; // Could potentially link to Member ID in the future
   status?: string; // e.g., 'To Do', 'In Progress', 'Done'
 }
 
@@ -22,7 +29,7 @@ export interface SprintPlanning {
 export interface SprintDetailItem {
   id: string; // Unique ID for the detail item
   ticketNumber: string;
-  developer: string;
+  developer: string; // Could potentially link to Member ID in the future
   storyPoints: number;
   devTime: string; // e.g., "2d", "4h", "1w"
 }
@@ -46,11 +53,12 @@ export interface SprintData {
   daysInSprint: number; // Max totalDays across all sprints in this project (might be less relevant now)
 }
 
-// Represents a single project containing its own sprint data
+// Represents a single project containing its own sprint data and members
 export interface Project {
     id: string; // Unique identifier for the project (e.g., UUID or timestamp-based)
     name: string;
     sprintData: SprintData;
+    members: Member[]; // Array of team members associated with the project
 }
 
 // The top-level data structure stored will be an array of Project objects
@@ -71,3 +79,16 @@ export const initialSprintPlanning: SprintPlanning = {
   definitionOfDone: '',
   testingStrategy: '',
 };
+
+// Predefined roles for team members
+export const predefinedRoles = [
+  'Project Manager',
+  'Business Analyst',
+  'QA Engineer',
+  'DevOps Engineer',
+  'Development Team Lead',
+  'Software Engineer',
+  'UX/UI Designer',
+  'Scrum Master',
+  'Product Owner',
+];

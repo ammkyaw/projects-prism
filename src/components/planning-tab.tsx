@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { PlusCircle, Trash2 } from 'lucide-react';
-import type { Sprint, SprintPlanning, Task } from '@/types/sprint-data';
+import type { Sprint, SprintPlanning, Task, Member } from '@/types/sprint-data'; // Import Member
 import { initialSprintPlanning } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ interface PlanningTabProps {
   sprints: Sprint[];
   onSavePlanning: (sprintNumber: number, data: SprintPlanning) => void;
   projectName: string;
+  members: Member[]; // Add members prop
 }
 
 // Internal state structure for task rows
@@ -31,11 +32,11 @@ const createEmptyTaskRow = (): TaskRow => ({
   id: '', // Will be assigned based on internal ID or existing ID
   description: '',
   storyPoints: '', // Use string initially for easier input handling
-  assignee: '',
+  assignee: '', // Initialize assignee as empty string
   status: 'To Do', // Default status
 });
 
-export default function PlanningTab({ sprints, onSavePlanning, projectName }: PlanningTabProps) {
+export default function PlanningTab({ sprints, onSavePlanning, projectName, members }: PlanningTabProps) {
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | null>(null);
   const [planningData, setPlanningData] = useState<SprintPlanning>(initialSprintPlanning);
   const [newTasks, setNewTasks] = useState<TaskRow[]>([]);
@@ -53,6 +54,7 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName }: Pl
         (loadedPlanning.newTasks || []).map((task, index) => ({
           ...task,
           storyPoints: task.storyPoints?.toString() ?? '',
+          assignee: task.assignee ?? '', // Ensure assignee is string or empty string
           _internalId: task.id || `initial_new_${index}_${Date.now()}`,
         }))
       );
@@ -60,6 +62,7 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName }: Pl
          (loadedPlanning.spilloverTasks || []).map((task, index) => ({
           ...task,
           storyPoints: task.storyPoints?.toString() ?? '',
+          assignee: task.assignee ?? '', // Ensure assignee is string or empty string
           _internalId: task.id || `initial_spill_${index}_${Date.now()}`,
         }))
       );
@@ -111,12 +114,12 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName }: Pl
     type: 'new' | 'spillover',
     internalId: string,
     field: keyof Omit<Task, 'id'>,
-    value: string | number
+    value: string | number | undefined // Allow undefined for assignee clearing
   ) => {
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     updater(rows =>
       rows.map(row =>
-        row._internalId === internalId ? { ...row, [field]: value } : row
+        row._internalId === internalId ? { ...row, [field]: value ?? '' } : row // Set to empty string if value is undefined/null
       )
     );
   };
@@ -139,14 +142,14 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName }: Pl
                 return;
             }
 
-            const description = row.description.trim();
+            const description = row.description?.trim();
             const storyPointsRaw = row.storyPoints?.toString().trim();
             const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
-            const assignee = row.assignee?.trim();
+            const assignee = row.assignee?.trim() || undefined; // Set to undefined if empty/whitespace
             const status = row.status?.trim();
 
             if (!description) {
-                 toast({ variant: "destructive", title: "Task Error", description: `Task description is required for row starting with "${row.description.substring(0,10)}...".`});
+                 toast({ variant: "destructive", title: "Task Error", description: `Task description is required for row starting with "${(row.description || '').substring(0,10)}...".`});
                  hasErrors = true;
                  return;
             }
@@ -160,7 +163,7 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName }: Pl
                 id: row.id || row._internalId, // Preserve existing ID or use internal one
                 description,
                 storyPoints: storyPoints,
-                assignee: assignee || undefined,
+                assignee: assignee,
                 status: status || 'To Do',
             });
         });
@@ -181,9 +184,6 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName }: Pl
     };
 
     onSavePlanning(selectedSprintNumber, finalPlanningData);
-     // Optional: Re-initialize rows from saved data if needed, or keep the form as is
-     // setNewTasks(finalNewTasks.map(...));
-     // setSpilloverTasks(finalSpilloverTasks.map(...));
   };
 
    // Helper to render task rows
@@ -229,13 +229,21 @@ export default function PlanningTab({ sprints, onSavePlanning, projectName }: Pl
                 {/* Assignee */}
                  <div className="md:col-span-1 col-span-1">
                     <Label htmlFor={`assignee-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Assignee</Label>
-                    <Input
-                        id={`assignee-${type}-${row._internalId}`}
-                        value={row.assignee}
-                        onChange={e => handleTaskInputChange(type, row._internalId, 'assignee', e.target.value)}
-                        placeholder="Developer"
-                        className="h-9"
-                    />
+                     <Select
+                         value={row.assignee ?? ''} // Use empty string if assignee is undefined/null
+                         onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'assignee', value === 'unassigned' ? undefined : value)} // Set undefined if 'unassigned' is chosen
+                     >
+                        <SelectTrigger id={`assignee-${type}-${row._internalId}`} className="h-9">
+                          <SelectValue placeholder="Select Assignee" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="unassigned" className="text-muted-foreground">-- Unassigned --</SelectItem>
+                           {members.map(member => (
+                               <SelectItem key={member.id} value={member.name}>{member.name}</SelectItem> // Use name as value for simplicity
+                           ))}
+                           {members.length === 0 && <SelectItem value="no-members" disabled>No members in project</SelectItem>}
+                        </SelectContent>
+                     </Select>
                 </div>
                 {/* Status */}
                 <div className="md:col-span-1 col-span-1">

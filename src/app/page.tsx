@@ -7,7 +7,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen } from 'lucide-react'; // Added NotebookPen for Planning
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users } from 'lucide-react'; // Added Users for Members, NotebookPen for Planning
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -17,10 +17,12 @@ import { Label } from "@/components/ui/label"
 import HomeTab from '@/components/home-tab';
 import EntryTab from '@/components/entry-tab';
 import ReportsTab from '@/components/reports-tab';
-import PlanningTab from '@/components/planning-tab'; // Import PlanningTab
+import PlanningTab from '@/components/planning-tab';
+import MembersTab from '@/components/members-tab'; // Import MembersTab
+import AddMembersDialog from '@/components/add-members-dialog'; // Import AddMembersDialog
 
 
-import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning } from '@/types/sprint-data';
+import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member } from '@/types/sprint-data';
 import { initialSprintData, initialSprintPlanning } from '@/types/sprint-data'; // Import initialSprintData and initialSprintPlanning
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -58,18 +60,20 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<string>("home");
   const [newProjectName, setNewProjectName] = useState<string>('');
   const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState<boolean>(false);
+  const [isAddMembersDialogOpen, setIsAddMembersDialogOpen] = useState<boolean>(false); // State for Add Members dialog
+  const [newlyCreatedProjectId, setNewlyCreatedProjectId] = useState<string | null>(null); // Track ID for Add Members dialog
   const { toast } = useToast();
   const [resetManualFormKey, setResetManualFormKey] = useState(0); // State to trigger form reset
 
   // Effect to load data from localStorage on mount
   useEffect(() => {
-    const savedData = localStorage.getItem('appData'); // Load AppData instead of sprintData
+    const savedData = localStorage.getItem('appData');
     if (savedData) {
       try {
         const parsedData: AppData = JSON.parse(savedData);
-        // Basic validation for the new structure
-        if (Array.isArray(parsedData) && parsedData.every(p => p.id && p.name && p.sprintData && Array.isArray(p.sprintData.sprints))) {
-           // Ensure details and planning arrays exist on loaded sprints
+        // Basic validation for the new structure including members
+        if (Array.isArray(parsedData) && parsedData.every(p => p.id && p.name && p.sprintData && Array.isArray(p.sprintData.sprints) && Array.isArray(p.members))) {
+           // Ensure details, planning arrays, and members exist on loaded sprints/projects
            const validatedData = parsedData.map(project => ({
               ...project,
               sprintData: {
@@ -80,24 +84,24 @@ export default function Home() {
                     planning: sprint.planning ?? initialSprintPlanning, // Ensure planning object exists
                  })),
               },
+              members: project.members ?? [], // Ensure members array exists
            }));
           setProjects(validatedData);
-          // Select the first project if available, or null otherwise
           setSelectedProjectId(validatedData.length > 0 ? validatedData[0].id : null);
         } else {
-          console.warn("Invalid data found in localStorage.");
+          console.warn("Invalid or outdated data found in localStorage.");
           localStorage.removeItem('appData'); // Clear invalid data
-          setProjects([]); // Reset projects state
+          setProjects([]);
           setSelectedProjectId(null);
         }
       } catch (error) {
         console.error("Failed to parse project data from localStorage:", error);
         localStorage.removeItem('appData'); // Clear corrupted data
-        setProjects([]); // Reset projects state
+        setProjects([]);
         setSelectedProjectId(null);
       }
     }
-  }, []); // Removed toast dependency
+  }, []);
 
   // Effect to save data to localStorage whenever projects change
   useEffect(() => {
@@ -113,10 +117,9 @@ export default function Home() {
            description: "Could not save project data locally. Data might be too large or storage is unavailable.",
          });
       }
-    } else if (projects?.length === 0) { // Check explicitly for empty array after load/creation
-       localStorage.removeItem('appData'); // Clear storage if projects array is explicitly empty
+    } else if (projects?.length === 0) {
+       localStorage.removeItem('appData');
     }
-    // Only save when projects state actually changes, not on every render with toast
   }, [projects, toast]);
 
   // Find the currently selected project object
@@ -124,7 +127,7 @@ export default function Home() {
     return projects.find(p => p.id === selectedProjectId) ?? null;
   }, [projects, selectedProjectId]);
 
-  // Parser for sprint data (remains largely the same, returns SprintData)
+  // Parser for sprint data (remains largely the same)
   const parseSprintData = (jsonData: any[]): SprintData => {
      const requiredColumns = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered'];
     if (!jsonData || jsonData.length === 0) {
@@ -158,12 +161,10 @@ export default function Home() {
 
          let startDateStr: string;
          if (typeof startDateValue === 'number') {
-             // Handle Excel date number
              if (startDateValue > 0) {
                  try {
-                     // Use XLSX utility for converting Excel date serial number
-                     const excelEpoch = new Date(Date.UTC(1899, 11, 30)); // Excel epoch starts Dec 30, 1899 for compatibility
-                     const date = new Date(excelEpoch.getTime() + startDateValue * 86400000); // milliseconds in a day
+                     const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+                     const date = new Date(excelEpoch.getTime() + startDateValue * 86400000);
                      startDateStr = date.toISOString().split('T')[0];
                  } catch (e) {
                      console.warn(`Skipping row ${rowIndex + 2}: Invalid date format for value ${startDateValue}.`);
@@ -174,10 +175,8 @@ export default function Home() {
                  return;
              }
          } else if (typeof startDateValue === 'string') {
-            // Handle date string (attempt to parse YYYY-MM-DD or ISO formats)
              const potentialDate = new Date(startDateValue);
              if (!isNaN(potentialDate.getTime())) {
-                 // Check if it's just a year or invalid date like '1'
                  if (potentialDate.getFullYear() > 1900 && potentialDate.toISOString().includes('-')) {
                     startDateStr = potentialDate.toISOString().split('T')[0];
                  } else {
@@ -210,8 +209,8 @@ export default function Home() {
             duration,
             committedPoints: commitment,
             completedPoints: delivered,
-            details: [], // Initialize details array
-            planning: initialSprintPlanning, // Initialize planning object
+            details: [],
+            planning: initialSprintPlanning,
             totalDays,
         });
     });
@@ -239,16 +238,15 @@ export default function Home() {
     setProjects(prevProjects => {
       const updatedProjects = prevProjects.map(p => {
          if (p.id === selectedProjectId) {
-           projectNameForToast = p.name; // Get name for toast
-           // Preserve existing details and planning when saving basic sprint data
+           projectNameForToast = p.name;
            const updatedSprints = newSprintData.sprints.map(newSprint => {
              const existingSprint = p.sprintData.sprints.find(
                oldSprint => oldSprint.sprintNumber === newSprint.sprintNumber
              );
              return {
                ...newSprint,
-               details: existingSprint?.details ?? [], // Keep old details or initialize empty array
-               planning: existingSprint?.planning ?? initialSprintPlanning, // Keep old planning or initialize
+               details: existingSprint?.details ?? [],
+               planning: existingSprint?.planning ?? initialSprintPlanning,
              };
            });
 
@@ -266,8 +264,8 @@ export default function Home() {
     });
 
     toast({ title: "Success", description: `Sprint data saved to project '${projectNameForToast}'.` });
-    setActiveTab("home"); // Switch to home tab after saving
-    setResetManualFormKey(prevKey => prevKey + 1); // Trigger form reset
+    setActiveTab("home");
+    setResetManualFormKey(prevKey => prevKey + 1);
   }, [selectedProjectId, toast]);
 
 
@@ -298,9 +296,45 @@ export default function Home() {
        return updatedProjects;
      });
       toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber} in project '${projectNameForToast}'.` });
-      // Optionally switch tab or stay on planning tab
-      // setActiveTab("planning");
   }, [selectedProjectId, toast]);
+
+  // Handler to save members for the *selected* project
+  const handleSaveMembers = useCallback((updatedMembers: Member[]) => {
+    if (!selectedProjectId) {
+      toast({ variant: "destructive", title: "Error", description: "No project selected." });
+      return;
+    }
+    let projectNameForToast = 'N/A';
+    setProjects(prevProjects => {
+      const updatedProjects = prevProjects.map(p => {
+        if (p.id === selectedProjectId) {
+          projectNameForToast = p.name;
+          return { ...p, members: updatedMembers };
+        }
+        return p;
+      });
+      return updatedProjects;
+    });
+    toast({ title: "Success", description: `Members updated for project '${projectNameForToast}'.` });
+  }, [selectedProjectId, toast]);
+
+  // Handler to add members to the *newly created* project (from dialog)
+   const handleAddMembersToNewProject = useCallback((addedMembers: Member[]) => {
+       if (!newlyCreatedProjectId) return;
+
+       setProjects(prevProjects => {
+         const updatedProjects = prevProjects.map(p => {
+           if (p.id === newlyCreatedProjectId) {
+             return { ...p, members: [...(p.members || []), ...addedMembers] };
+           }
+           return p;
+         });
+         return updatedProjects;
+       });
+       toast({ title: "Members Added", description: `Members added to the new project.` });
+       setIsAddMembersDialogOpen(false); // Close the dialog
+       setNewlyCreatedProjectId(null); // Reset the tracked ID
+   }, [newlyCreatedProjectId, toast]);
 
 
   // Export data for the currently selected project
@@ -316,6 +350,7 @@ export default function Home() {
      try {
       const wb = XLSX.utils.book_new();
 
+       // Sprint Summary Sheet
        const summaryData = selectedProject.sprintData.sprints.map(s => ({
          'SprintNumber': s.sprintNumber,
          'StartDate': s.startDate,
@@ -327,7 +362,7 @@ export default function Home() {
        const wsSummary = XLSX.utils.json_to_sheet(summaryData);
        XLSX.utils.book_append_sheet(wb, wsSummary, 'Sprint Summary');
 
-       // Export details if they exist
+       // Sprint Details Sheet
        const detailsExist = selectedProject.sprintData.sprints.some(s => s.details && s.details.length > 0);
        if (detailsExist) {
            const allDetails: any[] = [];
@@ -342,11 +377,13 @@ export default function Home() {
                    });
                });
            });
-           const wsDetails = XLSX.utils.json_to_sheet(allDetails);
-           XLSX.utils.book_append_sheet(wb, wsDetails, 'Sprint Details');
+           if (allDetails.length > 0) {
+               const wsDetails = XLSX.utils.json_to_sheet(allDetails);
+               XLSX.utils.book_append_sheet(wb, wsDetails, 'Sprint Details');
+           }
        }
 
-       // Export planning data if it exists
+       // Planning Sheets (Summary and Tasks)
        const planningExists = selectedProject.sprintData.sprints.some(s => s.planning && (s.planning.goal || s.planning.newTasks.length > 0 || s.planning.spilloverTasks.length > 0 || s.planning.definitionOfDone || s.planning.testingStrategy));
        if (planningExists) {
            const planningSummaryData: any[] = [];
@@ -379,14 +416,28 @@ export default function Home() {
                    }));
                }
            });
-           const wsPlanningSummary = XLSX.utils.json_to_sheet(planningSummaryData);
-           XLSX.utils.book_append_sheet(wb, wsPlanningSummary, 'Planning Summary');
-            const wsPlanningTasks = XLSX.utils.json_to_sheet(planningTasksData);
-           XLSX.utils.book_append_sheet(wb, wsPlanningTasks, 'Planning Tasks');
+            if (planningSummaryData.length > 0) {
+               const wsPlanningSummary = XLSX.utils.json_to_sheet(planningSummaryData);
+               XLSX.utils.book_append_sheet(wb, wsPlanningSummary, 'Planning Summary');
+            }
+            if (planningTasksData.length > 0) {
+               const wsPlanningTasks = XLSX.utils.json_to_sheet(planningTasksData);
+               XLSX.utils.book_append_sheet(wb, wsPlanningTasks, 'Planning Tasks');
+            }
+       }
+
+       // Members Sheet
+       if (selectedProject.members && selectedProject.members.length > 0) {
+            const membersData = selectedProject.members.map(m => ({
+                'MemberID': m.id,
+                'Name': m.name,
+                'Role': m.role,
+            }));
+            const wsMembers = XLSX.utils.json_to_sheet(membersData);
+            XLSX.utils.book_append_sheet(wb, wsMembers, 'Members');
        }
 
 
-      // Add project name to filename for clarity
       const projectNameSlug = selectedProject.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       XLSX.writeFile(wb, `sprint_stats_${projectNameSlug}_report.xlsx`);
       toast({ title: "Success", description: `Data for project '${selectedProject.name}' exported to Excel.` });
@@ -413,16 +464,21 @@ export default function Home() {
     }
 
     const newProject: Project = {
-      id: `proj_${Date.now()}`, // Simple unique ID
+      id: `proj_${Date.now()}`,
       name: trimmedName,
-      sprintData: initialSprintData // Start with empty sprint data
+      sprintData: initialSprintData,
+      members: [], // Initialize with empty members array
     };
 
     setProjects(prevProjects => [...prevProjects, newProject]);
-    setSelectedProjectId(newProject.id); // Select the newly created project
-    setNewProjectName(''); // Clear input
-    setIsNewProjectDialogOpen(false); // Close dialog
+    setSelectedProjectId(newProject.id);
+    setNewProjectName('');
+    setIsNewProjectDialogOpen(false);
     toast({ title: "Project Created", description: `Project "${trimmedName}" created successfully.` });
+
+    // Open the Add Members dialog for the newly created project
+    setNewlyCreatedProjectId(newProject.id); // Track the new project ID
+    setIsAddMembersDialogOpen(true); // Open the dialog
   };
 
 
@@ -431,13 +487,12 @@ export default function Home() {
       <header className="sticky top-0 z-10 flex items-center justify-between p-4 bg-card border-b shadow-sm">
         <div className="flex items-center gap-4">
             <h1 className="text-2xl font-semibold text-primary">Sprint Stats</h1>
-             {/* Project Selector */}
              <Select
-               value={selectedProjectId ?? undefined} // Handle null case for Select
+               value={selectedProjectId ?? undefined}
                onValueChange={(value) => {
                    setSelectedProjectId(value);
-                   setActiveTab("home"); // Switch to home tab on project change
-                   setResetManualFormKey(prevKey => prevKey + 1); // Also reset entry form
+                   setActiveTab("home");
+                   setResetManualFormKey(prevKey => prevKey + 1);
                }}
                disabled={projects.length === 0}
              >
@@ -456,7 +511,6 @@ export default function Home() {
                   </SelectGroup>
                 </SelectContent>
              </Select>
-             {/* New Project Button/Dialog */}
              <Dialog open={isNewProjectDialogOpen} onOpenChange={setIsNewProjectDialogOpen}>
                 <DialogTrigger asChild>
                     <Button variant="outline" size="sm"><PlusCircle className="mr-2 h-4 w-4" /> New Project</Button>
@@ -491,7 +545,7 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-4">
-          {selectedProject && selectedProject.sprintData.sprints.length > 0 && (
+          {selectedProject && (selectedProject.sprintData.sprints.length > 0 || selectedProject.members.length > 0) && (
             <Button onClick={handleExport} variant="outline" size="sm">
               <Download className="mr-2 h-4 w-4" />
               Export Project Data
@@ -500,48 +554,64 @@ export default function Home() {
         </div>
       </header>
 
+      {/* Add Members Dialog */}
+      <AddMembersDialog
+        isOpen={isAddMembersDialogOpen}
+        onOpenChange={setIsAddMembersDialogOpen}
+        onSaveMembers={handleAddMembersToNewProject} // Use the specific handler for new projects
+        existingMembers={[]} // Start with no members for a new project
+        projectId={newlyCreatedProjectId} // Pass the ID of the newly created project
+      />
+
+
       <main className="flex-1 p-6">
          {selectedProject ? (
              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-4 mb-6"> {/* Updated grid-cols to 4 */}
+              <TabsList className="grid w-full grid-cols-5 mb-6"> {/* Updated grid-cols to 5 */}
                 <TabsTrigger value="home"><HomeIcon className="mr-2 h-4 w-4" />Home</TabsTrigger>
                 <TabsTrigger value="entry"><ListPlus className="mr-2 h-4 w-4" />Entry</TabsTrigger>
-                <TabsTrigger value="planning"><NotebookPen className="mr-2 h-4 w-4" />Planning</TabsTrigger> {/* Added Planning Trigger */}
+                <TabsTrigger value="planning"><NotebookPen className="mr-2 h-4 w-4" />Planning</TabsTrigger>
+                <TabsTrigger value="members"><Users className="mr-2 h-4 w-4" />Members</TabsTrigger> {/* Added Members Trigger */}
                 <TabsTrigger value="reports"><BarChart className="mr-2 h-4 w-4" />Reports</TabsTrigger>
               </TabsList>
 
               <TabsContent value="home">
-                 {/* Pass only the selected project's sprintData, name and ID */}
                  <HomeTab
-                     projectId={selectedProject.id} // Pass projectId
+                     projectId={selectedProject.id}
                      sprintData={selectedProject.sprintData}
                      projectName={selectedProject.name}
                  />
               </TabsContent>
 
               <TabsContent value="entry">
-                 {/* Pass the save handler, initial data, parser, and reset key */}
                 <EntryTab
-                    key={resetManualFormKey} // Use key to force re-render and reset
+                    key={resetManualFormKey}
                     onSaveSprints={handleSaveSprints}
-                    initialSprintData={selectedProject.sprintData} // Pass existing data for editing
-                    parseSprintData={parseSprintData} // Still needed for paste functionality
+                    initialSprintData={selectedProject.sprintData}
+                    parseSprintData={parseSprintData}
                     projectName={selectedProject.name}
                 />
               </TabsContent>
 
-                <TabsContent value="planning">
-                   {/* Pass project's sprints and the save handler */}
+              <TabsContent value="planning">
                   <PlanningTab
                     sprints={selectedProject.sprintData.sprints}
                     onSavePlanning={handleSavePlanning}
                     projectName={selectedProject.name}
+                    members={selectedProject.members} // Pass members for assignee dropdown
                   />
                </TabsContent>
 
+               <TabsContent value="members">
+                 <MembersTab
+                   projectId={selectedProject.id}
+                   projectName={selectedProject.name}
+                   initialMembers={selectedProject.members}
+                   onSaveMembers={handleSaveMembers} // Pass the save handler
+                 />
+               </TabsContent>
 
               <TabsContent value="reports">
-                 {/* Pass only the selected project's sprintData */}
                  <ReportsTab sprintData={selectedProject.sprintData} projectName={selectedProject.name} />
               </TabsContent>
             </Tabs>
@@ -554,9 +624,6 @@ export default function Home() {
             </Card>
          )}
       </main>
-
-
-
 
       <footer className="text-center p-4 text-xs text-muted-foreground border-t">
          Sprint Stats - Agile Reporting Made Easy
