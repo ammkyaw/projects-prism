@@ -58,7 +58,7 @@ export default function HomeTab({ sprintData, projectName, projectId }: HomeTabP
                     <TableHead className="w-[100px]">Sprint #</TableHead>
                     <TableHead>Start Date</TableHead>
                     <TableHead>End Date</TableHead>
-                    <TableHead>Status</TableHead> {/* Add Status Header */}
+                    <TableHead>Status</TableHead>{/* Add Status Header */}
                     <TableHead className="text-right">Commitment</TableHead>
                     <TableHead className="text-right">Delivered</TableHead>
                     <TableHead className="w-[50px] text-center">Actions</TableHead>
