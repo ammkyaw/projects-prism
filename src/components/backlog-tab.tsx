@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"; // Import Dialog
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogClose, DialogFooter } from "@/components/ui/dialog"; // Import Dialog components including DialogFooter
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PlusCircle, Trash2, Package, Save, ArrowUpDown, View, ArrowRightSquare } from 'lucide-react'; // Added View, ArrowRightSquare
 import type { Task, Member, Sprint, SprintStatus } from '@/types/sprint-data'; // Added Sprint, SprintStatus
@@ -305,14 +305,16 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                     {/* Backlog ID */}
                     <div className="md:col-span-1 col-span-1">
                         <Label htmlFor={`backlog-id-${row._internalId}`} className="md:hidden text-xs font-medium">Backlog ID*</Label>
-                        <Input
-                            id={`backlog-id-${row._internalId}`}
-                            value={row.backlogId ?? ''}
-                            onChange={e => handleInputChange(row._internalId, 'backlogId', e.target.value)}
-                            placeholder="ID-123"
-                            className="h-9"
-                            required
-                        />
+                        <Button variant="link" className="p-0 h-auto text-left justify-start font-normal" onClick={() => handleViewDetails(row)}>
+                             <Input
+                                 id={`backlog-id-${row._internalId}`}
+                                 value={row.backlogId ?? ''}
+                                 onChange={e => handleInputChange(row._internalId, 'backlogId', e.target.value)}
+                                 placeholder="ID-123"
+                                 className="h-9"
+                                 required
+                             />
+                         </Button>
                     </div>
                     {/* Title */}
                     <div className="md:col-span-1 col-span-2">
@@ -404,10 +406,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                      </div>
                       {/* Actions Cell */}
                       <div className="md:col-span-1 col-span-2 flex items-center gap-1 justify-center">
-                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleViewDetails(row)}>
-                             <View className="h-4 w-4" />
-                             <span className="sr-only">View Details</span>
-                         </Button>
+                         {/* View Details Button removed - Backlog ID is now the trigger */}
                          <Button
                              variant="ghost"
                              size="icon"
@@ -540,4 +539,5 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
     </>
   );
 }
+
 
