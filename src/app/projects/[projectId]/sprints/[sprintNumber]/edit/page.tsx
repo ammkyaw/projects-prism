@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -25,7 +26,7 @@ interface DetailRow extends SprintDetailItem {
 const createEmptyDetailRow = (): DetailRow => ({
     _internalId: `temp_${Date.now()}_${Math.random()}`,
     id: '', // Will be assigned on save if needed, or use _internalId
-    ticketNumber: '',
+    ticketNumber: '', // Use ticketNumber
     developer: '', // Keep as string, will store member name
     storyPoints: 0,
     devTime: '',
@@ -87,7 +88,7 @@ export default function EditSprintDetailsPage() {
                      if (
                          item && typeof item === 'object' &&
                          typeof item.id === 'string' &&
-                         typeof item.ticketNumber === 'string' &&
+                         typeof item.ticketNumber === 'string' && // Check ticketNumber
                          typeof item.developer === 'string' &&
                          typeof item.storyPoints === 'number' && !isNaN(item.storyPoints) &&
                          typeof item.devTime === 'string'
@@ -145,7 +146,7 @@ export default function EditSprintDetailsPage() {
             .filter(row => row.ticketNumber.trim() || row.developer.trim() || row.storyPoints > 0 || row.devTime.trim()) // Filter out truly empty rows
             .map(({ _internalId, ...rest }) => ({ // Map to plain object for comparison
                  id: rest.id || '', // Use empty string if no ID yet
-                 ticketNumber: rest.ticketNumber.trim(),
+                 ticketNumber: rest.ticketNumber.trim(), // Use ticketNumber
                  developer: rest.developer.trim(),
                  storyPoints: Number(rest.storyPoints ?? 0),
                  devTime: rest.devTime.trim(),
@@ -348,7 +349,7 @@ export default function EditSprintDetailsPage() {
                          <Label htmlFor={`ticket-${row._internalId}`} className="md:hidden text-xs font-medium">Ticket #*</Label>
                          <Input
                             id={`ticket-${row._internalId}`}
-                            value={row.ticketNumber}
+                            value={row.ticketNumber} // Use ticketNumber
                             onChange={e => handleDetailInputChange(row._internalId, 'ticketNumber', e.target.value)}
                             placeholder="JIRA-123"
                             className="h-9"

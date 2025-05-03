@@ -44,7 +44,7 @@ export interface Team {
 // Represents a single task within a sprint plan
 export interface Task {
   id: string; // Unique ID for the task item
-  description: string;
+  ticketNumber: string; // Changed from description
   storyPoints?: number | string; // Can be number or empty string from input
   devEstimatedTime?: string; // Renamed from estimatedTime, Optional: e.g., "2d", "4h", "1w 2d"
   qaEstimatedTime?: string; // Optional: Defaults to "2d"
@@ -55,8 +55,9 @@ export interface Task {
   startDate?: string | undefined; // Optional: YYYY-MM-DD for Gantt chart
   dependsOn?: string[]; // Optional: Array of task IDs this task depends on
   // Legacy fields - keep if needed for migration or detail view, but planning uses new fields
-  ticketNumber?: string;
+  // ticketNumber?: string; // This is now the primary field
   devTime?: string;
+  description?: string; // Keep temporarily for potential data migration if needed, but should not be used for new data
 }
 
 // Represents the planning data for a single sprint

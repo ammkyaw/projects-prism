@@ -165,7 +165,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
              const memberHolidays = assigneeName ? (memberHolidayMap.get(assigneeName) ?? new Set<string>()) : new Set<string>(); // Get holidays for assignee or empty set
 
             if (!task.startDate || !isValid(parseISO(task.startDate))) {
-                console.warn(`Task ${index + 1} (${task.description}): Invalid or missing start date.`);
+                console.warn(`Task ${index + 1} (${task.ticketNumber}): Invalid or missing start date.`); // Use ticketNumber
                 return null;
             }
 
@@ -261,7 +261,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
              // Tooltip to show more details
              const tooltipContent = [
-                 `${task.description || 'Task'} (${task.status || 'N/A'})`,
+                 `Ticket: ${task.ticketNumber || 'N/A'} (${task.status || 'N/A'})`, // Use ticketNumber
                  `Dev: ${task.devEstimatedTime || '0d'} [${devPhaseValid ? format(devStartDateObj, 'MM/dd') + '-' + format(devEndDateObj, 'MM/dd') : 'N/A'}]`,
                  `QA: ${task.qaEstimatedTime || '0d'} [${qaPhaseValid ? format(qaStartDateObj, 'MM/dd') + '-' + format(qaEndDateObj, 'MM/dd') : 'N/A'}]`,
                  `Buffer: ${task.bufferTime || '0d'} [${bufferPhaseValid ? format(bufferStartDateObj, 'MM/dd') + '-' + format(bufferEndDateObj, 'MM/dd') : 'N/A'}]`,
@@ -271,7 +271,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
 
             const result = {
-                name: task.description || `Task ${task.id}`,
+                name: task.ticketNumber || `Task ${task.id}`, // Use ticketNumber for Y-axis label
                 taskIndex: index,
                 // Recharts bar needs [start, end] where end is EXCLUSIVE for length calculation,
                 // but INCLUSIVE for positioning. So we use [startIndex, endIndex + 1]
@@ -502,5 +502,3 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     </ChartContainer>
   );
 }
-
-

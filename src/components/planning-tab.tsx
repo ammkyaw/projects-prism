@@ -114,20 +114,20 @@ const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number):
    }
 
    // Loop until the required number of working days are counted
+   // Need to count the start day itself if it's a working day
    while (workingDaysCounted < workingDays) {
-      const dayOfWeek = getDay(currentDate);
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-          workingDaysCounted++;
-      }
+        if (getDay(currentDate) !== 0 && getDay(currentDate) !== 6) {
+            workingDaysCounted++;
+        }
 
-      // Only advance the date if we haven't reached the target number of working days yet
-      if (workingDaysCounted < workingDays) {
-          currentDate = addDays(currentDate, 1);
-          // Skip subsequent weekends while advancing
-          while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
-              currentDate = addDays(currentDate, 1);
-          }
-      }
+        // Only advance the date if we haven't reached the target number of working days yet
+        if (workingDaysCounted < workingDays) {
+             currentDate = addDays(currentDate, 1);
+             // Skip subsequent weekends while advancing
+             while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
+                 currentDate = addDays(currentDate, 1);
+             }
+        }
    }
 
   return currentDate;
@@ -158,7 +158,7 @@ interface NewSprintFormState {
 const createEmptyTaskRow = (): TaskRow => ({
   _internalId: `task_${Date.now()}_${Math.random()}`,
   id: '',
-  description: '',
+  ticketNumber: '', // Changed from description
   storyPoints: '',
   devEstimatedTime: '', // Renamed
   qaEstimatedTime: '2d', // Default QA time
@@ -247,6 +247,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 
        const mapTaskToRow = (task: Task, index: number, type: 'new' | 'spill'): TaskRow => ({
           ...task,
+          ticketNumber: task.ticketNumber ?? '', // Use ticketNumber
           storyPoints: task.storyPoints?.toString() ?? '',
           devEstimatedTime: task.devEstimatedTime ?? '', // Use new field
           qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
@@ -410,7 +411,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           // Skip completely empty rows silently, unless it's the only row in 'new' tasks
           if (
               taskRows.length > 1 &&
-              !row.description && !row.storyPoints && !row.assignee &&
+              !row.ticketNumber && !row.storyPoints && !row.assignee && // Check ticketNumber
               row.status === 'To Do' && !row.devEstimatedTime &&
               row.qaEstimatedTime === '2d' && row.bufferTime === '1d' && // Check default values too
               !row.startDate && !row.reviewer
@@ -420,7 +421,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           // Special check for the single row case in 'new' tasks
           if (
               taskType === 'new' && taskRows.length === 1 &&
-              !row.description && !row.storyPoints && !row.assignee &&
+              !row.ticketNumber && !row.storyPoints && !row.assignee && // Check ticketNumber
               row.status === 'To Do' && !row.devEstimatedTime &&
               row.qaEstimatedTime === '2d' && row.bufferTime === '1d' &&
               !row.startDate && !row.reviewer
@@ -430,7 +431,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           }
 
 
-          const description = row.description?.trim();
+          const ticketNumber = row.ticketNumber?.trim(); // Use ticketNumber
           const storyPointsRaw = row.storyPoints?.toString().trim();
           const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
           const devEstimatedTime = row.devEstimatedTime?.trim() || undefined;
@@ -441,7 +442,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           const status = row.status?.trim() as Task['status'];
           const startDate = row.startDate;
 
-          if (!description) errors.push(`${taskPrefix}: Description is required.`);
+          if (!ticketNumber) errors.push(`${taskPrefix}: Ticket # is required.`); // Updated validation message
           if (!startDate) errors.push(`${taskPrefix}: Start Date is required for timeline.`);
 
           if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
@@ -464,7 +465,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 
           finalTasks.push({
               id: row.id || `task_${selectedSprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
-              description: description || '',
+              ticketNumber: ticketNumber || '', // Use ticketNumber
               storyPoints: storyPoints,
               devEstimatedTime: devEstimatedTime,
               qaEstimatedTime: qaEstimatedTime, // Save QA time
@@ -645,10 +646,11 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 
    const renderTaskTable = (type: 'new' | 'spillover', taskRows: TaskRow[], disabled: boolean) => (
       <div className="overflow-x-auto"> {/* Add horizontal scroll */}
-         <div className="min-w-[1200px] space-y-4"> {/* Set min-width */}
-             {/* Updated grid layout - added QA Est, Buffer, Reviewer */}
-            <div className="hidden md:grid grid-cols-[3fr_70px_100px_100px_100px_1fr_1fr_1fr_100px_40px] gap-x-2 items-center pb-2 border-b">
-                <Label className="text-xs font-medium text-muted-foreground">Description*</Label>
+         {/* Adjusted grid layout for narrower Ticket # and other fields */}
+         <div className="min-w-[1150px] space-y-4"> {/* Adjusted min-width */}
+             {/* Grid column definitions */}
+            <div className="hidden md:grid grid-cols-[150px_70px_100px_100px_100px_150px_150px_120px_100px_40px] gap-x-2 items-center pb-2 border-b">
+                <Label className="text-xs font-medium text-muted-foreground">Ticket #*</Label>
                 <Label className="text-xs font-medium text-muted-foreground text-right">Story Pts</Label>
                 <Label className="text-xs font-medium text-muted-foreground text-right">Dev Est</Label>
                 <Label className="text-xs font-medium text-muted-foreground text-right">QA Est</Label>
@@ -661,16 +663,17 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
             </div>
             <div className="space-y-4 md:space-y-2">
                 {taskRows.map((row) => (
-                <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[3fr_70px_100px_100px_100px_1fr_1fr_1fr_100px_40px] gap-x-2 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
-                     {/* Description */}
+                // Match the grid column definition here
+                <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[150px_70px_100px_100px_100px_150px_150px_120px_100px_40px] gap-x-2 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
+                     {/* Ticket Number */}
                     <div className="md:col-span-1 col-span-2">
-                        <Label htmlFor={`desc-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Description*</Label>
+                        <Label htmlFor={`ticket-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Ticket #*</Label>
                         <Input
-                            id={`desc-${type}-${row._internalId}`}
-                            value={row.description}
-                            onChange={e => handleTaskInputChange(type, row._internalId, 'description', e.target.value)}
-                            placeholder="Task description"
-                            className="h-9"
+                            id={`ticket-${type}-${row._internalId}`}
+                            value={row.ticketNumber}
+                            onChange={e => handleTaskInputChange(type, row._internalId, 'ticketNumber', e.target.value)}
+                            placeholder="e.g., 12345"
+                            className="h-9 w-full" // Ensure width is handled by grid
                             disabled={disabled}
                             required
                         />
@@ -696,7 +699,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                             id={`devEstTime-${type}-${row._internalId}`}
                             value={row.devEstimatedTime}
                             onChange={e => handleTaskInputChange(type, row._internalId, 'devEstimatedTime', e.target.value)}
-                            placeholder="e.g., 2d, 5"
+                            placeholder="e.g., 2d"
                             className="h-9 text-right w-full"
                             disabled={disabled}
                         />
@@ -733,7 +736,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                              onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'assignee', value === 'unassigned' ? undefined : value)}
                              disabled={disabled || members.length === 0}
                          >
-                            <SelectTrigger id={`assignee-${type}-${row._internalId}`} className="h-9">
+                            <SelectTrigger id={`assignee-${type}-${row._internalId}`} className="h-9 w-full">
                               <SelectValue placeholder="Select Assignee" />
                             </SelectTrigger>
                             <SelectContent>
@@ -753,7 +756,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                             onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'reviewer', value === 'unassigned' ? undefined : value)}
                             disabled={disabled || members.length === 0}
                         >
-                           <SelectTrigger id={`reviewer-${type}-${row._internalId}`} className="h-9">
+                           <SelectTrigger id={`reviewer-${type}-${row._internalId}`} className="h-9 w-full">
                              <SelectValue placeholder="Select Reviewer" />
                            </SelectTrigger>
                            <SelectContent>
@@ -773,7 +776,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                            onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'status', value)}
                             disabled={disabled}
                          >
-                            <SelectTrigger id={`status-${type}-${row._internalId}`} className="h-9">
+                            <SelectTrigger id={`status-${type}-${row._internalId}`} className="h-9 w-full">
                               <SelectValue placeholder="Select Status" />
                             </SelectTrigger>
                             <SelectContent>
@@ -843,7 +846,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                  {renderTaskTable('new', newTasks, disabled)}
              </CardContent>
              <CardFooter>
-                <p className="text-xs text-muted-foreground">* Required field: Description, Start Date. Other fields optional but recommended for planning/timeline.</p>
+                <p className="text-xs text-muted-foreground">* Required field: Ticket #, Start Date. Other fields optional but recommended for planning/timeline.</p>
             </CardFooter>
          </Card>
 
@@ -855,7 +858,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                  {renderTaskTable('spillover', spilloverTasks, disabled)}
              </CardContent>
               <CardFooter>
-                <p className="text-xs text-muted-foreground">* Required field: Description, Start Date.</p>
+                <p className="text-xs text-muted-foreground">* Required field: Ticket #, Start Date.</p>
             </CardFooter>
          </Card>
 
@@ -1090,4 +1093,3 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     </div>
   );
 }
-
