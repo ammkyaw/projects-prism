@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Task } from '@/types/sprint-data';
+import type { Task, Member } from '@/types/sprint-data'; // Import Member
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from 'recharts';
 import { ChartConfig, ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { format, parseISO, differenceInDays, addDays, isWithinInterval } from 'date-fns';
@@ -16,19 +16,43 @@ interface SprintTimelineChartProps {
   tasks: TaskWithEndDate[]; // Expect tasks with the calculated endDate
   sprintStartDate?: string;
   sprintEndDate?: string;
+  members: Member[]; // Add members for coloring
 }
 
-// Define colors for different task statuses or assignees (example)
+// Define a base color palette for assignees (expandable)
+const assigneeColors = [
+  'hsl(var(--chart-1))', // Blue
+  'hsl(var(--chart-2))', // Gold
+  'hsl(var(--chart-3))', // Muted Blue
+  'hsl(var(--chart-4))', // Orangeish
+  'hsl(var(--chart-5))', // Greenish
+  'hsl(270 60% 60%)', // Purple
+  'hsl(180 50% 55%)', // Teal
+  'hsl(330 70% 65%)', // Pink
+];
+
 const statusColors: { [key: string]: string } = {
-  'To Do': 'hsl(var(--chart-5))', // Greenish
-  'In Progress': 'hsl(var(--chart-4))', // Orangeish
-  'Done': 'hsl(var(--chart-1))', // Blue
+  'To Do': 'hsl(var(--muted) / 0.5)', // Lighter gray for To Do
+  'In Progress': 'hsl(var(--accent))', // Use Accent color (Gold)
+  'Done': 'hsl(var(--primary))', // Blue
   'Blocked': 'hsl(var(--destructive))', // Red
 };
 
-const defaultColor = 'hsl(var(--chart-3))'; // Muted blue for unassigned/default
 
-export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndDate }: SprintTimelineChartProps) {
+const defaultColor = 'hsl(var(--muted-foreground))'; // Gray for unassigned/default
+
+export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndDate, members }: SprintTimelineChartProps) {
+
+  // Create a map for consistent assignee colors
+  const memberColorMap = useMemo(() => {
+    const map: { [assigneeName: string]: string } = {};
+    members.forEach((member, index) => {
+      map[member.name] = assigneeColors[index % assigneeColors.length];
+    });
+    return map;
+  }, [members]);
+
+
   const chartData = useMemo(() => {
     if (!tasks || tasks.length === 0 || !sprintStartDate || !sprintEndDate) {
       return [];
@@ -38,7 +62,6 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     const end = parseISO(sprintEndDate);
 
     return tasks
-        // Tasks are pre-filtered in the parent component to have valid startDate and endDate (calculated)
         .map((task, index) => {
             const taskStart = parseISO(task.startDate!);
             const taskEnd = parseISO(task.endDate); // Use the calculated endDate
@@ -47,27 +70,29 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             const visStart = taskStart < start ? start : taskStart;
             let visEnd = taskEnd > end ? end : taskEnd;
 
-            // Ensure visEnd is not before visStart after clamping
+             // Ensure visEnd is not before visStart after clamping
              if (visEnd < visStart) {
                visEnd = visStart;
-            }
+             }
 
             const startDay = differenceInDays(visStart, start);
             // Ensure duration is at least 1 day for visualization
             const duration = Math.max(differenceInDays(visEnd, visStart) + 1, 1);
 
-             // Assign color based on status or assignee (example)
-             const color = statusColors[task.status ?? ''] || defaultColor;
+             // Assign color based on assignee first, fallback to status or default
+             const color = task.assignee && memberColorMap[task.assignee]
+                ? memberColorMap[task.assignee]
+                : statusColors[task.status ?? ''] || defaultColor;
 
             return {
                 name: task.description || `Task ${task.id}`,
                 taskIndex: index, // Use index for Y-axis positioning
                 range: [startDay, startDay + duration -1], // [start_day_index, end_day_index]
                 fill: color,
-                tooltip: `${task.description || 'Task'} (${task.status || 'N/A'}) - Est. ${task.estimatedTime || '?'} ${task.assignee ? '(' + task.assignee + ')' : ''} [${format(taskStart, 'MM/dd')} - ${format(taskEnd, 'MM/dd')}]` // Updated tooltip
+                tooltip: `${task.description || 'Task'} (${task.status || 'N/A'}) - Est. ${task.estimatedTime || '?'} ${task.assignee ? '(' + task.assignee + ')' : '(Unassigned)'} [${format(taskStart, 'MM/dd')} - ${format(taskEnd, 'MM/dd')}]` // Updated tooltip
             };
         });
-  }, [tasks, sprintStartDate, sprintEndDate]);
+  }, [tasks, sprintStartDate, sprintEndDate, memberColorMap]); // Add memberColorMap dependency
 
   if (chartData.length === 0) {
     return <div className="flex items-center justify-center h-full text-muted-foreground">No tasks with valid start date and estimate to display.</div>;

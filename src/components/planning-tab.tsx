@@ -176,7 +176,24 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
              const durationDays = parseEstimatedTimeToDays(task.estimatedTime!)!;
              // Calculate an *approximate* end date based on working days for the chart
              // Note: This simple calculation doesn't account for weekends within the duration.
-             const endDate = addDays(startDate, durationDays > 0 ? durationDays - 1 : 0); // Add duration days (adjusting for inclusiveness)
+              // Calculate end date by adding *calendar* days, assuming estimate is working days.
+              // This is an approximation for visualization. More complex logic needed for exact weekend skipping.
+             let daysToAdd = 0;
+             let currentDay = startDate;
+             let workingDaysCounted = 0;
+             while (workingDaysCounted < durationDays) {
+                 const dayOfWeek = currentDay.getDay(); // 0=Sun, 6=Sat
+                 if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                     workingDaysCounted++;
+                 }
+                 // Don't increment daysToAdd on the last working day
+                 if (workingDaysCounted < durationDays) {
+                     daysToAdd++;
+                 }
+                 currentDay = addDays(startDate, daysToAdd + 1); // Check the next day
+             }
+             const endDate = addDays(startDate, daysToAdd);
+
              return {
                  ...task,
                  // Add a temporary endDate field *just for the chart component*
@@ -358,7 +375,11 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           const status = row.status?.trim() as Task['status'];
           const startDate = row.startDate; // Already string | undefined
 
+          // Require description, estimate, and start date for timeline validity
           if (!description) errors.push(`${taskPrefix}: Description is required.`);
+          if (!estimatedTime) errors.push(`${taskPrefix}: Estimated Time is required for timeline.`);
+          if (!startDate) errors.push(`${taskPrefix}: Start Date is required for timeline.`);
+
           if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
                errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
           }
@@ -766,6 +787,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                        tasks={tasksForChart}
                        sprintStartDate={currentSprintStartDate}
                        sprintEndDate={currentSprintEndDate}
+                       members={members} // Pass members for coloring
                     />
                 ) : (
                     <div className="flex items-center justify-center text-muted-foreground h-full p-4 text-center">
@@ -967,3 +989,4 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     </div>
   );
 }
+
