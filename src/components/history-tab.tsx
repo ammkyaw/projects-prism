@@ -2,28 +2,28 @@
 "use client";
 
 import React, { useState, useMemo } from 'react'; // Added React import
-import type { Task } from '@/types/sprint-data';
+import type { Task, Sprint } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Info, Filter, ArrowUpDown } from 'lucide-react';
-import { taskPriorities } from '@/types/sprint-data';
+import { Info, History, ArrowUpDown } from 'lucide-react';
+import { taskPriorities, taskTypes } from '@/types/sprint-data';
 import { format, parseISO, isValid } from 'date-fns';
 
-interface BacklogPrioritizationTabProps {
+interface HistoryTabProps {
   projectId: string;
   projectName: string;
-  backlog: Task[]; // Pass backlog data for prioritization
+  historyItems: Task[]; // Pass only items that have been moved (task.movedToSprint is set)
 }
 
-type SortKey = 'priority' | 'title' | 'taskType' | 'createdDate';
+type SortKey = 'priority' | 'title' | 'taskType' | 'createdDate' | 'movedToSprint';
 type SortDirection = 'asc' | 'desc';
 
-export default function BacklogPrioritizationTab({ projectId, projectName, backlog }: BacklogPrioritizationTabProps) {
+export default function HistoryTab({ projectId, projectName, historyItems }: HistoryTabProps) {
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection } | null>(null);
 
-  const sortedBacklog = useMemo(() => {
-    let sortableItems = [...(backlog || [])]; // Add null check
+  const sortedHistory = useMemo(() => {
+    let sortableItems = [...(historyItems || [])]; // Use historyItems
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         let aValue: any;
@@ -35,8 +35,7 @@ export default function BacklogPrioritizationTab({ projectId, projectName, backl
                 bValue = taskPriorities.indexOf(b.priority || 'Medium');
                 break;
             case 'createdDate':
-                // Handle potentially invalid dates during sorting
-                 const dateA = a.createdDate && isValid(parseISO(a.createdDate)) ? parseISO(a.createdDate) : new Date(0); // Fallback for invalid/missing
+                 const dateA = a.createdDate && isValid(parseISO(a.createdDate)) ? parseISO(a.createdDate) : new Date(0);
                  const dateB = b.createdDate && isValid(parseISO(b.createdDate)) ? parseISO(b.createdDate) : new Date(0);
                  aValue = dateA.getTime();
                  bValue = dateB.getTime();
@@ -45,9 +44,13 @@ export default function BacklogPrioritizationTab({ projectId, projectName, backl
                  aValue = a.title?.toLowerCase() || '';
                  bValue = b.title?.toLowerCase() || '';
                  break;
+            case 'movedToSprint':
+                  aValue = a.movedToSprint ?? Infinity; // Sort undefined/null last
+                  bValue = b.movedToSprint ?? Infinity;
+                  break;
             default:
-                 aValue = (a[sortConfig.key] as any)?.toString().toLowerCase() || ''; // Add type assertion
-                 bValue = (b[sortConfig.key] as any)?.toString().toLowerCase() || ''; // Add type assertion
+                 aValue = (a[sortConfig.key] as any)?.toString().toLowerCase() || '';
+                 bValue = (b[sortConfig.key] as any)?.toString().toLowerCase() || '';
         }
 
         if (aValue < bValue) {
@@ -59,11 +62,11 @@ export default function BacklogPrioritizationTab({ projectId, projectName, backl
         return 0;
       });
     } else {
-        // Default sort by priority if no specific sort is selected
-        sortableItems.sort((a, b) => taskPriorities.indexOf(a.priority || 'Medium') - taskPriorities.indexOf(b.priority || 'Medium'));
+        // Default sort by sprint number moved to, then priority
+        sortableItems.sort((a, b) => (a.movedToSprint ?? Infinity) - (b.movedToSprint ?? Infinity) || taskPriorities.indexOf(a.priority || 'Medium') - taskPriorities.indexOf(b.priority || 'Medium'));
     }
     return sortableItems;
-  }, [backlog, sortConfig]);
+  }, [historyItems, sortConfig]);
 
   const requestSort = (key: SortKey) => {
     let direction: SortDirection = 'asc';
@@ -83,21 +86,25 @@ export default function BacklogPrioritizationTab({ projectId, projectName, backl
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center justify-center gap-2"><Filter className="h-5 w-5 text-primary" /> Backlog Prioritization</CardTitle>
-        <CardDescription>Prioritize backlog items for project '{projectName}' based on value, effort, or other criteria. Click headers to sort.</CardDescription>
+        <CardTitle className="flex items-center justify-center gap-2"><History className="h-5 w-5 text-primary" /> Backlog History</CardTitle>
+        <CardDescription>View backlog items that have been moved to sprints for project '{projectName}'. Click headers to sort.</CardDescription>
       </CardHeader>
       <CardContent>
-        {sortedBacklog.length === 0 ? ( // Check sortedBacklog length
+        {sortedHistory.length === 0 ? (
              <div className="flex flex-col items-center justify-center min-h-[200px] border-dashed border-2 rounded-md p-6">
                 <Info className="h-8 w-8 text-muted-foreground mb-2" />
-                <p className="text-muted-foreground">No backlog items to prioritize.</p>
-                <p className="text-sm text-muted-foreground">Add items in the 'Management' tab.</p>
+                <p className="text-muted-foreground">No backlog items have been moved to sprints yet.</p>
              </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
+                     <TableHead className="w-[100px]">
+                        <Button variant="ghost" onClick={() => requestSort('movedToSprint')} className="px-1 h-auto">
+                            Sprint # {getSortIndicator('movedToSprint')}
+                        </Button>
+                    </TableHead>
                     <TableHead className="w-[150px]">
                         <Button variant="ghost" onClick={() => requestSort('priority')} className="px-1 h-auto">
                             Priority {getSortIndicator('priority')}
@@ -123,8 +130,9 @@ export default function BacklogPrioritizationTab({ projectId, projectName, backl
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedBacklog.map(task => (
+                  {sortedHistory.map(task => (
                     <TableRow key={task.id}>
+                       <TableCell>{task.movedToSprint}</TableCell>
                       <TableCell>{task.priority}</TableCell>
                       <TableCell className="font-medium">{task.backlogId}</TableCell>
                       <TableCell>{task.title}</TableCell>

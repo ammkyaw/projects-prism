@@ -67,6 +67,8 @@ export interface Task {
   taskType?: TaskType; // Type of task/work item
   createdDate?: string; // YYYY-MM-DD, when the item was added to the backlog
   initiator?: string; // Name or ID of the person who added the item
+  // --- History Tracking ---
+  movedToSprint?: number; // Optional: The sprint number this backlog item was moved to. Used for history.
   // Legacy fields - keep if needed for migration or detail view, but planning uses new fields
   devTime?: string; // Legacy, replaced by devEstimatedTime
 }
@@ -180,6 +182,7 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     createdDate: '', // Will be set on creation
     initiator: '', // Will be set (maybe manually for now)
     dependsOn: [],
+    movedToSprint: undefined, // Initialize as not moved
     // Fields typically set during sprint planning:
     devEstimatedTime: undefined,
     qaEstimatedTime: undefined, // Don't default these in backlog
@@ -188,4 +191,5 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     reviewer: undefined,
     startDate: undefined,
 };
+
 

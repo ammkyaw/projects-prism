@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Ad
 import * as XLSX from 'xlsx';
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical } from 'lucide-react'; // Added new icons
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History } from 'lucide-react'; // Added History icon
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -17,18 +17,19 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 // Main Content Components (Tabs) - Renamed and New Placeholders
 import DashboardTab from '@/components/dashboard-tab'; // Renamed from HomeTab
-import BacklogTab from '@/components/backlog-tab';
+import BacklogTab from '@/components/backlog/backlog-tab'; // Updated path
 // PlanningTab is now part of Sprints section
 import MembersTab from '@/components/teams/members-tab'; // Updated path
 import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
 import TeamsTab from '@/components/teams/teams-tab'; // Updated path
 import AddMembersDialog from '@/components/add-members-dialog';
+import HistoryTab from '@/components/history-tab'; // New history tab component
 
 // Placeholder Sub-Tab Components
 import SprintSummaryTab from '@/components/sprints/sprint-summary-tab'; // Updated path
 import SprintPlanningTab from '@/components/sprints/sprint-planning-tab'; // New component for planning
 import SprintRetrospectiveTab from '@/components/sprints/sprint-retrospective-tab'; // Updated path
-import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Updated path
+// import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // REMOVED
 import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
 import AnalyticsChartsTab from '@/components/analytics-charts-tab';
 import AnalyticsReportsTab from '@/components/analytics-reports-tab'; // Updated path
@@ -107,12 +108,13 @@ export default function Home() {
       analytics: 'charts',
       teams: 'members',
       settings: 'holidays',
+      history: 'main', // History is a main tab without subtabs for now
   };
 
   // Update activeTab logic for main tabs
   const handleMainTabChange = (mainTabKey: string) => {
-      if (mainTabKey === 'dashboard') {
-         setActiveTab('dashboard');
+      if (mainTabKey === 'dashboard' || mainTabKey === 'history') {
+         setActiveTab(mainTabKey);
       } else {
          const defaultSub = defaultSubTabs[mainTabKey] || ''; // Fallback to empty string if no default
          setActiveTab(`${mainTabKey}/${defaultSub}`);
@@ -291,7 +293,8 @@ export default function Home() {
                              createdDate: typeof taskData.createdDate === 'string' && isValid(parseISO(taskData.createdDate)) ? taskData.createdDate : undefined,
                              initiator: typeof taskData.initiator === 'string' ? taskData.initiator : undefined,
                              dependsOn: Array.isArray(taskData.dependsOn) ? taskData.dependsOn.filter((dep: any): dep is string => typeof dep === 'string') : undefined,
-                              // Sprint-specific fields should be undefined in backlog
+                             movedToSprint: typeof taskData.movedToSprint === 'number' ? taskData.movedToSprint : undefined, // Validate history field
+                              // Sprint-specific fields should be undefined in backlog context
                              devEstimatedTime: undefined,
                              qaEstimatedTime: undefined,
                              bufferTime: undefined,
@@ -354,6 +357,7 @@ export default function Home() {
                                            startDate: typeof taskData.startDate === 'string' && isValid(parseISO(taskData.startDate)) ? taskData.startDate : emptyTask.startDate,
                                            priority: typeof taskData.priority === 'string' && taskPriorities.includes(taskData.priority as any) ? taskData.priority as Task['priority'] : 'Medium', // Validate and default priority
                                            dependsOn: Array.isArray(taskData.dependsOn) ? taskData.dependsOn.filter((dep: any): dep is string => typeof dep === 'string') : undefined,
+                                           movedToSprint: undefined, // History field not relevant within sprint context
                                            // Backlog specific fields should not be present in sprint tasks unless needed for context
                                            taskType: undefined, // Not typically stored in sprint task
                                            createdDate: undefined,
@@ -834,6 +838,7 @@ export default function Home() {
                        id: task.id || `backlog_save_${Date.now()}_${Math.random()}`, // Ensure ID
                        // Status is not saved for backlog items
                        priority: task.priority ?? 'Medium', // Ensure priority
+                       movedToSprint: task.movedToSprint, // Preserve history field
                    }));
                    return { ...p, backlog: validatedBacklog };
                }
@@ -888,14 +893,19 @@ export default function Home() {
                        assignee: backlogItem.assignee,
                        reviewer: backlogItem.reviewer,
                        // Clear backlog-specific fields that shouldn't be in sprint context
-                       taskType: undefined,
-                       createdDate: undefined,
-                       initiator: undefined,
+                       // taskType: undefined, // Keep taskType for history? Decide later.
+                       // createdDate: undefined, // Keep createdDate? Decide later.
+                       initiator: backlogItem.initiator, // Keep initiator
+                       movedToSprint: undefined, // Clear movedToSprint for sprint task
                    };
 
-                   // Remove item from backlog
-                   const updatedBacklog = [...p.backlog!];
-                   updatedBacklog.splice(backlogItemIndex, 1);
+                   // Instead of removing, update the item in backlog to mark it as moved
+                   const updatedBacklog = p.backlog!.map((item, index) => {
+                       if (index === backlogItemIndex) {
+                           return { ...item, movedToSprint: targetSprintNumber };
+                       }
+                       return item;
+                   });
 
                    // Add item to the target sprint's newTasks
                    const updatedSprints = [...p.sprintData.sprints];
@@ -908,7 +918,7 @@ export default function Home() {
 
                    return {
                        ...p,
-                       backlog: updatedBacklog,
+                       backlog: updatedBacklog, // Save the updated backlog
                        sprintData: {
                            ...p.sprintData,
                            sprints: updatedSprints,
@@ -921,7 +931,7 @@ export default function Home() {
        });
 
        if (movedItemDetails) {
-         toast({ title: "Item Moved", description: `Backlog item '${movedItemDetails}' moved to Sprint ${targetSprintNumber}.` });
+         toast({ title: "Item Moved", description: `Backlog item '${movedItemDetails}' moved to Sprint ${targetSprintNumber}. Marked in backlog.` });
        }
    }, [selectedProjectId, toast]);
 
@@ -1092,6 +1102,7 @@ export default function Home() {
                 'CreatedDate': task.createdDate,
                 'StoryPoints': task.storyPoints,
                 'DependsOn': (task.dependsOn || []).join(', '), // Flatten dependency array
+                'MovedToSprint': task.movedToSprint ?? '', // Add movedToSprint history
                  // Other backlog specific fields if needed
             }));
             const wsBacklog = XLSX.utils.json_to_sheet(backlogData);
@@ -1218,7 +1229,7 @@ export default function Home() {
   };
 
   // Define the tab structure
-  const tabsConfig = {
+  const tabsConfig: Record<string, { label: string; icon: React.ElementType; component?: React.ElementType; subTabs?: Record<string, { label: string; icon: React.ElementType; component: React.ElementType }> }> = {
       dashboard: { label: "Dashboard", icon: LayoutDashboard, component: DashboardTab },
       sprints: {
           label: "Sprints", icon: IterationCw, subTabs: {
@@ -1230,7 +1241,7 @@ export default function Home() {
       backlog: {
           label: "Backlog", icon: Layers, subTabs: {
               management: { label: "Management", icon: Package, component: BacklogTab },
-              prioritization: { label: "Prioritization", icon: Filter, component: BacklogPrioritizationTab },
+              // prioritization: { label: "Prioritization", icon: Filter, component: BacklogPrioritizationTab }, // REMOVED
               grooming: { label: "Grooming", icon: Edit, component: BacklogGroomingTab },
           }
       },
@@ -1251,6 +1262,7 @@ export default function Home() {
               holidays: { label: "Holidays", icon: CalendarDays, component: HolidaysTab },
           }
       },
+      history: { label: "History", icon: History, component: HistoryTab }, // Added History Tab
   };
 
   // Render the currently active tab content
@@ -1284,8 +1296,7 @@ export default function Home() {
 
         // Add specific props based on the sub-tab component
          switch (`${mainKey}/${subKey}`) {
-            case 'dashboard': // Main dashboard tab
-               componentProps = { ...componentProps, sprintData: selectedProject.sprintData };
+            case 'dashboard': // Main dashboard tab (handled below in else block)
                break;
             case 'sprints/summary':
                componentProps = { ...componentProps, sprintData: selectedProject.sprintData, onDeleteSprint: handleDeleteSprint };
@@ -1299,7 +1310,7 @@ export default function Home() {
                     members: selectedProject.members ?? [],
                     holidayCalendars: selectedProject.holidayCalendars ?? [],
                     teams: selectedProject.teams ?? [],
-                    backlog: selectedProject.backlog ?? [],
+                    backlog: selectedProject.backlog?.filter(task => !task.movedToSprint) ?? [], // Only pass non-moved items
                  };
                 break;
             case 'sprints/retrospective':
@@ -1309,21 +1320,20 @@ export default function Home() {
             case 'backlog/management':
                 componentProps = {
                     ...componentProps,
-                    initialBacklog: selectedProject.backlog ?? [],
+                    initialBacklog: selectedProject.backlog?.filter(task => !task.movedToSprint) ?? [], // Only pass non-moved items
                     onSaveBacklog: handleSaveBacklog,
                     members: selectedProject.members ?? [],
                     sprints: selectedProject.sprintData.sprints ?? [],
                     onMoveToSprint: handleMoveToSprint,
                  };
                 break;
-            case 'backlog/prioritization':
-                componentProps = { ...componentProps, backlog: selectedProject.backlog ?? [] };
-                break;
+            // case 'backlog/prioritization': // REMOVED
+            //     componentProps = { ...componentProps, backlog: selectedProject.backlog ?? [] };
+            //     break;
             case 'backlog/grooming':
-                // Add props for these tabs if needed
                 componentProps = {
                      ...componentProps,
-                     initialBacklog: selectedProject.backlog ?? [], // Ensure default []
+                     initialBacklog: selectedProject.backlog?.filter(task => !task.movedToSprint) ?? [], // Only pass non-moved items
                      onSaveBacklog: handleSaveBacklog
                  };
                 break;
@@ -1357,32 +1367,22 @@ export default function Home() {
                  };
                  break;
             default:
-               // Handle main tab case (e.g., dashboard)
-                if (!mainConfig.subTabs) {
-                    ActiveComponent = mainConfig.component;
-                     if (mainKey === 'dashboard') {
-                        componentProps = { ...componentProps, sprintData: selectedProject.sprintData };
-                     }
-                    // Add props for other main tabs without subtabs if any in the future
-                } else {
-                   // Default to first sub-tab if only main key is provided but it has subtabs
-                    const firstSubKey = Object.keys(mainConfig.subTabs)[0];
-                    const firstSubConfig = mainConfig.subTabs[firstSubKey as keyof typeof mainConfig.subTabs];
-                    ActiveComponent = firstSubConfig.component;
-                    // Recalculate props based on default sub tab
-                    // This might need adjustments based on which props each default sub-tab needs
-                    // Example: if default for sprints is summary:
-                    if (mainKey === 'sprints') {
-                       componentProps = { ...componentProps, sprintData: selectedProject.sprintData, onDeleteSprint: handleDeleteSprint };
-                    }
-                    // Add similar logic for other default sub-tabs
-                }
+               // Fallback or handle unexpected cases
+                ActiveComponent = () => <div>Unknown Tab</div>;
+                componentProps = {};
+                break;
         }
     } else {
-        // Handle main tabs without sub-tabs (like Dashboard)
+        // Handle main tabs without sub-tabs (Dashboard, History)
         ActiveComponent = mainConfig.component;
          if (mainKey === 'dashboard') {
             componentProps = { ...componentProps, sprintData: selectedProject.sprintData };
+         } else if (mainKey === 'history') {
+            componentProps = {
+                ...componentProps,
+                // Pass only backlog items that HAVE been moved
+                historyItems: selectedProject.backlog?.filter(task => !!task.movedToSprint) ?? [],
+            };
          }
         // Add props for other main tabs if needed
     }
@@ -1491,8 +1491,8 @@ export default function Home() {
              </Card>
          ) : (
              <Tabs value={activeMainTab} onValueChange={handleMainTabChange} className="w-full">
-                {/* Main Tabs List */}
-               <TabsList className="grid w-full grid-cols-6 mb-6">
+                {/* Main Tabs List - Updated grid cols */}
+               <TabsList className="grid w-full grid-cols-7 mb-6">
                  {Object.entries(tabsConfig).map(([key, config]) => (
                      <TabsTrigger key={key} value={key}>
                         <config.icon className="mr-2 h-4 w-4" /> {config.label}
@@ -1506,7 +1506,10 @@ export default function Home() {
                          {/* Render Sub Tabs only if the active main tab has them */}
                          {tabsConfig[activeMainTab as keyof typeof tabsConfig]?.subTabs && (
                              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mb-6">
-                                <TabsList className="grid w-full grid-cols-3"> {/* Adjust cols based on max subtabs */}
+                                <TabsList className={cn(
+                                    "grid w-full",
+                                    Object.keys(tabsConfig[activeMainTab as keyof typeof tabsConfig].subTabs!).length === 2 ? "grid-cols-2" : "grid-cols-3"
+                                )}> {/* Adjust cols dynamically */}
                                     {Object.entries(tabsConfig[activeMainTab as keyof typeof tabsConfig].subTabs!).map(([subKey, subConfig]) => (
                                         <TabsTrigger key={`${activeMainTab}/${subKey}`} value={`${activeMainTab}/${subKey}`}>
                                            <subConfig.icon className="mr-2 h-4 w-4" /> {subConfig.label}
@@ -1541,4 +1544,3 @@ export default function Home() {
 }
 
 
-    
