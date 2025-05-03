@@ -23,7 +23,7 @@ export default function BacklogPrioritizationTab({ projectId, projectName, backl
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection } | null>(null);
 
   const sortedBacklog = useMemo(() => {
-    let sortableItems = [...backlog];
+    let sortableItems = [...(backlog || [])]; // Add null check
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         let aValue: any;
@@ -46,8 +46,8 @@ export default function BacklogPrioritizationTab({ projectId, projectName, backl
                  bValue = b.title?.toLowerCase() || '';
                  break;
             default:
-                 aValue = a[sortConfig.key]?.toString().toLowerCase() || '';
-                 bValue = b[sortConfig.key]?.toString().toLowerCase() || '';
+                 aValue = (a[sortConfig.key] as any)?.toString().toLowerCase() || ''; // Add type assertion
+                 bValue = (b[sortConfig.key] as any)?.toString().toLowerCase() || ''; // Add type assertion
         }
 
         if (aValue < bValue) {
@@ -87,7 +87,7 @@ export default function BacklogPrioritizationTab({ projectId, projectName, backl
         <CardDescription>Prioritize backlog items for project '{projectName}' based on value, effort, or other criteria. Click headers to sort.</CardDescription>
       </CardHeader>
       <CardContent>
-        {backlog.length === 0 ? (
+        {sortedBacklog.length === 0 ? ( // Check sortedBacklog length
              <div className="flex flex-col items-center justify-center min-h-[200px] border-dashed border-2 rounded-md p-6">
                 <Info className="h-8 w-8 text-muted-foreground mb-2" />
                 <p className="text-muted-foreground">No backlog items to prioritize.</p>
@@ -129,7 +129,7 @@ export default function BacklogPrioritizationTab({ projectId, projectName, backl
                       <TableCell className="font-medium">{task.backlogId}</TableCell>
                       <TableCell>{task.title}</TableCell>
                       <TableCell>{task.taskType}</TableCell>
-                      <TableCell>{task.createdDate ? format(parseISO(task.createdDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
+                      <TableCell>{task.createdDate && isValid(parseISO(task.createdDate)) ? format(parseISO(task.createdDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
                       <TableCell className="text-right">{task.storyPoints ?? '-'}</TableCell>
                     </TableRow>
                   ))}

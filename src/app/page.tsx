@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -19,7 +20,7 @@ import DashboardTab from '@/components/dashboard-tab'; // Renamed from HomeTab
 import BacklogTab from '@/components/backlog-tab';
 // PlanningTab is now part of Sprints section
 import MembersTab from '@/components/teams/members-tab'; // Updated path
-import HolidaysTab from '@/components/settings/holidays-tab'; // Corrected path
+import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
 import TeamsTab from '@/components/teams/teams-tab'; // Updated path
 import AddMembersDialog from '@/components/add-members-dialog';
 
@@ -564,12 +565,13 @@ export default function Home() {
         toast({ variant: "destructive", title: "Error", description: "No project selected." });
         return;
      }
-     const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+     let currentProjectName = 'N/A';
      let statusUpdateMessage = '';
 
      setProjects(prevProjects => {
         const updatedProjects = prevProjects.map(p => {
           if (p.id === selectedProjectId) {
+              currentProjectName = p.name; // Capture project name here
               let tempSprints = [...(p.sprintData.sprints ?? [])]; // Create a mutable copy (handle null/undefined)
 
               // First pass: Deactivate other sprints if the target is becoming active
@@ -627,7 +629,7 @@ export default function Home() {
         return [...updatedProjects];
      });
      toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
-   }, [selectedProjectId, toast, projects]);
+   }, [selectedProjectId, toast]);
 
 
   // Handler to create a new sprint and save its initial planning data (used by PlanningTab)
@@ -718,7 +720,7 @@ export default function Home() {
          }, 0);
      }
 
-  }, [selectedProjectId, toast, projects]);
+  }, [selectedProjectId, toast]);
 
 
   // Handler to save members for the *selected* project
@@ -727,10 +729,11 @@ export default function Home() {
       toast({ variant: "destructive", title: "Error", description: "No project selected." });
       return;
     }
-     const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+    let currentProjectName = 'N/A';
     setProjects(prevProjects => {
       const updatedProjects = prevProjects.map(p => {
         if (p.id === selectedProjectId) {
+          currentProjectName = p.name; // Capture name
           return { ...p, members: updatedMembers };
         }
         return p;
@@ -738,7 +741,7 @@ export default function Home() {
       return updatedProjects;
     });
     toast({ title: "Success", description: `Members updated for project '${currentProjectName}'.` });
-  }, [selectedProjectId, toast, projects]);
+  }, [selectedProjectId, toast]);
 
    // Handler to save holiday calendars for the *selected* project
    const handleSaveHolidayCalendars = useCallback((updatedCalendars: HolidayCalendar[]) => {
@@ -747,12 +750,13 @@ export default function Home() {
          return;
      }
 
-     const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+     let currentProjectName = 'N/A';
      let membersToUpdate: Member[] = [];
 
      setProjects(prevProjects => {
          const updatedProjects = prevProjects.map(p => {
              if (p.id === selectedProjectId) {
+                 currentProjectName = p.name; // Capture name
                  // Keep track of members whose calendars might change
                  membersToUpdate = (p.members || []).map(member => {
                      if (member.holidayCalendarId && !updatedCalendars.some(cal => cal.id === member.holidayCalendarId)) {
@@ -781,7 +785,7 @@ export default function Home() {
          });
       }, 0);
 
- }, [selectedProjectId, toast, projects]);
+ }, [selectedProjectId, toast]);
 
    // Handler to save teams for the *selected* project
    const handleSaveTeams = useCallback((updatedTeams: Team[]) => {
@@ -789,10 +793,11 @@ export default function Home() {
          toast({ variant: "destructive", title: "Error", description: "No project selected." });
          return;
      }
-     const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+     let currentProjectName = 'N/A';
      setProjects(prevProjects => {
          const updatedProjects = prevProjects.map(p => {
              if (p.id === selectedProjectId) {
+                 currentProjectName = p.name; // Capture name
                  // Optionally, add validation here to ensure team members and leads still exist
                  const validTeams = updatedTeams.map(team => {
                      const validMembers = team.members.filter(tm => (p.members || []).some(m => m.id === tm.memberId));
@@ -810,7 +815,7 @@ export default function Home() {
          return updatedProjects;
      });
      toast({ title: "Success", description: `Teams updated for project '${currentProjectName}'.` });
-   }, [selectedProjectId, toast, projects]);
+   }, [selectedProjectId, toast]);
 
     // Handler to save backlog data for the selected project
    const handleSaveBacklog = useCallback((updatedBacklog: Task[]) => {
@@ -818,10 +823,11 @@ export default function Home() {
            toast({ variant: "destructive", title: "Error", description: "No project selected." });
            return;
        }
-       const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+       let currentProjectName = 'N/A';
        setProjects(prevProjects => {
            const updatedProjects = prevProjects.map(p => {
                if (p.id === selectedProjectId) {
+                   currentProjectName = p.name; // Capture name
                    // Validate tasks before saving? (Ensure IDs, required fields, etc.)
                    const validatedBacklog = updatedBacklog.map(task => ({
                        ...task,
@@ -836,7 +842,7 @@ export default function Home() {
            return updatedProjects;
        });
        toast({ title: "Success", description: `Backlog updated for project '${currentProjectName}'.` });
-   }, [selectedProjectId, toast, projects]);
+   }, [selectedProjectId, toast]);
 
 
    // Handler to move a backlog item to a sprint
@@ -845,12 +851,13 @@ export default function Home() {
            toast({ variant: "destructive", title: "Error", description: "No project selected." });
            return;
        }
-       const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+       let currentProjectName = 'N/A';
        let movedItemDetails: string | null = null;
 
        setProjects(prevProjects => {
            const updatedProjects = prevProjects.map(p => {
                if (p.id === selectedProjectId) {
+                    currentProjectName = p.name; // Capture name
                    const backlogItemIndex = (p.backlog ?? []).findIndex(item => item.id === backlogItemId);
                    if (backlogItemIndex === -1) {
                        console.error("Backlog item not found:", backlogItemId);
@@ -916,17 +923,18 @@ export default function Home() {
        if (movedItemDetails) {
          toast({ title: "Item Moved", description: `Backlog item '${movedItemDetails}' moved to Sprint ${targetSprintNumber}.` });
        }
-   }, [selectedProjectId, toast, projects]);
+   }, [selectedProjectId, toast]);
 
 
   // Handler to add members to the *newly created* project (from dialog)
    const handleAddMembersToNewProject = useCallback((addedMembers: Member[]) => {
        if (!newlyCreatedProjectId) return;
-       const newProjectName = projects.find(p => p.id === newlyCreatedProjectId)?.name ?? 'the new project';
+       let newProjectName = 'the new project';
 
        setProjects(prevProjects => {
          const updatedProjects = prevProjects.map(p => {
            if (p.id === newlyCreatedProjectId) {
+             newProjectName = p.name; // Capture name
              return { ...p, members: [...(p.members || []), ...addedMembers] };
            }
            return p;
@@ -938,8 +946,8 @@ export default function Home() {
           toast({ title: "Members Added", description: `Members added to project '${newProjectName}'.` });
           setIsAddMembersDialogOpen(false); // Close the dialog
           setNewlyCreatedProjectId(null); // Reset the tracked ID
-       }, 10); // Use small timeout
-   }, [newlyCreatedProjectId, toast, projects]);
+       }, 50); // Adjusted timeout
+   }, [newlyCreatedProjectId, toast]);
 
   // Handler to delete a sprint
   const handleDeleteSprint = useCallback((sprintNumber: number) => {
@@ -947,10 +955,11 @@ export default function Home() {
       toast({ variant: "destructive", title: "Error", description: "No project selected." });
       return;
     }
-     const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+    let currentProjectName = 'N/A';
     setProjects(prevProjects => {
       const updatedProjects = prevProjects.map(p => {
         if (p.id === selectedProjectId) {
+          currentProjectName = p.name; // Capture name
           const filteredSprints = (p.sprintData.sprints ?? []).filter(s => s.sprintNumber !== sprintNumber); // Handle null/undefined
           return {
             ...p,
@@ -968,7 +977,7 @@ export default function Home() {
       return updatedProjects;
     });
     toast({ title: "Sprint Deleted", description: `Sprint ${sprintNumber} deleted from project '${currentProjectName}'.` });
-  }, [selectedProjectId, toast, projects]);
+  }, [selectedProjectId, toast]);
 
 
   // Export data for the currently selected project
@@ -1205,7 +1214,7 @@ export default function Home() {
      setTimeout(() => {
         toast({ title: "Project Created", description: `Project "${trimmedName}" created successfully.` });
         setIsAddMembersDialogOpen(true); // Open the dialog AFTER state update
-    }, 10); // Increased timeout slightly
+    }, 50); // Increased timeout slightly
   };
 
   // Define the tab structure
@@ -1532,3 +1541,4 @@ export default function Home() {
 }
 
 
+    
