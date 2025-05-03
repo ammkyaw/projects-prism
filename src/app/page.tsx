@@ -91,7 +91,7 @@ export default function Home() {
                  sprints: project.sprintData.sprints.map(sprint => {
                     let status: SprintStatus = sprint.status ?? 'Planned';
                     // Automatically mark as Completed if end date is in the past
-                    if (sprint.endDate && isPast(parseISO(sprint.endDate)) && status !== 'Completed') {
+                    if (sprint.endDate && clientNow && isPast(parseISO(sprint.endDate)) && status !== 'Completed') {
                        status = 'Completed';
                     }
                     // Ensure only one active sprint (prefer existing active, else mark first future planned as active if applicable - this logic might need refinement)
@@ -123,7 +123,8 @@ export default function Home() {
         setSelectedProjectId(null);
       }
     }
-  }, []); // Run only on mount
+  }, [clientNow]); // Run only on mount, or when clientNow is set
+
 
   // Effect to save data to localStorage whenever projects change
   useEffect(() => {
@@ -275,11 +276,12 @@ export default function Home() {
        toast({ variant: "destructive", title: "Error", description: "No project selected." });
        return;
     }
-    let projectNameForToast = 'N/A';
+    // Get project name *before* updating state
+    const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+
     setProjects(prevProjects => {
       const updatedProjects = prevProjects.map(p => {
          if (p.id === selectedProjectId) {
-           projectNameForToast = p.name;
            const mergedSprints = [...p.sprintData.sprints]; // Start with existing sprints
 
             newSprintData.sprints.forEach(newSprint => {
@@ -331,10 +333,10 @@ export default function Home() {
        return updatedProjects;
     });
 
-    toast({ title: "Success", description: `Sprint data saved to project '${projectNameForToast}'.` });
+    toast({ title: "Success", description: `Sprint data saved to project '${currentProjectName}'.` });
     setActiveTab("home");
     setResetManualFormKey(prevKey => prevKey + 1); // Reset Entry form
-  }, [selectedProjectId, toast]);
+  }, [selectedProjectId, toast, projects]);
 
 
   // Handler to save planning data AND potentially update sprint status (used by PlanningTab)
@@ -343,14 +345,13 @@ export default function Home() {
         toast({ variant: "destructive", title: "Error", description: "No project selected." });
         return;
      }
-     let projectNameForToast = 'N/A';
+     const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
      let statusUpdateMessage = '';
 
      setProjects(prevProjects => {
         let wasStatusUpdated = false;
         const updatedProjects = prevProjects.map(p => {
           if (p.id === selectedProjectId) {
-              projectNameForToast = p.name;
               let tempSprints = [...p.sprintData.sprints]; // Create a mutable copy
 
               // First pass: Deactivate other sprints if the target is becoming active
@@ -389,8 +390,8 @@ export default function Home() {
         // If status was updated, trigger save effect by returning new array
         return wasStatusUpdated ? updatedProjects : prevProjects;
      });
-     toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage}` });
-   }, [selectedProjectId, toast]);
+     toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
+   }, [selectedProjectId, toast, projects]);
 
   // Handler to create a new sprint and save its initial planning data (used by PlanningTab)
   const handleCreateAndPlanSprint = useCallback((
@@ -406,7 +407,7 @@ export default function Home() {
     setProjects(prevProjects => {
       return prevProjects.map(p => {
         if (p.id === selectedProjectId) {
-          projectNameForToast = p.name;
+          projectNameForToast = p.name; // Assign name before potentially returning early
           // Check if sprint number already exists
           if (p.sprintData.sprints.some(s => s.sprintNumber === sprintDetails.sprintNumber)) {
              toast({ variant: "destructive", title: "Error", description: `Sprint number ${sprintDetails.sprintNumber} already exists.` });
@@ -439,8 +440,13 @@ export default function Home() {
       });
     });
 
-     toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
-  }, [selectedProjectId, toast]);
+     // Check if the toast should actually be shown (i.e., if the project was actually updated)
+     // This requires checking if projectNameForToast was updated from 'N/A', which happens
+     // inside the map only if the project was found and modified.
+     if (projectNameForToast !== 'N/A') {
+        toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
+     }
+  }, [selectedProjectId, toast, projects]);
 
 
   // Handler to save members for the *selected* project
@@ -449,19 +455,18 @@ export default function Home() {
       toast({ variant: "destructive", title: "Error", description: "No project selected." });
       return;
     }
-    let projectNameForToast = 'N/A';
+     const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
     setProjects(prevProjects => {
       const updatedProjects = prevProjects.map(p => {
         if (p.id === selectedProjectId) {
-          projectNameForToast = p.name;
           return { ...p, members: updatedMembers };
         }
         return p;
       });
       return updatedProjects;
     });
-    toast({ title: "Success", description: `Members updated for project '${projectNameForToast}'.` });
-  }, [selectedProjectId, toast]);
+    toast({ title: "Success", description: `Members updated for project '${currentProjectName}'.` });
+  }, [selectedProjectId, toast, projects]);
 
    // Handler to save holiday calendars for the *selected* project
    const handleSaveHolidayCalendars = useCallback((updatedCalendars: HolidayCalendar[]) => {
@@ -469,11 +474,12 @@ export default function Home() {
            toast({ variant: "destructive", title: "Error", description: "No project selected." });
            return;
        }
-       let projectNameForToast = 'N/A';
+       // Get project name *before* updating state
+       const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
+
        setProjects(prevProjects => {
            const updatedProjects = prevProjects.map(p => {
                if (p.id === selectedProjectId) {
-                   projectNameForToast = p.name;
                     // Also need to check if any member's assigned calendar was deleted
                     const updatedMembers = (p.members || []).map(member => {
                         if (member.holidayCalendarId && !updatedCalendars.some(cal => cal.id === member.holidayCalendarId)) {
@@ -489,12 +495,14 @@ export default function Home() {
            });
            return updatedProjects;
        });
-       toast({ title: "Success", description: `Holiday calendars updated for project '${projectNameForToast}'.` });
-   }, [selectedProjectId, toast]);
+       toast({ title: "Success", description: `Holiday calendars updated for project '${currentProjectName}'.` });
+   }, [selectedProjectId, toast, projects]);
+
 
   // Handler to add members to the *newly created* project (from dialog)
    const handleAddMembersToNewProject = useCallback((addedMembers: Member[]) => {
        if (!newlyCreatedProjectId) return;
+       const newProjectName = projects.find(p => p.id === newlyCreatedProjectId)?.name ?? 'the new project';
 
        setProjects(prevProjects => {
          const updatedProjects = prevProjects.map(p => {
@@ -505,10 +513,10 @@ export default function Home() {
          });
          return updatedProjects;
        });
-       toast({ title: "Members Added", description: `Members added to the new project.` });
+       toast({ title: "Members Added", description: `Members added to project '${newProjectName}'.` });
        setIsAddMembersDialogOpen(false); // Close the dialog
        setNewlyCreatedProjectId(null); // Reset the tracked ID
-   }, [newlyCreatedProjectId, toast]);
+   }, [newlyCreatedProjectId, toast, projects]);
 
   // Handler to delete a sprint
   const handleDeleteSprint = useCallback((sprintNumber: number) => {
@@ -516,11 +524,10 @@ export default function Home() {
       toast({ variant: "destructive", title: "Error", description: "No project selected." });
       return;
     }
-    let projectNameForToast = 'N/A';
+     const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
     setProjects(prevProjects => {
       const updatedProjects = prevProjects.map(p => {
         if (p.id === selectedProjectId) {
-           projectNameForToast = p.name;
           const filteredSprints = p.sprintData.sprints.filter(s => s.sprintNumber !== sprintNumber);
           return {
             ...p,
@@ -537,8 +544,8 @@ export default function Home() {
       });
       return updatedProjects;
     });
-    toast({ title: "Sprint Deleted", description: `Sprint ${sprintNumber} deleted from project '${projectNameForToast}'.` });
-  }, [selectedProjectId, toast]);
+    toast({ title: "Sprint Deleted", description: `Sprint ${sprintNumber} deleted from project '${currentProjectName}'.` });
+  }, [selectedProjectId, toast, projects]);
 
 
   // Export data for the currently selected project
@@ -885,3 +892,6 @@ export default function Home() {
     </div>
   );
 }
+
+
+    
