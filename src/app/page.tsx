@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChangeEvent } from 'react';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Added useRef
 import * as XLSX from 'xlsx';
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,19 +17,20 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 // Main Content Components (Tabs) - Renamed and New Placeholders
 import DashboardTab from '@/components/dashboard-tab'; // Renamed from HomeTab
 import BacklogTab from '@/components/backlog-tab';
-import PlanningTab from '@/components/planning-tab';
-import MembersTab from '@/components/members-tab';
-import HolidaysTab from '@/components/holidays-tab';
-import TeamsTab from '@/components/teams-tab';
+// PlanningTab is now part of Sprints section
+import MembersTab from '@/components/teams/members-tab'; // Updated path
+import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
+import TeamsTab from '@/components/teams/teams-tab'; // Updated path
 import AddMembersDialog from '@/components/add-members-dialog';
 
 // Placeholder Sub-Tab Components
-import SprintSummaryTab from '@/components/sprint-summary-tab';
-import SprintRetrospectiveTab from '@/components/sprint-retrospective-tab';
-import BacklogPrioritizationTab from '@/components/backlog-prioritization-tab';
-import BacklogGroomingTab from '@/components/backlog-grooming-tab';
-import AnalyticsChartsTab from '@/components/analytics-charts-tab';
-import AnalyticsReportsTab from '@/components/analytics-reports-tab';
+import SprintSummaryTab from '@/components/sprints/sprint-summary-tab'; // Updated path
+import SprintPlanningTab from '@/components/sprints/sprint-planning-tab'; // New component for planning
+import SprintRetrospectiveTab from '@/components/sprints/sprint-retrospective-tab'; // Updated path
+import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Updated path
+import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Updated path
+import AnalyticsChartsTab from '@/components/analytics/analytics-charts-tab';
+import AnalyticsReportsTab from '@/components/analytics/analytics-reports-tab'; // Updated path
 
 
 import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember } from '@/types/sprint-data'; // Updated Task type reference
@@ -64,7 +65,7 @@ const calculateSprintMetrics = (startDateStr: string | undefined, duration: stri
         return { totalDays, endDate: format(endDate, 'yyyy-MM-dd') };
     } catch (e) {
         console.error("Error calculating end date:", e);
-        return { totalDays: 0, endDate: 'N/A' };
+        return { totalDays, endDate: 'N/A' };
     }
 };
 
@@ -85,7 +86,7 @@ export default function Home() {
   // Combined state for active main and sub tab. Format: "main/sub" or just "main"
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [newProjectName, setNewProjectName] = useState<string>('');
-  const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState<boolean>(false);
+  const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState<boolean>(isSprintStatus==='Completed');
   const [isAddMembersDialogOpen, setIsAddMembersDialogOpen] = useState<boolean>(false);
   const [newlyCreatedProjectId, setNewlyCreatedProjectId] = useState<string | null>(null); // Track ID for Add Members dialog
   const { toast } = useToast();
@@ -160,9 +161,9 @@ export default function Home() {
                projectData.members.forEach((memberData: any) => {
                  if (
                    memberData && typeof memberData === 'object' &&
-                   memberData.id && typeof memberData.id === 'string' &&
-                   memberData.name && typeof memberData.name === 'string' &&
-                   memberData.role && typeof memberData.role === 'string'
+                   memberData.id && typeof memberData.id !== 'string' &&
+                   memberData.name && typeof memberData.name !== 'string' &&
+                   memberData.role && typeof memberData.role !== 'string'
                  ) {
                    validatedMembers.push({
                      id: memberData.id,
@@ -282,6 +283,7 @@ export default function Home() {
                              ticketNumber: typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : backlogId, // Default ticketNumber to backlogId if missing
                              title: typeof taskData.title === 'string' ? taskData.title : undefined,
                              description: typeof taskData.description === 'string' ? taskData.description : undefined,
+                             acceptanceCriteria: typeof taskData.acceptanceCriteria === 'string' ? taskData.acceptanceCriteria : undefined, // Added acceptance criteria
                              storyPoints: (typeof taskData.storyPoints === 'number' || typeof taskData.storyPoints === 'string') ? taskData.storyPoints : undefined,
                              priority: typeof taskData.priority === 'string' && taskPriorities.includes(taskData.priority as any) ? taskData.priority as Task['priority'] : 'Medium', // Validate and default priority
                              taskType: typeof taskData.taskType === 'string' ? taskData.taskType as Task['taskType'] : undefined,
@@ -340,6 +342,7 @@ export default function Home() {
                                            ticketNumber: ticketNumber,
                                            title: typeof taskData.title === 'string' ? taskData.title : undefined,
                                            description: typeof taskData.description === 'string' ? taskData.description : undefined,
+                                           acceptanceCriteria: typeof taskData.acceptanceCriteria === 'string' ? taskData.acceptanceCriteria : undefined,
                                            storyPoints: (typeof taskData.storyPoints === 'number' || typeof taskData.storyPoints === 'string') ? taskData.storyPoints : emptyTask.storyPoints,
                                            devEstimatedTime: typeof taskData.devEstimatedTime === 'string' ? taskData.devEstimatedTime : emptyTask.devEstimatedTime,
                                            qaEstimatedTime: typeof taskData.qaEstimatedTime === 'string' ? taskData.qaEstimatedTime : emptyTask.qaEstimatedTime,
@@ -467,14 +470,14 @@ export default function Home() {
                 localStorage.removeItem('appData');
                 localStorage.removeItem('selectedProjectId');
              } else {
-                console.warn("Validation error encountered. Data might be partially invalid. Retaining localStorage data for inspection.");
+                console.warn("Validation error encountered. Data might be partially invalid. Retaining localStorage data for inspection.", error);
              }
              setProjects([]);
              setSelectedProjectId(null);
              toast({
                variant: "destructive",
                title: "Data Load Error",
-               description: "Could not load project data. Storage might contain invalid data. Please check console for details.",
+               description: `Could not load project data. Storage might contain invalid data. Error: ${error?.message || 'Unknown error'}. Please check console for details.`,
              });
          } finally {
               console.log("Finished loading data attempt.");
@@ -554,16 +557,6 @@ export default function Home() {
     console.log("Selected project determined:", project?.name ?? 'None');
     return project;
   }, [projects, selectedProjectId]);
-
-  // Parser for sprint data (from Entry tab - paste/manual legacy)
-  // This function might be removed if the Entry tab is gone, but kept for now if needed elsewhere.
-  // const parseSprintData = ... (keep if needed, otherwise remove)
-
-
-  // Handler to save legacy sprint data (from Entry tab) to the *selected* project
-  // This handler is likely removed as the Entry tab is gone.
-  // const handleSaveLegacySprints = ...
-
 
   // Handler to save planning data AND potentially update sprint status (used by PlanningTab)
    const handleSavePlanningAndUpdateStatus = useCallback((sprintNumber: number, planningData: SprintPlanning, newStatus?: SprintStatus) => {
@@ -887,6 +880,10 @@ export default function Home() {
                        // Carry over other relevant fields if needed (assignee, reviewer, etc.)
                        assignee: backlogItem.assignee,
                        reviewer: backlogItem.reviewer,
+                       // Clear backlog-specific fields that shouldn't be in sprint context
+                       taskType: undefined,
+                       createdDate: undefined,
+                       initiator: undefined,
                    };
 
                    // Remove item from backlog
@@ -1217,7 +1214,7 @@ export default function Home() {
       sprints: {
           label: "Sprints", icon: IterationCw, subTabs: {
               summary: { label: "Summary", icon: Eye, component: SprintSummaryTab },
-              planning: { label: "Planning", icon: NotebookPen, component: PlanningTab },
+              planning: { label: "Planning", icon: NotebookPen, component: SprintPlanningTab },
               retrospective: { label: "Retrospective", icon: GitCommitVertical, component: SprintRetrospectiveTab },
           }
       },
@@ -1311,9 +1308,15 @@ export default function Home() {
                  };
                 break;
             case 'backlog/prioritization':
+                componentProps = { ...componentProps, backlog: selectedProject.backlog ?? [] };
+                break;
             case 'backlog/grooming':
                 // Add props for these tabs if needed
-                componentProps = { ...componentProps, backlog: selectedProject.backlog ?? [] };
+                componentProps = {
+                     ...componentProps,
+                     initialBacklog: selectedProject.backlog ?? [], // Ensure default []
+                     onSaveBacklog: handleSaveBacklog
+                 };
                 break;
             case 'analytics/charts':
                  componentProps = { ...componentProps, sprintData: selectedProject.sprintData, members: selectedProject.members ?? [] };
@@ -1527,3 +1530,5 @@ export default function Home() {
     </div>
   );
 }
+
+
