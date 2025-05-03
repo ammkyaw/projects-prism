@@ -29,8 +29,8 @@ import SprintPlanningTab from '@/components/sprints/sprint-planning-tab'; // New
 import SprintRetrospectiveTab from '@/components/sprints/sprint-retrospective-tab'; // Updated path
 import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Updated path
 import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Updated path
-import AnalyticsChartsTab from '@/components/analytics/analytics-charts-tab';
-import AnalyticsReportsTab from '@/components/analytics/analytics-reports-tab'; // Updated path
+import AnalyticsChartsTab from '@/components/analytics-charts-tab';
+import AnalyticsReportsTab from '@/components/analytics-reports-tab'; // Updated path
 
 
 import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember } from '@/types/sprint-data'; // Updated Task type reference
@@ -1530,5 +1530,7 @@ export default function Home() {
     </div>
   );
 }
+
+
 
 

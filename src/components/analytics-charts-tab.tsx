@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { SprintData, Member } from '@/types/sprint-data';
@@ -70,3 +69,4 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
     </div>
   );
 }
+
