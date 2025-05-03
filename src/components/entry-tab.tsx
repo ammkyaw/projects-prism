@@ -15,40 +15,42 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 interface EntryTabProps {
-  onDataProcessed: (data: SprintData) => void;
-  parseSprintData: (jsonData: any[]) => SprintData; // Keep parser for paste functionality in ManualInputForm
+  onSaveSprints: (data: SprintData) => void; // Renamed callback for clarity
+  initialSprintData: SprintData | null; // Add prop for initial data
+  parseSprintData: (jsonData: any[]) => SprintData; // Keep parser for paste functionality
+  projectName: string; // Add project name prop
 }
 
-export default function EntryTab({ onDataProcessed, parseSprintData }: EntryTabProps) {
-  // Removed file upload state: fileName, inputMode, isProcessing
+export default function EntryTab({ onSaveSprints, initialSprintData, parseSprintData, projectName }: EntryTabProps) {
   const { toast } = useToast();
 
   // Handler for manual data submission (passed to ManualInputForm)
-  const handleManualData = (data: SprintData) => {
-    onDataProcessed(data); // Use callback to lift state up
-    // Don't clear form here, ManualInputForm handles its state
-    toast({ title: "Success", description: "Manual data submitted." });
+  const handleManualDataSubmit = (data: SprintData) => {
+    onSaveSprints(data); // Use the specific save callback
+    // Toast is now handled in the parent component (page.tsx) after successful save
   };
 
   return (
     <div className="space-y-6">
-       {/* Directly show the manual input form */}
-       <ManualInputForm onSubmit={handleManualData} />
-       {/* Optionally keep a way to switch back or provide context */}
-        {/* <Card>
-            <CardHeader>
-                <CardTitle>Data Entry</CardTitle>
-                 <CardDescription>
-                    Enter sprint data manually row by row, or paste tab-separated data from a spreadsheet.
-                 </CardDescription>
-            </CardHeader>
-            <CardContent>
-                 <p className="text-sm text-muted-foreground">
-                    Required columns: SprintNumber, StartDate (YYYY-MM-DD), Duration (e.g., '2 Weeks'), TotalCommitment, TotalDelivered. Optional: Details.
-                 </p>
-            </CardContent>
-        </Card> */}
-
+       <Card>
+          <CardHeader>
+             {/* Display Project Name */}
+             <CardTitle>Data Entry for Project: {projectName}</CardTitle>
+             <CardDescription>
+                Enter or paste sprint data for the selected project. Click 'Save' when done.
+                Required columns: SprintNumber, StartDate (YYYY-MM-DD), Duration (e.g., '2 Weeks'), TotalCommitment, TotalDelivered. Optional: Details.
+             </CardDescription>
+          </CardHeader>
+          <CardContent>
+             {/* Pass initial data and the renamed submit handler */}
+             <ManualInputForm onSubmit={handleManualDataSubmit} initialData={initialSprintData?.sprints ?? []} />
+          </CardContent>
+           {/* <CardFooter>
+               <p className="text-sm text-muted-foreground">
+                   Remember to click 'Save' at the bottom of the form to persist your changes.
+               </p>
+           </CardFooter> */}
+       </Card>
     </div>
   );
 }

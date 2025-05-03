@@ -2,27 +2,27 @@
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select" // Import Select component
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { SprintData, Sprint } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { PlusCircle, Trash2 } from 'lucide-react';
-import { addDays, format, parseISO } from 'date-fns'; // For date calculations
+import { addDays, format, parseISO } from 'date-fns';
 import { cn } from "@/lib/utils";
-
 
 interface ManualInputFormProps {
   onSubmit: (data: SprintData) => void;
+  initialData?: Sprint[]; // Optional initial sprint data
 }
 
 // Updated row structure for manual entry
 interface ManualEntryRow {
-  id: number;
+  id: number; // Use for React key, persistent across renders
   sprintNumber: string;
   startDate: string;
   duration: string; // e.g., "1 Week", "2 Weeks"
@@ -33,31 +33,17 @@ interface ManualEntryRow {
 
 const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
 
-// Helper to calculate working days and end date from duration string
+// Helper to calculate working days and end date from duration string (remains the same)
 const calculateSprintMetrics = (startDateStr: string, duration: string): { totalDays: number, endDate: string } => {
     let totalDays = 0;
     let calendarDaysToAdd = 0;
 
     switch (duration) {
-        case "1 Week":
-            totalDays = 5;
-            calendarDaysToAdd = 6; // Saturday
-            break;
-        case "2 Weeks":
-            totalDays = 10;
-            calendarDaysToAdd = 13; // Following Saturday
-            break;
-        case "3 Weeks":
-            totalDays = 15;
-            calendarDaysToAdd = 20; // Following Saturday
-            break;
-        case "4 Weeks":
-            totalDays = 20;
-            calendarDaysToAdd = 27; // Following Saturday
-            break;
-        default:
-            totalDays = 0;
-            calendarDaysToAdd = -1; // Indicate invalid duration
+        case "1 Week": totalDays = 5; calendarDaysToAdd = 6; break;
+        case "2 Weeks": totalDays = 10; calendarDaysToAdd = 13; break;
+        case "3 Weeks": totalDays = 15; calendarDaysToAdd = 20; break;
+        case "4 Weeks": totalDays = 20; calendarDaysToAdd = 27; break;
+        default: totalDays = 0; calendarDaysToAdd = -1;
     }
 
     if (!startDateStr || calendarDaysToAdd < 0) {
@@ -65,7 +51,7 @@ const calculateSprintMetrics = (startDateStr: string, duration: string): { total
     }
 
     try {
-        const startDate = parseISO(startDateStr); // Handles YYYY-MM-DD
+        const startDate = parseISO(startDateStr);
         const endDate = addDays(startDate, calendarDaysToAdd);
         return { totalDays, endDate: format(endDate, 'yyyy-MM-dd') };
     } catch (e) {
@@ -74,32 +60,51 @@ const calculateSprintMetrics = (startDateStr: string, duration: string): { total
     }
 };
 
+// Helper to convert Sprint to ManualEntryRow
+const sprintToRow = (sprint: Sprint, index: number): ManualEntryRow => ({
+  id: Date.now() + index, // Assign a unique ID for the row
+  sprintNumber: sprint.sprintNumber.toString(),
+  startDate: sprint.startDate,
+  duration: sprint.duration,
+  totalCommitment: sprint.committedPoints.toString(),
+  totalDelivered: sprint.completedPoints.toString(),
+  details: sprint.details || '',
+});
 
-export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
-  const [rows, setRows] = useState<ManualEntryRow[]>([
-    { id: Date.now(), sprintNumber: '', startDate: '', duration: '', totalCommitment: '', totalDelivered: '', details: '' }
-  ]);
+export default function ManualInputForm({ onSubmit, initialData = [] }: ManualInputFormProps) {
+  const [rows, setRows] = useState<ManualEntryRow[]>([]);
   const [pasteData, setPasteData] = useState<string>('');
   const { toast } = useToast();
 
+  // Effect to initialize or update rows based on initialData prop
+  useEffect(() => {
+    if (initialData.length > 0) {
+      setRows(initialData.map(sprintToRow));
+    } else {
+      // Ensure there's always at least one empty row if initialData is empty
+      setRows([{ id: Date.now(), sprintNumber: '', startDate: '', duration: '', totalCommitment: '', totalDelivered: '', details: '' }]);
+    }
+  }, [initialData]); // Re-run effect if initialData changes
 
   const handleAddRow = () => {
      setRows([...rows, { id: Date.now(), sprintNumber: '', startDate: '', duration: '', totalCommitment: '', totalDelivered: '', details: '' }]);
   };
 
   const handleRemoveRow = (id: number) => {
-    setRows(rows.filter(row => row.id !== id));
+    setRows(prevRows => {
+       const newRows = prevRows.filter(row => row.id !== id);
+       // If removing the last row, add a new empty one back
+       return newRows.length > 0 ? newRows : [{ id: Date.now(), sprintNumber: '', startDate: '', duration: '', totalCommitment: '', totalDelivered: '', details: '' }];
+    });
   };
 
   const handleInputChange = (id: number, field: keyof Omit<ManualEntryRow, 'id'>, value: string) => {
     setRows(rows.map(row => row.id === id ? { ...row, [field]: value } : row));
   };
 
-   // Specific handler for Select component
   const handleDurationChange = (id: number, value: string) => {
      handleInputChange(id, 'duration', value);
   };
-
 
   const handlePasteChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setPasteData(event.target.value);
@@ -112,22 +117,18 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
     }
 
     const lines = pasteData.trim().split('\n');
-    // Update expected headers for simplified format
     const expectedHeaders = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered', 'Details'];
-    const requiredHeaders = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered']; // Core required
+    const requiredHeaders = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered'];
     const newRows: ManualEntryRow[] = [];
     let headerLine = '';
     let dataLines: string[] = [];
 
-    // Check if the first line looks like a header
-    const firstLineCols = lines[0].split('\t'); // Assuming TSV
+    const firstLineCols = lines[0].split('\t');
      if (requiredHeaders.every(header => firstLineCols.some(col => col.trim().toLowerCase() === header.toLowerCase()))) {
          headerLine = lines[0];
          dataLines = lines.slice(1);
      } else {
-         // Assume no header provided, use required headers implicitly
          dataLines = lines;
-         // Verify if the number of columns matches required headers count if no header detected
          if (firstLineCols.length < requiredHeaders.length) {
               toast({ variant: "destructive", title: "Error", description: `Pasted data seems to be missing columns. Expected at least ${requiredHeaders.length}.` });
               return;
@@ -137,41 +138,35 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
      const headers = headerLine ? headerLine.split('\t').map(h => h.trim()) : requiredHeaders;
      const headerMap: { [key: string]: number } = {};
      headers.forEach((h, i) => {
-        // Find the canonical header name (case-insensitive) from the broader expected set
         const canonicalHeader = expectedHeaders.find(eh => eh.toLowerCase() === h.toLowerCase());
         if (canonicalHeader) {
             headerMap[canonicalHeader] = i;
         } else if (!headerLine && i < expectedHeaders.length) {
-            // If no header, map based on order up to expected headers count
             headerMap[expectedHeaders[i]] = i;
         }
      });
 
-     // Check if all REQUIRED headers are mapped
      const missingRequiredHeaders = requiredHeaders.filter(rh => !(rh in headerMap));
       if (missingRequiredHeaders.length > 0) {
             toast({ variant: "destructive", title: "Error", description: `Missing required columns in pasted data: ${missingRequiredHeaders.join(', ')}` });
            return;
        }
 
-
     dataLines.forEach((line, index) => {
-        if (!line.trim()) return; // Skip empty lines
+        if (!line.trim()) return;
 
-        const values = line.split('\t'); // Assuming TSV
+        const values = line.split('\t');
          if (values.length < requiredHeaders.length && !headerLine) {
              console.warn(`Skipping pasted line ${index + (headerLine ? 2 : 1)}: Not enough columns for required data.`);
-             return; // Skip if not enough columns and no headers were provided
+             return;
          }
 
         const newRow: Partial<ManualEntryRow> = { id: Date.now() + index };
 
-         expectedHeaders.forEach(header => { // Iterate through all possible headers
+         expectedHeaders.forEach(header => {
             const colIndex = headerMap[header];
              const value = colIndex !== undefined ? (values[colIndex] || '').trim() : '';
-             // Only add if the header was found or it's an implicit required one
              if (colIndex !== undefined || requiredHeaders.includes(header)) {
-                // Map spreadsheet header names to ManualEntryRow field names
                 switch(header) {
                     case 'SprintNumber': newRow.sprintNumber = value; break;
                     case 'StartDate': newRow.startDate = value; break;
@@ -183,10 +178,8 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
              }
          });
 
-        // Basic check if essential fields might be empty after mapping
         if (!newRow.sprintNumber || !newRow.startDate || !newRow.duration || !newRow.totalCommitment || !newRow.totalDelivered) {
            console.warn(`Skipping pasted line ${index + (headerLine ? 2 : 1)}: Contains potentially empty required fields.`, newRow);
-           // Optionally skip the row or allow it and let validation handle it later
         }
 
         newRows.push(newRow as ManualEntryRow);
@@ -197,9 +190,10 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
        return;
     }
 
+    // Replace existing rows with pasted data
     setRows(newRows);
-    setPasteData(''); // Clear paste area
-    toast({ title: "Success", description: "Pasted data processed." });
+    setPasteData('');
+    toast({ title: "Success", description: "Pasted data processed. Review and click Save." });
   };
 
 
@@ -208,25 +202,31 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
 
     const sprints: Sprint[] = [];
     let hasErrors = false;
-    let maxTotalDays = 0; // Track max days for SprintData
+    let maxTotalDays = 0;
+    const sprintNumbers = new Set<number>(); // To check for duplicate sprint numbers
 
     rows.forEach((row, index) => {
-        // Validate and parse each field
+        // Skip completely empty rows silently
+        if (!row.sprintNumber && !row.startDate && !row.duration && !row.totalCommitment && !row.totalDelivered && !row.details) {
+            return;
+        }
+
         const sprintNumber = parseInt(row.sprintNumber, 10);
-        const startDateStr = row.startDate.trim(); // Validate YYYY-MM-DD format
+        const startDateStr = row.startDate.trim();
         const duration = row.duration.trim();
         const commitment = parseInt(row.totalCommitment, 10);
         const delivered = parseInt(row.totalDelivered, 10);
         const details = row.details?.trim();
 
-        // --- Validation ---
         let rowErrors: string[] = [];
         if (isNaN(sprintNumber) || sprintNumber <= 0) rowErrors.push("Invalid Sprint #");
+        if (sprintNumbers.has(sprintNumber)) rowErrors.push(`Duplicate Sprint #${sprintNumber}`);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) rowErrors.push("Invalid Start Date (use YYYY-MM-DD)");
          if (!duration || !DURATION_OPTIONS.includes(duration)) rowErrors.push("Invalid Duration");
         if (isNaN(commitment) || commitment < 0) rowErrors.push("Invalid Total Commitment");
         if (isNaN(delivered) || delivered < 0) rowErrors.push("Invalid Total Delivered");
-        if (!isNaN(delivered) && !isNaN(commitment) && delivered > commitment) rowErrors.push("Delivered cannot exceed Commitment");
+        // Allow delivered > commitment for flexibility, remove validation:
+        // if (!isNaN(delivered) && !isNaN(commitment) && delivered > commitment) rowErrors.push("Delivered cannot exceed Commitment");
 
 
         if (rowErrors.length > 0) {
@@ -238,9 +238,9 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
             hasErrors = true;
             return; // Stop processing this row
         }
-        // --- End Validation ---
 
-         // Calculate derived fields
+        sprintNumbers.add(sprintNumber); // Add valid number to set
+
          const { totalDays, endDate } = calculateSprintMetrics(startDateStr, duration);
          if (totalDays <= 0 || endDate === 'N/A') {
              toast({ variant: "destructive", title: `Error in Row ${index + 1}`, description: "Could not calculate sprint metrics from Start Date and Duration." });
@@ -248,13 +248,10 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
              return;
          }
 
-         // Track maximum total days
          if (totalDays > maxTotalDays) {
              maxTotalDays = totalDays;
          }
 
-
-        // Create Sprint object
         sprints.push({
             sprintNumber,
             startDate: startDateStr,
@@ -269,27 +266,25 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
 
 
     if (hasErrors) {
-        return; // Don't submit if there were validation errors
-    }
-
-    if (sprints.length === 0) {
-        toast({ variant: "destructive", title: "Error", description: "No valid sprint data entered." });
         return;
     }
 
-    // Sort sprints by number
-    sprints.sort((a, b) => a.sprintNumber - b.sprintNumber);
+    // Allow submitting empty data (to clear a project's sprints)
+    // if (sprints.length === 0) {
+    //     toast({ variant: "destructive", title: "Error", description: "No valid sprint data entered." });
+    //     return;
+    // }
 
+    sprints.sort((a, b) => a.sprintNumber - b.sprintNumber);
 
     const finalData: SprintData = {
         sprints,
         totalStoryPoints: sprints.reduce((sum, s) => sum + s.completedPoints, 0),
-        daysInSprint: maxTotalDays, // Use the calculated max total days
+        daysInSprint: maxTotalDays,
     };
 
     onSubmit(finalData);
-     // Optionally clear the form after successful submission
-     // setRows([{ id: Date.now(), sprintNumber: '', startDate: '', duration: '', totalCommitment: '', totalDelivered: '', details: '' }]);
+    // Don't clear form here, parent component manages data persistence
   };
 
 
@@ -299,7 +294,7 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
        <Card>
           <CardHeader>
               <CardTitle>Paste Data (Optional)</CardTitle>
-               <CardDescription>Paste tab-separated data. Columns: SprintNumber, StartDate (YYYY-MM-DD), Duration (e.g., '2 Weeks'), TotalCommitment, TotalDelivered, Details (optional).</CardDescription>
+               <CardDescription>Paste tab-separated data to replace current entries. Columns: SprintNumber, StartDate (YYYY-MM-DD), Duration ('1 Week', '2 Weeks', etc.), TotalCommitment, TotalDelivered, Details (optional).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <Textarea
@@ -318,7 +313,7 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
         <CardHeader>
           <CardTitle>Manual Sprint Data Entry</CardTitle>
            <CardDescription>
-                Enter sprint data row by row. Required fields are marked. Dates must be YYYY-MM-DD.
+                Enter or edit sprint data row by row. Required fields are marked. Dates must be YYYY-MM-DD.
            </CardDescription>
         </CardHeader>
         <CardContent>
@@ -341,7 +336,7 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
                    {/* Sprint Number */}
                    <div>
                      <Label htmlFor={`sprintNumber-${row.id}`} className="md:hidden text-xs font-medium">Sprint #*</Label>
-                     <Input id={`sprintNumber-${row.id}`} type="number" placeholder="#" value={row.sprintNumber} onChange={e => handleInputChange(row.id, 'sprintNumber', e.target.value)} required className="h-9 w-full"/> {/* Adjusted width */}
+                     <Input id={`sprintNumber-${row.id}`} type="number" placeholder="#" value={row.sprintNumber} onChange={e => handleInputChange(row.id, 'sprintNumber', e.target.value)} required className="h-9 w-full md:w-auto"/> {/* Adjusted width */}
                    </div>
                    {/* Start Date */}
                    <div>
@@ -392,7 +387,7 @@ export default function ManualInputForm({ onSubmit }: ManualInputFormProps) {
                  <PlusCircle className="mr-2 h-4 w-4" />
                  Add Row
                </Button>
-               <Button type="submit">Save</Button> {/* Updated button text */}
+               <Button type="submit">Save</Button>
             </div>
           </form>
         </CardContent>
