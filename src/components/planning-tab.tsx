@@ -109,7 +109,6 @@ interface TaskRow extends Task {
   _internalId: string;
   // Use Date objects for picker state, string for underlying Task model
   startDateObj?: Date | undefined;
-  // endDateObj removed
 }
 
 interface NewSprintFormState {
@@ -127,10 +126,14 @@ const createEmptyTaskRow = (): TaskRow => ({
   assignee: '',
   status: 'To Do',
   startDate: undefined,
-  // endDate: undefined, // Removed
   startDateObj: undefined,
-  // endDateObj: undefined, // Removed
 });
+
+// Define a type for tasks prepared for the chart
+interface ChartTask extends Task {
+  endDate: string; // Added calculated end date for chart use
+}
+
 
 export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members }: PlanningTabProps) {
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | null>(null);
@@ -161,9 +164,10 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       return selectedSprint?.endDate;
   }, [isCreatingNewSprint, newSprintForm.startDate, newSprintForm.duration, selectedSprint]);
 
-  // Filter tasks with valid dates AND duration for the chart
-   const tasksForChart: Task[] = useMemo(() => {
-       const allTaskRows = isCreatingNewSprint ? [...newTasks, ...spilloverTasks] : [...(planningData.newTasks || []), ...(planningData.spilloverTasks || [])];
+   // Filter tasks with valid dates AND duration for the chart
+   // Use the current UI state (newTasks, spilloverTasks) as the source
+   const tasksForChart: ChartTask[] = useMemo(() => {
+       const allTaskRows = [...newTasks, ...spilloverTasks]; // Use current state being edited
 
        return allTaskRows
          .filter(task => task.startDate && task.estimatedTime && isValid(parseISO(task.startDate)) && parseEstimatedTimeToDays(task.estimatedTime) !== null)
@@ -172,7 +176,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
              const durationDays = parseEstimatedTimeToDays(task.estimatedTime!)!;
              // Calculate an *approximate* end date based on working days for the chart
              // Note: This simple calculation doesn't account for weekends within the duration.
-             // A more accurate Gantt would need a proper work-day calculation.
              const endDate = addDays(startDate, durationDays > 0 ? durationDays - 1 : 0); // Add duration days (adjusting for inclusiveness)
              return {
                  ...task,
@@ -180,8 +183,8 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                  endDate: format(endDate, 'yyyy-MM-dd'),
              };
          });
-   }, [newTasks, spilloverTasks, planningData.newTasks, planningData.spilloverTasks, isCreatingNewSprint]);
-
+    // Update chart whenever the task rows in the UI change
+   }, [newTasks, spilloverTasks]);
 
 
   const nextSprintNumber = useMemo(() => {
@@ -222,9 +225,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           assignee: task.assignee ?? '',
           status: task.status ?? 'To Do',
           startDate: task.startDate,
-          // endDate: undefined, // Removed
           startDateObj: parseDateString(task.startDate),
-          // endDateObj: undefined, // Removed
           _internalId: task.id || `initial_${type}_${index}_${Date.now()}`,
        });
 
@@ -356,7 +357,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           const assignee = row.assignee?.trim() || undefined;
           const status = row.status?.trim() as Task['status'];
           const startDate = row.startDate; // Already string | undefined
-          // const endDate = row.endDate; // Removed
 
           if (!description) errors.push(`${taskPrefix}: Description is required.`);
           if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
@@ -371,10 +371,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           }
            // Basic date validation
            if (startDate && !isValid(parseISO(startDate))) errors.push(`${taskPrefix}: Invalid Start Date format (YYYY-MM-DD).`);
-           // if (endDate && !isValid(parseISO(endDate))) errors.push(`${taskPrefix}: Invalid End Date format (YYYY-MM-DD).`); // Removed
-           // if (startDate && endDate && isValid(parseISO(startDate)) && isValid(parseISO(endDate)) && differenceInDays(parseISO(endDate), parseISO(startDate)) < 0) { // Removed
-           //     errors.push(`${taskPrefix}: End Date cannot be before Start Date.`);
-           // }
 
           finalTasks.push({
               id: row.id || `task_${selectedSprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
@@ -384,7 +380,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
               assignee: assignee,
               status: status,
               startDate: startDate, // Store string date
-              // endDate: undefined, // Removed
           });
       });
       return { tasks: finalTasks, errors };
@@ -532,11 +527,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
   ) => {
     const dateValue = row.startDateObj;
 
-    // Disable dates based on the other date field (no longer needed)
-    // const disabledDates = (date: Date): boolean => {
-    //     return false; // No restrictions based on end date anymore
-    // };
-
     return (
         <Popover>
             <PopoverTrigger asChild>
@@ -557,7 +547,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                     mode="single"
                     selected={dateValue}
                     onSelect={(date) => handleTaskDateChange(type, row._internalId, field, date)}
-                    // disabled={disabledDates} // No longer needed
                     initialFocus
                 />
             </PopoverContent>
@@ -577,7 +566,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
             <Label className="text-xs font-medium text-muted-foreground">Assignee</Label>
             <Label className="text-xs font-medium text-muted-foreground">Status</Label>
             <Label className="text-xs font-medium text-muted-foreground text-center">Start Date*</Label>
-            {/* <Label className="text-xs font-medium text-muted-foreground text-center">End Date</Label> */}
             <div />
         </div>
         <div className="space-y-4 md:space-y-2">
@@ -666,11 +654,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                     <Label htmlFor={`startDate-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Start Date*</Label>
                     {renderDatePicker(type, row, 'startDate', disabled)}
                  </div>
-                  {/* End Date - Removed */}
-                 {/* <div className="md:col-span-1 col-span-1">
-                    <Label htmlFor={`endDate-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">End Date</Label>
-                    {renderDatePicker(type, row, 'endDate', disabled)}
-                 </div> */}
                  {/* Delete Button */}
                 <div className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
                     <Button
@@ -770,6 +753,28 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
              disabled={disabled}
           />
         </div>
+
+        {/* Sprint Timeline Chart - Always Render based on current state */}
+        <Card>
+           <CardHeader>
+               <CardTitle className="flex items-center gap-2"><GanttChartSquare className="h-5 w-5 text-muted-foreground" /> Sprint Timeline</CardTitle>
+               <CardDescription>Visualization of planned tasks. Add start dates and estimated times to tasks to see them here.</CardDescription>
+           </CardHeader>
+           <CardContent className="min-h-[200px]">
+                {tasksForChart.length > 0 ? (
+                    <SprintTimelineChart
+                       tasks={tasksForChart}
+                       sprintStartDate={currentSprintStartDate}
+                       sprintEndDate={currentSprintEndDate}
+                    />
+                ) : (
+                    <div className="flex items-center justify-center text-muted-foreground h-full p-4 text-center">
+                        <Info className="mr-2 h-5 w-5" />
+                        Add tasks with Start Date and Estimated Time to visualize the timeline.
+                    </div>
+                )}
+           </CardContent>
+       </Card>
      </>
   );
 
@@ -853,28 +858,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
 
                      {/* Render Planning Form for New Sprint */}
                      {renderPlanningForm(false)} {/* Planning form is enabled for new sprint */}
-
-                      {/* Sprint Timeline Chart for New Sprint */}
-                     <Card>
-                          <CardHeader>
-                              <CardTitle className="flex items-center gap-2"><GanttChartSquare className="h-5 w-5 text-muted-foreground" /> Sprint Timeline (Preview)</CardTitle>
-                              <CardDescription>Visualization of planned tasks. Add start dates and estimated times to tasks to see them here.</CardDescription>
-                          </CardHeader>
-                          <CardContent className="min-h-[200px]">
-                               {tasksForChart.length > 0 ? (
-                                   <SprintTimelineChart
-                                      tasks={tasksForChart}
-                                      sprintStartDate={currentSprintStartDate}
-                                      sprintEndDate={currentSprintEndDate}
-                                   />
-                               ) : (
-                                   <div className="flex items-center justify-center text-muted-foreground h-full p-4 text-center">
-                                       <Info className="mr-2 h-5 w-5" />
-                                       Add tasks with Start Date and Estimated Time to visualize the timeline.
-                                   </div>
-                               )}
-                          </CardContent>
-                      </Card>
 
                 </CardContent>
             )}
@@ -965,28 +948,6 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                     <CardContent className="space-y-6 border-t pt-6 mt-6">
                        <h3 className="text-xl font-semibold">Planning Details for Sprint {selectedSprintNumber}</h3>
                        {renderPlanningForm(isSprintCompleted)}
-
-                       {/* Sprint Timeline Chart for Existing Sprint */}
-                        <Card>
-                          <CardHeader>
-                              <CardTitle className="flex items-center gap-2"><GanttChartSquare className="h-5 w-5 text-muted-foreground" /> Sprint Timeline</CardTitle>
-                              <CardDescription>Visualization of planned tasks for Sprint {selectedSprintNumber}.</CardDescription>
-                          </CardHeader>
-                           <CardContent className="min-h-[200px]">
-                                {tasksForChart.length > 0 ? (
-                                    <SprintTimelineChart
-                                        tasks={tasksForChart}
-                                        sprintStartDate={currentSprintStartDate}
-                                        sprintEndDate={currentSprintEndDate}
-                                    />
-                                ) : (
-                                    <div className="flex items-center justify-center text-muted-foreground h-full p-4 text-center">
-                                        <Info className="mr-2 h-5 w-5" />
-                                        Add tasks with Start Date and Estimated Time to visualize the timeline.
-                                    </div>
-                                )}
-                           </CardContent>
-                       </Card>
                     </CardContent>
                     <CardFooter className="border-t pt-4 flex justify-end gap-2">
                          {isSprintPlanned && (
