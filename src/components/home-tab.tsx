@@ -3,15 +3,17 @@ import type { SprintData } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from '@/components/ui/button';
-import { Info, Edit } from 'lucide-react'; // Keep Info icon, Add Edit icon
+import { Info, Edit } from 'lucide-react';
+import Link from 'next/link'; // Import Link
 
 interface HomeTabProps {
   sprintData: SprintData | null;
-  projectName: string; // Add project name prop
-  onEditSprint?: (sprintNumber: number) => void; // Optional callback for edit
+  projectName: string;
+  projectId: string; // Add projectId prop
+  // Removed onEditSprint prop
 }
 
-export default function HomeTab({ sprintData, projectName, onEditSprint }: HomeTabProps) {
+export default function HomeTab({ sprintData, projectName, projectId }: HomeTabProps) {
   return (
     <Card>
       <CardHeader>
@@ -19,8 +21,9 @@ export default function HomeTab({ sprintData, projectName, onEditSprint }: HomeT
         <CardTitle>Project: {projectName}</CardTitle>
         <CardDescription>
           This tab provides a summary of the sprint data loaded for the selected project.
-          Use the 'Entry' tab to add or modify sprint details for this project.
-          View the generated charts and reports in the 'Reports' tab.
+          Use the 'Entry' tab to add or modify basic sprint data (commitment/delivered).
+          Click the 'Edit' icon to add detailed ticket information for a specific sprint.
+          View charts and reports in the 'Reports' tab.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -36,8 +39,7 @@ export default function HomeTab({ sprintData, projectName, onEditSprint }: HomeT
                     <TableHead>End Date</TableHead>
                     <TableHead className="text-right">Commitment</TableHead>
                     <TableHead className="text-right">Delivered</TableHead>
-                    {/* Removed Details header */}
-                    <TableHead className="w-[50px]">Actions</TableHead> {/* Added Actions header */}
+                    <TableHead className="w-[50px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -48,17 +50,18 @@ export default function HomeTab({ sprintData, projectName, onEditSprint }: HomeT
                       <TableCell>{sprint.endDate || 'N/A'}</TableCell>
                       <TableCell className="text-right">{sprint.committedPoints}</TableCell>
                       <TableCell className="text-right">{sprint.completedPoints}</TableCell>
-                      {/* Removed Details cell */}
-                       {/* Added Actions cell with Edit button */}
                        <TableCell>
-                         <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => onEditSprint?.(sprint.sprintNumber)} // Call callback on click
-                            aria-label={`Edit Sprint ${sprint.sprintNumber}`}
-                         >
-                           <Edit className="h-4 w-4" />
-                         </Button>
+                         {/* Link to the dynamic edit page */}
+                         <Link href={`/projects/${projectId}/sprints/${sprint.sprintNumber}/edit`} passHref legacyBehavior>
+                           <Button
+                              asChild // Use asChild to make the Link the actual clickable element
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Edit Sprint ${sprint.sprintNumber}`}
+                           >
+                             <a><Edit className="h-4 w-4" /></a>
+                           </Button>
+                         </Link>
                        </TableCell>
                     </TableRow>
                   ))}

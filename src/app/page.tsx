@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, Edit } from 'lucide-react';
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle } from 'lucide-react'; // Removed Edit icon
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label"
 import HomeTab from '@/components/home-tab';
 import EntryTab from '@/components/entry-tab';
 import ReportsTab from '@/components/reports-tab';
-import EditSprintDetailsDialog from '@/components/edit-sprint-details-dialog'; // Import the new dialog
+// Removed import for EditSprintDetailsDialog
 
 import type { SprintData, Sprint, AppData, Project, SprintDetailItem } from '@/types/sprint-data';
 import { initialSprintData } from '@/types/sprint-data'; // Import initialSprintData
@@ -56,8 +56,9 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<string>("home");
   const [newProjectName, setNewProjectName] = useState<string>('');
   const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState<boolean>(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false); // State for edit dialog
-  const [editingSprint, setEditingSprint] = useState<Sprint | null>(null); // State for the sprint being edited
+  // Removed state for edit dialog and editing sprint
+  // const [isEditDialogOpen, setIsEditDialogOpen] = useState<boolean>(false);
+  // const [editingSprint, setEditingSprint] = useState<Sprint | null>(null);
   const { toast } = useToast();
   const [resetManualFormKey, setResetManualFormKey] = useState(0); // State to trigger form reset
 
@@ -83,7 +84,8 @@ export default function Home() {
           setProjects(validatedData);
           // Select the first project if available, or null otherwise
           setSelectedProjectId(validatedData.length > 0 ? validatedData[0].id : null);
-          toast({ title: "Data Loaded", description: "Loaded previously saved project data." });
+          // Toast removed from here, let components handle specific load messages if needed
+          // toast({ title: "Data Loaded", description: "Loaded previously saved project data." });
         } else {
           console.warn("Invalid data found in localStorage.");
           localStorage.removeItem('appData'); // Clear invalid data
@@ -97,7 +99,7 @@ export default function Home() {
         setSelectedProjectId(null);
       }
     }
-  }, [toast]);
+  }, []); // Removed toast dependency
 
   // Effect to save data to localStorage whenever projects change
   useEffect(() => {
@@ -113,9 +115,10 @@ export default function Home() {
            description: "Could not save project data locally. Data might be too large or storage is unavailable.",
          });
       }
-    } else {
-       localStorage.removeItem('appData'); // Clear storage if projects array is empty
+    } else if (projects?.length === 0) { // Check explicitly for empty array after load/creation
+       localStorage.removeItem('appData'); // Clear storage if projects array is explicitly empty
     }
+    // Only save when projects state actually changes, not on every render with toast
   }, [projects, toast]);
 
   // Find the currently selected project object
@@ -157,9 +160,13 @@ export default function Home() {
 
          let startDateStr: string;
          if (typeof startDateValue === 'number') {
+             // Handle Excel date number
              if (startDateValue > 0) {
                  try {
-                     startDateStr = XLSX.SSF.format('yyyy-mm-dd', startDateValue);
+                     // Use XLSX utility for converting Excel date serial number
+                     const excelEpoch = new Date(Date.UTC(1899, 11, 30)); // Excel epoch starts Dec 30, 1899 for compatibility
+                     const date = new Date(excelEpoch.getTime() + startDateValue * 86400000); // milliseconds in a day
+                     startDateStr = date.toISOString().split('T')[0];
                  } catch (e) {
                      console.warn(`Skipping row ${rowIndex + 2}: Invalid date format for value ${startDateValue}.`);
                      return;
@@ -169,9 +176,16 @@ export default function Home() {
                  return;
              }
          } else if (typeof startDateValue === 'string') {
-            const potentialDate = new Date(startDateValue);
+            // Handle date string (attempt to parse YYYY-MM-DD or ISO formats)
+             const potentialDate = new Date(startDateValue);
              if (!isNaN(potentialDate.getTime())) {
-                 startDateStr = potentialDate.toISOString().split('T')[0];
+                 // Check if it's just a year or invalid date like '1'
+                 if (potentialDate.getFullYear() > 1900 && potentialDate.toISOString().includes('-')) {
+                    startDateStr = potentialDate.toISOString().split('T')[0];
+                 } else {
+                     console.warn(`Skipping row ${rowIndex + 2}: Invalid date string format ${startDateValue}. Expected YYYY-MM-DD.`);
+                    return;
+                 }
              } else {
                  console.warn(`Skipping row ${rowIndex + 2}: Invalid date string format ${startDateValue}. Expected YYYY-MM-DD.`);
                  return;
@@ -222,9 +236,11 @@ export default function Home() {
        toast({ variant: "destructive", title: "Error", description: "No project selected." });
        return;
     }
-    setProjects(prevProjects =>
-      prevProjects.map(p => {
-        if (p.id === selectedProjectId) {
+    let projectNameForToast = 'N/A';
+    setProjects(prevProjects => {
+      const updatedProjects = prevProjects.map(p => {
+         if (p.id === selectedProjectId) {
+           projectNameForToast = p.name; // Get name for toast
            // Preserve existing details when saving basic sprint data
            const updatedSprints = newSprintData.sprints.map(newSprint => {
              const existingSprint = p.sprintData.sprints.find(
@@ -243,14 +259,16 @@ export default function Home() {
                  sprints: updatedSprints,
               },
            };
-        }
-        return p;
-      })
-    );
-    toast({ title: "Success", description: `Sprint data saved to project '${selectedProject?.name ?? 'N/A'}'.` });
+         }
+         return p;
+      });
+       return updatedProjects;
+    });
+
+    toast({ title: "Success", description: `Sprint data saved to project '${projectNameForToast}'.` });
     setActiveTab("home"); // Switch to home tab after saving
     setResetManualFormKey(prevKey => prevKey + 1); // Trigger form reset
-  }, [selectedProjectId, toast, selectedProject?.name]);
+  }, [selectedProjectId, toast]);
 
 
   // Export data for the currently selected project
@@ -336,42 +354,10 @@ export default function Home() {
     toast({ title: "Project Created", description: `Project "${trimmedName}" created successfully.` });
   };
 
-  // Handle clicking the Edit button on the Home tab
-  const handleEditSprint = (sprintNumber: number) => {
-      const sprintToEdit = selectedProject?.sprintData.sprints.find(s => s.sprintNumber === sprintNumber);
-      if (sprintToEdit) {
-          setEditingSprint(sprintToEdit);
-          setIsEditDialogOpen(true); // Open the edit dialog
-      } else {
-          toast({ variant: "destructive", title: "Error", description: `Sprint ${sprintNumber} not found.` });
-      }
-  };
+  // Removed handleEditSprint function
 
-  // Handle saving updated details from the dialog
-  const handleUpdateSprintDetails = (updatedDetails: SprintDetailItem[]) => {
-     if (!selectedProjectId || !editingSprint) return;
+  // Removed handleUpdateSprintDetails function
 
-     setProjects(prevProjects =>
-       prevProjects.map(p =>
-         p.id === selectedProjectId
-           ? {
-               ...p,
-               sprintData: {
-                 ...p.sprintData,
-                 sprints: p.sprintData.sprints.map(s =>
-                   s.sprintNumber === editingSprint.sprintNumber
-                     ? { ...s, details: updatedDetails }
-                     : s
-                 ),
-               },
-             }
-           : p
-       )
-     );
-     setIsEditDialogOpen(false); // Close the dialog
-     setEditingSprint(null); // Reset editing sprint
-     toast({ title: "Details Updated", description: `Details for Sprint ${editingSprint.sprintNumber} saved.` });
-  };
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -457,11 +443,12 @@ export default function Home() {
               </TabsList>
 
               <TabsContent value="home">
-                 {/* Pass only the selected project's sprintData and the edit handler */}
+                 {/* Pass only the selected project's sprintData, name and ID */}
                  <HomeTab
+                     projectId={selectedProject.id} // Pass projectId
                      sprintData={selectedProject.sprintData}
                      projectName={selectedProject.name}
-                     onEditSprint={handleEditSprint} // Pass the handler
+                     // Removed onEditSprint prop
                  />
               </TabsContent>
 
@@ -491,16 +478,7 @@ export default function Home() {
          )}
       </main>
 
-      {/* Edit Sprint Details Dialog */}
-      {editingSprint && selectedProject && (
-         <EditSprintDetailsDialog
-             isOpen={isEditDialogOpen}
-             onClose={() => { setIsEditDialogOpen(false); setEditingSprint(null); }}
-             sprint={editingSprint}
-             projectName={selectedProject.name}
-             onSave={handleUpdateSprintDetails}
-         />
-      )}
+      {/* Edit Sprint Details Dialog Removed */}
 
 
       <footer className="text-center p-4 text-xs text-muted-foreground border-t">
