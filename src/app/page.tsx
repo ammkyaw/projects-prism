@@ -23,7 +23,7 @@ import MembersTab from '@/components/teams/members-tab'; // Updated path
 import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
 import TeamsTab from '@/components/teams/teams-tab'; // Updated path
 import AddMembersDialog from '@/components/add-members-dialog';
-import HistoryTab from '@/components/history-tab'; // New history tab component
+import HistoryTab from '@/components/history-tab'; // Import HistoryTab component
 
 // Placeholder Sub-Tab Components
 import SprintSummaryTab from '@/components/sprints/sprint-summary-tab'; // Updated path
@@ -108,12 +108,11 @@ export default function Home() {
       analytics: 'charts',
       teams: 'members',
       settings: 'holidays',
-      history: 'main', // History is a main tab without subtabs for now
   };
 
   // Update activeTab logic for main tabs
   const handleMainTabChange = (mainTabKey: string) => {
-      if (mainTabKey === 'dashboard' || mainTabKey === 'history') {
+      if (mainTabKey === 'dashboard') { // Only dashboard is a main tab without subtabs now
          setActiveTab(mainTabKey);
       } else {
          const defaultSub = defaultSubTabs[mainTabKey] || ''; // Fallback to empty string if no default
@@ -1241,8 +1240,8 @@ export default function Home() {
       backlog: {
           label: "Backlog", icon: Layers, subTabs: {
               management: { label: "Management", icon: Package, component: BacklogTab },
-              // prioritization: { label: "Prioritization", icon: Filter, component: BacklogPrioritizationTab }, // REMOVED
               grooming: { label: "Grooming", icon: Edit, component: BacklogGroomingTab },
+              history: { label: "History", icon: History, component: HistoryTab }, // Added History Sub-Tab
           }
       },
       analytics: {
@@ -1262,7 +1261,6 @@ export default function Home() {
               holidays: { label: "Holidays", icon: CalendarDays, component: HolidaysTab },
           }
       },
-      history: { label: "History", icon: History, component: HistoryTab }, // Added History Tab
   };
 
   // Render the currently active tab content
@@ -1327,14 +1325,17 @@ export default function Home() {
                     onMoveToSprint: handleMoveToSprint,
                  };
                 break;
-            // case 'backlog/prioritization': // REMOVED
-            //     componentProps = { ...componentProps, backlog: selectedProject.backlog ?? [] };
-            //     break;
             case 'backlog/grooming':
                 componentProps = {
                      ...componentProps,
                      initialBacklog: selectedProject.backlog?.filter(task => !task.movedToSprint) ?? [], // Only pass non-moved items
                      onSaveBacklog: handleSaveBacklog
+                 };
+                break;
+             case 'backlog/history': // Updated sub-tab path
+                componentProps = {
+                    ...componentProps,
+                    historyItems: selectedProject.backlog?.filter(task => !!task.movedToSprint) ?? [],
                  };
                 break;
             case 'analytics/charts':
@@ -1373,16 +1374,10 @@ export default function Home() {
                 break;
         }
     } else {
-        // Handle main tabs without sub-tabs (Dashboard, History)
+        // Handle main tabs without sub-tabs (Dashboard)
         ActiveComponent = mainConfig.component;
          if (mainKey === 'dashboard') {
             componentProps = { ...componentProps, sprintData: selectedProject.sprintData };
-         } else if (mainKey === 'history') {
-            componentProps = {
-                ...componentProps,
-                // Pass only backlog items that HAVE been moved
-                historyItems: selectedProject.backlog?.filter(task => !!task.movedToSprint) ?? [],
-            };
          }
         // Add props for other main tabs if needed
     }
@@ -1491,8 +1486,8 @@ export default function Home() {
              </Card>
          ) : (
              <Tabs value={activeMainTab} onValueChange={handleMainTabChange} className="w-full">
-                {/* Main Tabs List - Updated grid cols */}
-               <TabsList className="grid w-full grid-cols-7 mb-6">
+                {/* Main Tabs List - Updated grid cols (now 6 main tabs) */}
+               <TabsList className="grid w-full grid-cols-6 mb-6">
                  {Object.entries(tabsConfig).map(([key, config]) => (
                      <TabsTrigger key={key} value={key}>
                         <config.icon className="mr-2 h-4 w-4" /> {config.label}
@@ -1508,8 +1503,9 @@ export default function Home() {
                              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mb-6">
                                 <TabsList className={cn(
                                     "grid w-full",
-                                    Object.keys(tabsConfig[activeMainTab as keyof typeof tabsConfig].subTabs!).length === 2 ? "grid-cols-2" : "grid-cols-3"
-                                )}> {/* Adjust cols dynamically */}
+                                    // Adjust grid cols dynamically based on the number of subtabs
+                                    `grid-cols-${Object.keys(tabsConfig[activeMainTab as keyof typeof tabsConfig].subTabs!).length}`
+                                )}>
                                     {Object.entries(tabsConfig[activeMainTab as keyof typeof tabsConfig].subTabs!).map(([subKey, subConfig]) => (
                                         <TabsTrigger key={`${activeMainTab}/${subKey}`} value={`${activeMainTab}/${subKey}`}>
                                            <subConfig.icon className="mr-2 h-4 w-4" /> {subConfig.label}
@@ -1542,5 +1538,3 @@ export default function Home() {
     </div>
   );
 }
-
-
