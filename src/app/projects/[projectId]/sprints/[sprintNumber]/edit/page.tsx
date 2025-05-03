@@ -15,6 +15,7 @@ import type { Sprint, SprintDetailItem, AppData, Project, Member } from '@/types
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import Link from 'next/link'; // Import Link for back navigation
+import { isValid } from 'date-fns'; // Import isValid
 
 // Internal state structure for editing rows
 interface DetailRow extends SprintDetailItem {
@@ -78,17 +79,32 @@ export default function EditSprintDetailsPage() {
              }
 
             setSprint(currentSprint);
-            // Initialize detail rows from the loaded sprint
-            setDetailRows(
-              (currentSprint.details || []).map((item, index) => ({
-                ...item,
-                developer: item.developer ?? '', // Ensure developer is string
-                _internalId: item.id || `initial_${index}_${Date.now()}`,
-              }))
-            );
-            if (!currentSprint.details || currentSprint.details.length === 0) {
-               setDetailRows([createEmptyDetailRow()]); // Add one empty row if none exist
-            }
+
+             // Initialize detail rows with validation
+             const validatedDetails: DetailRow[] = [];
+             if (Array.isArray(currentSprint.details)) {
+                 currentSprint.details.forEach((item, index) => {
+                     if (
+                         item && typeof item === 'object' &&
+                         typeof item.id === 'string' &&
+                         typeof item.ticketNumber === 'string' &&
+                         typeof item.developer === 'string' &&
+                         typeof item.storyPoints === 'number' && !isNaN(item.storyPoints) &&
+                         typeof item.devTime === 'string'
+                     ) {
+                         validatedDetails.push({
+                             ...item,
+                             _internalId: item.id || `initial_${index}_${Date.now()}`,
+                         });
+                     } else {
+                         console.warn(`Skipping invalid detail item in Sprint ${sprintNumber}:`, item);
+                     }
+                 });
+             }
+
+             // Set rows, ensuring at least one empty row if none exist
+             setDetailRows(validatedDetails.length > 0 ? validatedDetails : [createEmptyDetailRow()]);
+
           } else {
             toast({ variant: "destructive", title: "Error", description: `Sprint ${sprintNumber} not found in project ${currentProject.name}.` });
             router.push('/');
@@ -111,22 +127,35 @@ export default function EditSprintDetailsPage() {
     }
   }, [projectId, sprintNumber, router, toast]);
 
-  // Track unsaved changes
+  // Track unsaved changes - compare current state with initially loaded sprint details
   useEffect(() => {
-    if (!isLoading && sprint) { // Only track after initial load
-       const originalDetailsString = JSON.stringify(sprint.details || []);
-       const currentDetailsString = JSON.stringify(detailRows.map(({ _internalId, ...rest }) => ({
-            // Exclude internal ID and ensure types match for comparison
-            id: rest.id,
-            ticketNumber: rest.ticketNumber?.trim() ?? '',
-            developer: rest.developer?.trim() ?? '',
-            storyPoints: Number(rest.storyPoints ?? 0),
-            devTime: rest.devTime?.trim() ?? '',
-       }))
-          .filter(row => row.ticketNumber || row.developer || row.storyPoints || row.devTime)); // Filter out completely empty rows before comparing
+    if (isLoading || !sprint) return; // Only track after initial load and sprint is available
 
-       setHasUnsavedChanges(originalDetailsString !== currentDetailsString);
-    }
+    // Stringify original details for comparison
+    const originalDetailsString = JSON.stringify(
+        (sprint.details || [])
+            .map(({ _internalId, ...rest }: any) => rest) // Ensure comparison format matches current
+            .sort((a, b) => (a.id || '').localeCompare(b.id || '')) // Sort for consistent comparison
+    );
+
+
+     // Stringify current rows, filtering empty ones and sorting
+     const currentRowsString = JSON.stringify(
+        detailRows
+            .filter(row => row.ticketNumber.trim() || row.developer.trim() || row.storyPoints > 0 || row.devTime.trim()) // Filter out truly empty rows
+            .map(({ _internalId, ...rest }) => ({ // Map to plain object for comparison
+                 id: rest.id || '', // Use empty string if no ID yet
+                 ticketNumber: rest.ticketNumber.trim(),
+                 developer: rest.developer.trim(),
+                 storyPoints: Number(rest.storyPoints ?? 0),
+                 devTime: rest.devTime.trim(),
+            }))
+            .sort((a, b) => (a.id || '').localeCompare(b.id || '')) // Sort for consistent comparison
+     );
+
+
+    setHasUnsavedChanges(originalDetailsString !== currentRowsString);
+
   }, [detailRows, sprint, isLoading]);
 
 
@@ -155,7 +184,7 @@ export default function EditSprintDetailsPage() {
   };
 
    const handleDeveloperChange = (internalId: string, value: string) => {
-     handleDetailInputChange(internalId, 'developer', value === 'unassigned' ? undefined : value); // Set undefined if 'unassigned'
+     handleDetailInputChange(internalId, 'developer', value === 'unassigned' ? '' : value); // Set empty string if 'unassigned'
   };
 
   const handleSaveDetails = () => {
@@ -166,20 +195,22 @@ export default function EditSprintDetailsPage() {
 
     let hasErrors = false;
     const finalDetails: SprintDetailItem[] = [];
+    const ticketNumbers = new Set<string>(); // Check for duplicate ticket numbers
 
     detailRows.forEach((row, index) => {
         // Skip completely empty rows silently on save
-        if (!row.ticketNumber && !row.developer && !row.storyPoints && !row.devTime) {
+        if (!row.ticketNumber.trim() && !row.developer.trim() && !(Number(row.storyPoints) > 0) && !row.devTime.trim()) {
             return;
         }
 
         const ticketNumber = row.ticketNumber.trim();
-        const developer = row.developer.trim(); // This is the member's name
-        const storyPoints = Number(row.storyPoints); // Ensure it's a number
+        const developer = row.developer?.trim() ?? ''; // Use default if undefined
+        const storyPoints = Number(row.storyPoints ?? 0); // Ensure it's a number, default 0
         const devTime = row.devTime.trim();
 
         let rowErrors: string[] = [];
         if (!ticketNumber) rowErrors.push("Ticket # required");
+        if (ticketNumber && ticketNumbers.has(ticketNumber.toLowerCase())) rowErrors.push(`Duplicate Ticket #${ticketNumber}`);
         if (!developer) rowErrors.push("Developer required");
         if (isNaN(storyPoints) || storyPoints < 0) rowErrors.push("Invalid Story Points");
         if (!devTime) rowErrors.push("Dev Time required"); // Basic validation
@@ -193,6 +224,8 @@ export default function EditSprintDetailsPage() {
             hasErrors = true;
             return; // Stop processing this row
         }
+
+        if (ticketNumber) ticketNumbers.add(ticketNumber.toLowerCase()); // Add valid ticket to set
 
         finalDetails.push({
             id: row.id || `detail_${sprint.sprintNumber}_${Date.now()}_${index}`, // Ensure a unique ID if new
@@ -209,47 +242,58 @@ export default function EditSprintDetailsPage() {
 
     // Update the sprint details in the project
     const updatedSprint = { ...sprint, details: finalDetails };
-    const updatedSprints = project.sprintData.sprints.map(s =>
-        s.sprintNumber === sprintNumber ? updatedSprint : s
-    );
-    const updatedProjectData = {
-        ...project.sprintData,
-        sprints: updatedSprints,
-    };
-    const updatedProject = { ...project, sprintData: updatedProjectData };
 
-    // Update the projects array in localStorage
-    const savedData = localStorage.getItem('appData');
-    if (savedData) {
-        try {
-            const allProjects: AppData = JSON.parse(savedData);
-            const updatedProjects = allProjects.map(p => p.id === projectId ? updatedProject : p);
-            localStorage.setItem('appData', JSON.stringify(updatedProjects));
-
-            // Update local state to reflect saved changes
-            setProject(updatedProject);
-            setSprint(updatedSprint);
-            // Re-initialize rows from the newly saved sprint data to get consistent IDs
-            setDetailRows(
-              (updatedSprint.details || []).map((item, index) => ({
-                ...item,
-                 developer: item.developer ?? '',
-                _internalId: item.id || `saved_${index}_${Date.now()}`, // Use saved ID or generate new internal ID
-              }))
-            );
-             if ((updatedSprint.details || []).length === 0) {
-               setDetailRows([createEmptyDetailRow()]); // Ensure one empty row if saved details are empty
-             }
-
-
-            toast({ title: "Details Saved", description: `Details for Sprint ${sprintNumber} saved successfully.` });
-            setHasUnsavedChanges(false); // Reset unsaved changes flag
-        } catch (error) {
-            console.error("Failed to save data:", error);
-            toast({ variant: "destructive", title: "Error", description: "Failed to save sprint details." });
+    setProjects(prevProjects => {
+      if (!prevProjects) return [];
+      const updatedProjects = prevProjects.map(p => {
+        if (p.id === projectId) {
+          const updatedSprints = p.sprintData.sprints.map(s =>
+            s.sprintNumber === sprintNumber ? updatedSprint : s
+          );
+          return {
+            ...p,
+            sprintData: {
+              ...p.sprintData,
+              sprints: updatedSprints,
+            },
+          };
         }
-    }
+        return p;
+      });
+       // Trigger save to localStorage (defined in parent, this assumes setProjects triggers it)
+       return updatedProjects;
+    });
+
+
+     // Update local state *after* successfully initiating the save via setProjects
+     setProject(prev => prev ? { ...prev, sprintData: { ...prev.sprintData, sprints: prev.sprintData.sprints.map(s => s.sprintNumber === sprintNumber ? updatedSprint : s) } } : null);
+     setSprint(updatedSprint);
+     // Re-initialize rows from the newly saved sprint data to get consistent IDs and reflect saved state
+     setDetailRows(
+       (updatedSprint.details || []).map((item, index) => ({
+         ...item,
+         developer: item.developer ?? '',
+         _internalId: item.id || `saved_${index}_${Date.now()}`, // Use saved ID or generate new internal ID
+       }))
+     );
+     if ((updatedSprint.details || []).length === 0) {
+        setDetailRows([createEmptyDetailRow()]); // Ensure one empty row if saved details are empty
+     }
+
+    toast({ title: "Details Saved", description: `Details for Sprint ${sprintNumber} saved successfully.` });
+    setHasUnsavedChanges(false); // Reset unsaved changes flag
+
+
   };
+
+   // Function to update projects state globally (needed because localStorage is updated here)
+   const setProjects = (updateFn: (prevProjects: AppData | null) => AppData) => {
+        const currentData = localStorage.getItem('appData');
+        const currentProjects = currentData ? JSON.parse(currentData) : [];
+        const updatedProjects = updateFn(currentProjects);
+        localStorage.setItem('appData', JSON.stringify(updatedProjects));
+   };
+
 
   if (isLoading) {
     return <div className="flex justify-center items-center min-h-screen">Loading sprint details...</div>;

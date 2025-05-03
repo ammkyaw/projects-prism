@@ -24,16 +24,19 @@ import HolidaysTab from '@/components/holidays-tab'; // Import HolidaysTab
 import AddMembersDialog from '@/components/add-members-dialog';
 
 
-import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar } from '@/types/sprint-data'; // Added Task, HolidayCalendar types
-import { initialSprintData, initialSprintPlanning } from '@/types/sprint-data';
+import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday } from '@/types/sprint-data'; // Added Task, HolidayCalendar types
+import { initialSprintData, initialSprintPlanning, taskStatuses } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { addDays, format, parseISO, isPast } from 'date-fns';
+import { addDays, format, parseISO, isPast, isValid } from 'date-fns';
 
 // Helper function (remains the same)
-const calculateSprintMetrics = (startDateStr: string, duration: string): { totalDays: number, endDate: string } => {
+const calculateSprintMetrics = (startDateStr: string | undefined, duration: string | undefined): { totalDays: number, endDate: string } => {
     let totalDays = 0;
     let calendarDaysToAdd = 0;
+
+    if (!duration || !startDateStr) return { totalDays: 0, endDate: 'N/A' };
+
 
     switch (duration) {
         case "1 Week": totalDays = 5; calendarDaysToAdd = 6; break;
@@ -43,7 +46,9 @@ const calculateSprintMetrics = (startDateStr: string, duration: string): { total
         default: return { totalDays: 0, endDate: 'N/A' };
     }
 
-    if (!startDateStr) return { totalDays: 0, endDate: 'N/A' };
+     if (!isValid(parseISO(startDateStr))) {
+         return { totalDays: 0, endDate: 'N/A' };
+     }
 
     try {
         const startDate = parseISO(startDateStr);
@@ -54,6 +59,15 @@ const calculateSprintMetrics = (startDateStr: string, duration: string): { total
         return { totalDays: 0, endDate: 'N/A' };
     }
 };
+
+// Helper to create an empty task row for validation/defaults
+const createEmptyTaskRow = (): Task => ({
+  id: '',
+  description: '',
+  status: 'To Do',
+  qaEstimatedTime: '2d',
+  bufferTime: '1d',
+});
 
 
 export default function Home() {
@@ -74,95 +88,247 @@ export default function Home() {
   }, []);
 
 
-  // Effect to load data from localStorage on mount
+  // Effect to load data from localStorage on mount with improved validation
   useEffect(() => {
       const savedData = localStorage.getItem('appData');
       if (savedData) {
+          let parsedData: any; // Use any initially for safe parsing
           try {
-              const parsedData: AppData = JSON.parse(savedData);
-              // Basic validation for the new structure including members, status, and holidayCalendars
-              if (Array.isArray(parsedData) && parsedData.every(p => p.id && p.name && p.sprintData && Array.isArray(p.sprintData.sprints) && Array.isArray(p.members))) {
-                  // Ensure details, planning arrays, members, holidayCalendars, and status exist
-                  const validatedData = parsedData.map(project => ({
-                      ...project,
-                      sprintData: {
-                          ...project.sprintData,
-                          sprints: project.sprintData.sprints.map(sprint => {
-                              let status: SprintStatus = sprint.status ?? 'Planned';
-                              // Automatically mark as Completed if end date is in the past
-                              if (sprint.endDate && clientNow && isPast(parseISO(sprint.endDate)) && status !== 'Completed') {
-                                  status = 'Completed';
-                              }
-                              // Ensure planning object and tasks arrays exist and have correct fields
-                              const planning: SprintPlanning = sprint.planning ?? initialSprintPlanning;
-                              const validatedPlanning: SprintPlanning = {
-                                  ...planning,
-                                  newTasks: (planning.newTasks || []).map(task => ({
-                                      ...task,
-                                      status: task.status || 'To Do',
-                                      devEstimatedTime: task.devEstimatedTime, // Ensure this is carried over
-                                      qaEstimatedTime: task.qaEstimatedTime ?? '2d',
-                                      bufferTime: task.bufferTime ?? '1d',
-                                      reviewer: task.reviewer,
-                                      startDate: task.startDate,
-                                      assignee: task.assignee,
-                                      // Ensure other fields are present or default
-                                      id: task.id || `task_load_${Date.now()}_${Math.random()}`,
-                                      description: task.description || '',
-                                      storyPoints: task.storyPoints ?? undefined,
-                                      ticketNumber: task.ticketNumber,
-                                      devTime: task.devTime,
-                                  })),
-                                  spilloverTasks: (planning.spilloverTasks || []).map(task => ({
-                                      ...task,
-                                      status: task.status || 'To Do',
-                                      devEstimatedTime: task.devEstimatedTime, // Ensure this is carried over
-                                      qaEstimatedTime: task.qaEstimatedTime ?? '2d',
-                                      bufferTime: task.bufferTime ?? '1d',
-                                      reviewer: task.reviewer,
-                                      startDate: task.startDate,
-                                      assignee: task.assignee,
-                                      // Ensure other fields are present or default
-                                       id: task.id || `task_load_${Date.now()}_${Math.random()}`,
-                                       description: task.description || '',
-                                       storyPoints: task.storyPoints ?? undefined,
-                                       ticketNumber: task.ticketNumber,
-                                       devTime: task.devTime,
-                                  })),
-                              };
+              parsedData = JSON.parse(savedData);
 
-                              return {
-                                  ...sprint,
-                                  details: sprint.details ?? [], // Ensure details array exists
-                                  planning: validatedPlanning, // Use validated planning
-                                  status: status, // Set validated/updated status
-                              };
-                          }),
-                      },
-                      members: project.members?.map(m => ({ ...m, holidayCalendarId: m.holidayCalendarId ?? null })) ?? [], // Ensure members array exists and holidayCalendarId
-                      holidayCalendars: project.holidayCalendars ?? [], // Ensure holidayCalendars array exists
-                  }));
-                  setProjects(validatedData);
-                  setSelectedProjectId(validatedData.length > 0 ? validatedData[0].id : null);
-              } else {
-                  console.warn("Invalid or outdated data found in localStorage.");
-                  localStorage.removeItem('appData'); // Clear invalid data
-                  setProjects([]);
-                  setSelectedProjectId(null);
+              // --- Robust Validation ---
+              if (!Array.isArray(parsedData)) {
+                  throw new Error("Stored data is not an array.");
               }
+
+              const validatedProjects: Project[] = [];
+
+              for (const projectData of parsedData) {
+                   // Validate basic project structure
+                  if (
+                      !projectData || typeof projectData !== 'object' ||
+                      !projectData.id || typeof projectData.id !== 'string' ||
+                      !projectData.name || typeof projectData.name !== 'string'
+                  ) {
+                      console.warn("Skipping invalid project data:", projectData);
+                      continue; // Skip this invalid project
+                  }
+
+                   // --- Validate and Sanitize Members ---
+                   const validatedMembers: Member[] = [];
+                   if (Array.isArray(projectData.members)) {
+                       projectData.members.forEach((memberData: any) => {
+                           if (
+                               memberData && typeof memberData === 'object' &&
+                               memberData.id && typeof memberData.id === 'string' &&
+                               memberData.name && typeof memberData.name === 'string' &&
+                               memberData.role && typeof memberData.role === 'string'
+                           ) {
+                               validatedMembers.push({
+                                   id: memberData.id,
+                                   name: memberData.name,
+                                   role: memberData.role,
+                                   holidayCalendarId: typeof memberData.holidayCalendarId === 'string' ? memberData.holidayCalendarId : null, // Default to null if missing/invalid
+                               });
+                           } else {
+                               console.warn(`Skipping invalid member data in project ${projectData.id}:`, memberData);
+                           }
+                       });
+                   }
+
+                   // --- Validate and Sanitize Holiday Calendars ---
+                   const validatedCalendars: HolidayCalendar[] = [];
+                   if (Array.isArray(projectData.holidayCalendars)) {
+                       projectData.holidayCalendars.forEach((calData: any) => {
+                            if (
+                                calData && typeof calData === 'object' &&
+                                calData.id && typeof calData.id === 'string' &&
+                                calData.name && typeof calData.name === 'string' &&
+                                Array.isArray(calData.holidays)
+                            ) {
+                                const validatedHolidays: PublicHoliday[] = [];
+                                calData.holidays.forEach((holData: any) => {
+                                    if (
+                                        holData && typeof holData === 'object' &&
+                                        holData.id && typeof holData.id === 'string' &&
+                                        holData.name && typeof holData.name === 'string' &&
+                                        holData.date && typeof holData.date === 'string' &&
+                                        isValid(parseISO(holData.date)) // Validate date format
+                                    ) {
+                                        validatedHolidays.push({
+                                            id: holData.id,
+                                            name: holData.name,
+                                            date: holData.date,
+                                        });
+                                    } else {
+                                       console.warn(`Skipping invalid holiday data in calendar ${calData.id} (project ${projectData.id}):`, holData);
+                                    }
+                                });
+                                validatedCalendars.push({
+                                    id: calData.id,
+                                    name: calData.name,
+                                    countryCode: typeof calData.countryCode === 'string' ? calData.countryCode : undefined, // Accept string or undefined
+                                    holidays: validatedHolidays,
+                                });
+                            } else {
+                                console.warn(`Skipping invalid calendar data in project ${projectData.id}:`, calData);
+                            }
+                       });
+                   }
+
+
+                   // --- Validate and Sanitize SprintData ---
+                   let validatedSprintData: SprintData = { ...initialSprintData }; // Start with defaults
+                   if (projectData.sprintData && typeof projectData.sprintData === 'object' && Array.isArray(projectData.sprintData.sprints)) {
+                        const validatedSprints: Sprint[] = [];
+                        projectData.sprintData.sprints.forEach((sprintData: any) => {
+                            if (
+                                sprintData && typeof sprintData === 'object' &&
+                                typeof sprintData.sprintNumber === 'number' && !isNaN(sprintData.sprintNumber) &&
+                                typeof sprintData.startDate === 'string' && isValid(parseISO(sprintData.startDate)) &&
+                                typeof sprintData.duration === 'string'
+                                // Optional fields checked below
+                            ) {
+                                let status: SprintStatus = sprintData.status ?? 'Planned';
+                                const metrics = calculateSprintMetrics(sprintData.startDate, sprintData.duration);
+
+                                // Auto-complete based on date if status is not already 'Completed'
+                                if (metrics.endDate !== 'N/A' && clientNow && isPast(parseISO(metrics.endDate)) && status !== 'Completed') {
+                                    status = 'Completed';
+                                }
+
+                                 // Validate Planning Tasks (new and spillover)
+                                const validateTasks = (tasks: any[] | undefined): Task[] => {
+                                     if (!Array.isArray(tasks)) return [];
+                                     const emptyTask = createEmptyTaskRow();
+                                     return tasks.map((taskData: any) => {
+                                         if (!taskData || typeof taskData !== 'object') return null; // Skip invalid task data
+                                         return {
+                                             id: typeof taskData.id === 'string' ? taskData.id : `task_load_${Date.now()}_${Math.random()}`,
+                                             description: typeof taskData.description === 'string' ? taskData.description : emptyTask.description,
+                                             storyPoints: (typeof taskData.storyPoints === 'number' || typeof taskData.storyPoints === 'string') ? taskData.storyPoints : emptyTask.storyPoints,
+                                             devEstimatedTime: typeof taskData.devEstimatedTime === 'string' ? taskData.devEstimatedTime : emptyTask.devEstimatedTime,
+                                             qaEstimatedTime: typeof taskData.qaEstimatedTime === 'string' ? taskData.qaEstimatedTime : emptyTask.qaEstimatedTime,
+                                             bufferTime: typeof taskData.bufferTime === 'string' ? taskData.bufferTime : emptyTask.bufferTime,
+                                             assignee: typeof taskData.assignee === 'string' ? taskData.assignee : emptyTask.assignee,
+                                             reviewer: typeof taskData.reviewer === 'string' ? taskData.reviewer : emptyTask.reviewer,
+                                             status: typeof taskData.status === 'string' && taskStatuses.includes(taskData.status as any) ? taskData.status : emptyTask.status,
+                                             startDate: typeof taskData.startDate === 'string' && isValid(parseISO(taskData.startDate)) ? taskData.startDate : emptyTask.startDate,
+                                             ticketNumber: typeof taskData.ticketNumber === 'string' ? taskData.ticketNumber : emptyTask.ticketNumber, // Legacy field
+                                             devTime: typeof taskData.devTime === 'string' ? taskData.devTime : emptyTask.devTime, // Legacy field
+                                         };
+                                     }).filter((task): task is Task => task !== null); // Filter out nulls
+                                 };
+
+
+                                // Validate planning object structure
+                                const loadedPlanning = sprintData.planning;
+                                const validatedPlanning: SprintPlanning = {
+                                    goal: (loadedPlanning && typeof loadedPlanning.goal === 'string') ? loadedPlanning.goal : initialSprintPlanning.goal,
+                                    newTasks: validateTasks(loadedPlanning?.newTasks),
+                                    spilloverTasks: validateTasks(loadedPlanning?.spilloverTasks),
+                                    definitionOfDone: (loadedPlanning && typeof loadedPlanning.definitionOfDone === 'string') ? loadedPlanning.definitionOfDone : initialSprintPlanning.definitionOfDone,
+                                    testingStrategy: (loadedPlanning && typeof loadedPlanning.testingStrategy === 'string') ? loadedPlanning.testingStrategy : initialSprintPlanning.testingStrategy,
+                                };
+
+                                // Validate Sprint Details
+                                const validatedDetails: SprintDetailItem[] = [];
+                                if (Array.isArray(sprintData.details)) {
+                                   sprintData.details.forEach((detailData: any) => {
+                                       if (
+                                           detailData && typeof detailData === 'object' &&
+                                           typeof detailData.id === 'string' &&
+                                           typeof detailData.ticketNumber === 'string' &&
+                                           typeof detailData.developer === 'string' &&
+                                           typeof detailData.storyPoints === 'number' && !isNaN(detailData.storyPoints) &&
+                                           typeof detailData.devTime === 'string'
+                                       ) {
+                                           validatedDetails.push({
+                                              id: detailData.id,
+                                              ticketNumber: detailData.ticketNumber,
+                                              developer: detailData.developer,
+                                              storyPoints: detailData.storyPoints,
+                                              devTime: detailData.devTime,
+                                           });
+                                       } else {
+                                          console.warn(`Skipping invalid sprint detail in sprint ${sprintData.sprintNumber} (project ${projectData.id}):`, detailData);
+                                       }
+                                   });
+                                }
+
+
+                                validatedSprints.push({
+                                    sprintNumber: sprintData.sprintNumber,
+                                    startDate: sprintData.startDate,
+                                    endDate: metrics.endDate,
+                                    duration: sprintData.duration,
+                                    committedPoints: typeof sprintData.committedPoints === 'number' ? sprintData.committedPoints : 0,
+                                    completedPoints: typeof sprintData.completedPoints === 'number' ? sprintData.completedPoints : 0,
+                                    totalDays: metrics.totalDays,
+                                    status: status,
+                                    details: validatedDetails, // Use validated details
+                                    planning: validatedPlanning, // Use validated planning
+                                });
+                            } else {
+                                console.warn(`Skipping invalid sprint data in project ${projectData.id}:`, sprintData);
+                            }
+                        });
+
+                        validatedSprintData = {
+                            sprints: validatedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber), // Keep sorted
+                            totalStoryPoints: validatedSprints.reduce((sum, s) => sum + s.completedPoints, 0),
+                            daysInSprint: validatedSprints.length > 0 ? Math.max(...validatedSprints.map(s => s.totalDays)) : 0,
+                        };
+                    } else {
+                         console.warn(`Invalid or missing sprintData structure in project ${projectData.id}:`, projectData.sprintData);
+                    }
+
+                   // Add the validated project
+                   validatedProjects.push({
+                       id: projectData.id,
+                       name: projectData.name,
+                       members: validatedMembers.sort((a,b) => a.name.localeCompare(b.name)), // Keep sorted
+                       holidayCalendars: validatedCalendars.sort((a,b) => a.name.localeCompare(b.name)), // Keep sorted
+                       sprintData: validatedSprintData,
+                   });
+              }
+
+              // --- End Robust Validation ---
+
+              setProjects(validatedProjects);
+              // Set selected project ID: prioritize last viewed, then first project, then null
+              const lastProjectId = localStorage.getItem('selectedProjectId');
+              if (lastProjectId && validatedProjects.some(p => p.id === lastProjectId)) {
+                 setSelectedProjectId(lastProjectId);
+              } else if (validatedProjects.length > 0) {
+                 setSelectedProjectId(validatedProjects[0].id);
+              } else {
+                 setSelectedProjectId(null);
+              }
+
           } catch (error) {
-              console.error("Failed to parse project data from localStorage:", error);
-              localStorage.removeItem('appData'); // Clear corrupted data
+              console.error("Failed to parse or validate project data from localStorage:", error);
+              localStorage.removeItem('appData'); // Clear potentially corrupted data
+              localStorage.removeItem('selectedProjectId');
               setProjects([]);
               setSelectedProjectId(null);
+              toast({
+                 variant: "destructive",
+                 title: "Data Load Error",
+                 description: "Could not load project data. Storage might be corrupted. Please refresh.",
+              });
           }
+      } else {
+         // No data in localStorage, initialize empty
+         setProjects([]);
+         setSelectedProjectId(null);
       }
-  }, [clientNow]); // Run only on mount, or when clientNow is set
+  }, [clientNow, toast]); // Add toast dependency
 
 
   // Effect to save data to localStorage whenever projects change
   useEffect(() => {
-    if (projects && projects.length >= 0) { // Allow saving empty array to clear storage
+    if (projects) { // Always try to save, even if empty array (to clear storage)
       try {
         const dataToSave = JSON.stringify(projects);
         localStorage.setItem('appData', dataToSave);
@@ -175,8 +341,17 @@ export default function Home() {
          });
       }
     }
-    // Removed the else if to ensure saving an empty array works correctly to clear storage if needed
   }, [projects, toast]);
+
+   // Effect to save the selected project ID
+   useEffect(() => {
+       if (selectedProjectId) {
+           localStorage.setItem('selectedProjectId', selectedProjectId);
+       } else {
+           // Optionally remove if no project is selected
+           // localStorage.removeItem('selectedProjectId');
+       }
+   }, [selectedProjectId]);
 
 
   // Find the currently selected project object
@@ -267,9 +442,8 @@ export default function Home() {
          }
 
          let initialStatus: SprintStatus = 'Planned';
-         if (clientNow) {
+         if (clientNow && endDate !== 'N/A') {
              try {
-               const start = parseISO(startDateStr);
                const end = parseISO(endDate);
                if (isPast(end)) {
                    initialStatus = 'Completed';
@@ -405,21 +579,22 @@ export default function Home() {
                           statusUpdateMessage = ` Sprint ${sprintNumber} status updated to ${newStatus}.`;
                       }
                       // Ensure task IDs are present and correctly typed before saving
+                       const emptyTask = createEmptyTaskRow();
                       const validatedPlanning: SprintPlanning = {
                            ...planningData,
                            newTasks: (planningData.newTasks || []).map(task => ({
                               ...task,
-                              id: task.id || `task_save_${Date.now()}_${Math.random()}`,
-                              devEstimatedTime: task.devEstimatedTime, // Preserve this
-                              qaEstimatedTime: task.qaEstimatedTime ?? '2d',
-                              bufferTime: task.bufferTime ?? '1d',
+                              id: task.id || `task_save_new_${Date.now()}_${Math.random()}`,
+                              devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime, // Preserve or default
+                              qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
+                              bufferTime: task.bufferTime ?? emptyTask.bufferTime,
                            })),
                            spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
                               ...task,
-                              id: task.id || `task_save_${Date.now()}_${Math.random()}`,
-                              devEstimatedTime: task.devEstimatedTime, // Preserve this
-                              qaEstimatedTime: task.qaEstimatedTime ?? '2d',
-                              bufferTime: task.bufferTime ?? '1d',
+                              id: task.id || `task_save_spill_${Date.now()}_${Math.random()}`,
+                              devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime, // Preserve or default
+                              qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
+                              bufferTime: task.bufferTime ?? emptyTask.bufferTime,
                            })),
                       };
                       return { ...s, planning: validatedPlanning, status: finalStatus };
@@ -467,22 +642,23 @@ export default function Home() {
           }
 
            // Ensure task IDs are present and correctly typed before saving
+            const emptyTask = createEmptyTaskRow();
             const validatedPlanning: SprintPlanning = {
                 ...planningData,
-                newTasks: (planningData.newTasks || []).map(task => ({
-                   ...task,
-                   id: task.id || `task_create_${Date.now()}_${Math.random()}`,
-                   devEstimatedTime: task.devEstimatedTime, // Preserve this
-                   qaEstimatedTime: task.qaEstimatedTime ?? '2d',
-                   bufferTime: task.bufferTime ?? '1d',
-                })),
-                spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
-                   ...task,
-                   id: task.id || `task_create_${Date.now()}_${Math.random()}`,
-                   devEstimatedTime: task.devEstimatedTime, // Preserve this
-                   qaEstimatedTime: task.qaEstimatedTime ?? '2d',
-                   bufferTime: task.bufferTime ?? '1d',
-                })),
+                 newTasks: (planningData.newTasks || []).map(task => ({
+                    ...task,
+                    id: task.id || `task_create_new_${Date.now()}_${Math.random()}`,
+                    devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime, // Preserve or default
+                    qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
+                    bufferTime: task.bufferTime ?? emptyTask.bufferTime,
+                 })),
+                 spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
+                    ...task,
+                    id: task.id || `task_create_spill_${Date.now()}_${Math.random()}`,
+                    devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime, // Preserve or default
+                    qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
+                    bufferTime: task.bufferTime ?? emptyTask.bufferTime,
+                 })),
             };
 
           const newSprint: Sprint = {
@@ -964,9 +1140,3 @@ export default function Home() {
     </div>
   );
 }
-
-
-
-
-
-    
