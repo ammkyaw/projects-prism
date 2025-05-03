@@ -539,4 +539,3 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
   );
 }
 
-    
