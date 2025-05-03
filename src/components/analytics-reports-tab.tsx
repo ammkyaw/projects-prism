@@ -28,5 +28,4 @@ export default function AnalyticsReportsTab({ sprintData, projectName }: Analyti
 ```
   </change>
   <change>
-    <file>src/components/home-tab.tsx</file>
-    <description>Delete HomeTab component as its
+    <

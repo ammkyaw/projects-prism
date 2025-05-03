@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -7,7 +6,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package } from 'lucide-react'; // Added UsersRound, Package
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical } from 'lucide-react'; // Added new icons
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -16,15 +15,22 @@ import { Label } from "@/components/ui/label"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 
-import HomeTab from '@/components/home-tab';
-import EntryTab from '@/components/entry-tab';
-import ReportsTab from '@/components/reports-tab';
+// Main Content Components (Tabs) - Renamed and New Placeholders
+import DashboardTab from '@/components/dashboard-tab'; // Renamed from HomeTab
+import BacklogTab from '@/components/backlog-tab';
 import PlanningTab from '@/components/planning-tab';
 import MembersTab from '@/components/members-tab';
 import HolidaysTab from '@/components/holidays-tab';
-import TeamsTab from '@/components/teams-tab'; // Import TeamsTab
-import BacklogTab from '@/components/backlog-tab'; // Import BacklogTab
+import TeamsTab from '@/components/teams-tab';
 import AddMembersDialog from '@/components/add-members-dialog';
+
+// Placeholder Sub-Tab Components
+import SprintSummaryTab from '@/components/sprint-summary-tab';
+import SprintRetrospectiveTab from '@/components/sprint-retrospective-tab';
+import BacklogPrioritizationTab from '@/components/backlog-prioritization-tab';
+import BacklogGroomingTab from '@/components/backlog-grooming-tab';
+import AnalyticsChartsTab from '@/components/analytics-charts-tab';
+import AnalyticsReportsTab from '@/components/analytics-reports-tab';
 
 
 import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember } from '@/types/sprint-data'; // Updated Task type reference
@@ -77,13 +83,14 @@ const createEmptyTaskRow = (): Task => ({
 export default function Home() {
   const [projects, setProjects] = useState<AppData>([]); // State for all projects
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("home");
+  // Combined state for active main and sub tab. Format: "main/sub" or just "main"
+  const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [newProjectName, setNewProjectName] = useState<string>('');
   const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState<boolean>(false);
   const [isAddMembersDialogOpen, setIsAddMembersDialogOpen] = useState<boolean>(false);
   const [newlyCreatedProjectId, setNewlyCreatedProjectId] = useState<string | null>(null); // Track ID for Add Members dialog
   const { toast } = useToast();
-  const [resetManualFormKey, setResetManualFormKey] = useState(0); // State to trigger form reset
+  // const [resetManualFormKey, setResetManualFormKey] = useState(0); // State to trigger form reset (No longer needed as Entry tab removed)
   const [clientNow, setClientNow] = useState<Date | null>(null); // For client-side date comparison
   const [isLoading, setIsLoading] = useState(true); // Add loading state
 
@@ -91,6 +98,28 @@ export default function Home() {
   useEffect(() => {
      setClientNow(new Date());
   }, []);
+
+  // Define default sub-tabs for each main tab
+  const defaultSubTabs: Record<string, string> = {
+      sprints: 'summary',
+      backlog: 'management',
+      analytics: 'charts',
+      teams: 'members',
+      settings: 'holidays',
+  };
+
+  // Update activeTab logic for main tabs
+  const handleMainTabChange = (mainTabKey: string) => {
+      if (mainTabKey === 'dashboard') {
+         setActiveTab('dashboard');
+      } else {
+         const defaultSub = defaultSubTabs[mainTabKey] || ''; // Fallback to empty string if no default
+         setActiveTab(`${mainTabKey}/${defaultSub}`);
+      }
+  };
+
+  // Get the active main tab key from the combined state
+  const activeMainTab = useMemo(() => activeTab.split('/')[0], [activeTab]);
 
 
   // Effect to load data from localStorage on mount with improved validation and logging
@@ -528,191 +557,13 @@ export default function Home() {
   }, [projects, selectedProjectId]);
 
   // Parser for sprint data (from Entry tab - paste/manual legacy)
-  const parseSprintData = (jsonData: any[]): SprintData => {
-     const requiredColumns = ['SprintNumber', 'StartDate', 'Duration', 'TotalCommitment', 'TotalDelivered'];
-    if (!jsonData || jsonData.length === 0) {
-        throw new Error("No data found in the file.");
-    }
-    const firstRowKeys = Object.keys(jsonData[0]);
-    const missingColumns = requiredColumns.filter(col => !firstRowKeys.includes(col));
-    if (missingColumns.length > 0) {
-        throw new Error(`Missing required columns: ${missingColumns.join(', ')}`);
-    }
+  // This function might be removed if the Entry tab is gone, but kept for now if needed elsewhere.
+  // const parseSprintData = ... (keep if needed, otherwise remove)
 
-    const sprints: Sprint[] = [];
-    let maxTotalDays = 0;
-
-    jsonData.forEach((row, rowIndex) => {
-        const sprintNumber = parseInt(row.SprintNumber, 10);
-        let startDateValue = row.StartDate;
-        const duration = row.Duration?.toString().trim();
-        const commitment = parseInt(row.TotalCommitment, 10);
-        const delivered = parseInt(row.TotalDelivered, 10);
-
-        if (isNaN(sprintNumber) || !startDateValue || !duration || isNaN(commitment) || isNaN(delivered)) {
-            console.warn(`Skipping invalid row ${rowIndex + 2}: Missing essential data.`, row);
-            return;
-        }
-         const validDurations = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
-         if (!validDurations.includes(duration)) {
-            console.warn(`Skipping row ${rowIndex + 2}: Invalid duration value "${duration}". Expected one of: ${validDurations.join(', ')}.`);
-            return;
-         }
-
-         let startDateStr: string;
-         if (typeof startDateValue === 'number') {
-             if (startDateValue > 0) {
-                 try {
-                     // Excel dates are tricky, might need adjustment based on source system
-                     const excelEpoch = new Date(Date.UTC(1899, 11, 30)); // Common Excel epoch start
-                     const date = new Date(excelEpoch.getTime() + startDateValue * 86400000);
-                     if (isNaN(date.getTime())) throw new Error('Invalid date calculation');
-                     startDateStr = date.toISOString().split('T')[0];
-                 } catch (e) {
-                     console.warn(`Skipping row ${rowIndex + 2}: Invalid date format for Excel value ${startDateValue}.`, e);
-                     return;
-                 }
-             } else {
-                 console.warn(`Skipping row ${rowIndex + 2}: Invalid Excel date number ${startDateValue}.`);
-                 return;
-             }
-         } else if (typeof startDateValue === 'string') {
-             try {
-                const potentialDate = parseISO(startDateValue); // Prefer ISO format
-                 if (!isNaN(potentialDate.getTime())) {
-                     startDateStr = format(potentialDate, 'yyyy-MM-dd');
-                 } else {
-                      // Try parsing common date formats (less reliable)
-                     const commonParsed = new Date(startDateValue);
-                     if (!isNaN(commonParsed.getTime())) {
-                         startDateStr = format(commonParsed, 'yyyy-MM-dd');
-                     } else {
-                        throw new Error('Unparseable date string');
-                     }
-                 }
-             } catch (e) {
-                 console.warn(`Skipping row ${rowIndex + 2}: Invalid date string format ${startDateValue}. Expected YYYY-MM-DD or parseable format.`, e);
-                 return;
-             }
-         } else {
-             console.warn(`Skipping row ${rowIndex + 2}: Unrecognized date type ${typeof startDateValue}.`);
-             return;
-         }
-
-          const { totalDays, endDate } = calculateSprintMetrics(startDateStr, duration);
-         if (totalDays <= 0 || endDate === 'N/A') {
-             console.warn(`Skipping row ${rowIndex + 2}: Could not calculate metrics for start date ${startDateStr} and duration ${duration}.`);
-             return;
-         }
-
-         if (totalDays > maxTotalDays) {
-             maxTotalDays = totalDays;
-         }
-
-         let initialStatus: SprintStatus = 'Planned';
-         if (clientNow && endDate !== 'N/A') {
-             try {
-               const end = parseISO(endDate);
-               if (isPast(end)) {
-                   initialStatus = 'Completed';
-               }
-             } catch(e) { /* Ignore date parsing error here, handled above */ }
-         }
-
-        sprints.push({
-            sprintNumber,
-            startDate: startDateStr,
-            endDate,
-            duration,
-            committedPoints: commitment,
-            completedPoints: delivered,
-            status: initialStatus,
-            details: [], // Details added separately
-            planning: initialSprintPlanning, // Planning added separately
-            totalDays,
-        });
-    });
-
-     if (sprints.length === 0) {
-        throw new Error("No valid sprint data could be parsed from the file.");
-    }
-
-    sprints.sort((a, b) => a.sprintNumber - b.sprintNumber);
-
-    return {
-      sprints,
-      totalStoryPoints: sprints.reduce((sum, s) => sum + s.completedPoints, 0),
-      daysInSprint: maxTotalDays,
-    };
-  };
 
   // Handler to save legacy sprint data (from Entry tab) to the *selected* project
-  const handleSaveLegacySprints = useCallback((newSprintData: SprintData) => {
-    if (!selectedProjectId) {
-       toast({ variant: "destructive", title: "Error", description: "No project selected." });
-       return;
-    }
-    // Get project name *before* updating state
-    const currentProjectName = projects.find(p => p.id === selectedProjectId)?.name ?? 'N/A';
-
-    setProjects(prevProjects => {
-      const updatedProjects = prevProjects.map(p => {
-         if (p.id === selectedProjectId) {
-           const mergedSprints = [...(p.sprintData.sprints ?? [])]; // Start with existing sprints (handle null/undefined)
-
-            newSprintData.sprints.forEach(newSprint => {
-                const existingIndex = mergedSprints.findIndex(oldSprint => oldSprint.sprintNumber === newSprint.sprintNumber);
-                if (existingIndex !== -1) {
-                    // Update existing sprint: Merge basic data, keep existing details/planning/status
-                    mergedSprints[existingIndex] = {
-                        ...newSprint, // Takes new basic data (dates, points from entry)
-                        details: mergedSprints[existingIndex].details ?? [], // Keep existing details
-                        planning: mergedSprints[existingIndex].planning ?? initialSprintPlanning, // Keep existing planning
-                        status: mergedSprints[existingIndex].status ?? newSprint.status ?? 'Planned', // Keep existing status
-                    };
-                } else {
-                    // Add new sprint
-                    mergedSprints.push({
-                       ...newSprint,
-                       details: [], // Initialize empty details
-                       planning: initialSprintPlanning, // Initialize empty planning
-                       status: newSprint.status ?? 'Planned', // Use parsed or default status
-                    });
-                }
-            });
-
-
-           // Sort final list and ensure only one active
-           mergedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber);
-           let activeFound = false;
-           const finalSprints = mergedSprints.map(s => {
-               if (s.status === 'Active') {
-                   if (activeFound) {
-                       return { ...s, status: 'Planned' as SprintStatus };
-                   }
-                   activeFound = true;
-               }
-               return s;
-           });
-
-           return {
-              ...p,
-              sprintData: {
-                 sprints: finalSprints,
-                 totalStoryPoints: finalSprints.reduce((sum, s) => sum + s.completedPoints, 0),
-                 daysInSprint: Math.max(...finalSprints.map(s => s.totalDays), p.sprintData?.daysInSprint || 0), // Recalculate max days (handle null/undefined)
-              },
-           };
-         }
-         return p;
-      });
-       return updatedProjects;
-    });
-
-    toast({ title: "Success", description: `Sprint data saved to project '${currentProjectName}'.` });
-    setActiveTab("home");
-    setResetManualFormKey(prevKey => prevKey + 1); // Reset Entry form
-  }, [selectedProjectId, toast, projects]);
+  // This handler is likely removed as the Entry tab is gone.
+  // const handleSaveLegacySprints = ...
 
 
   // Handler to save planning data AND potentially update sprint status (used by PlanningTab)
@@ -1352,12 +1203,181 @@ export default function Home() {
     setNewProjectName('');
     setIsNewProjectDialogOpen(false);
     setNewlyCreatedProjectId(newProject.id); // Track the new project ID for dialog
+    setActiveTab("dashboard"); // Set dashboard as active after creating
 
     // Defer the toast and dialog opening slightly
      setTimeout(() => {
         toast({ title: "Project Created", description: `Project "${trimmedName}" created successfully.` });
         setIsAddMembersDialogOpen(true); // Open the dialog AFTER state update
     }, 10); // Increased timeout slightly
+  };
+
+  // Define the tab structure
+  const tabsConfig = {
+      dashboard: { label: "Dashboard", icon: LayoutDashboard, component: DashboardTab },
+      sprints: {
+          label: "Sprints", icon: IterationCw, subTabs: {
+              summary: { label: "Summary", icon: Eye, component: SprintSummaryTab },
+              planning: { label: "Planning", icon: NotebookPen, component: PlanningTab },
+              retrospective: { label: "Retrospective", icon: GitCommitVertical, component: SprintRetrospectiveTab },
+          }
+      },
+      backlog: {
+          label: "Backlog", icon: Layers, subTabs: {
+              management: { label: "Management", icon: Package, component: BacklogTab },
+              prioritization: { label: "Prioritization", icon: Filter, component: BacklogPrioritizationTab },
+              grooming: { label: "Grooming", icon: Edit, component: BacklogGroomingTab },
+          }
+      },
+      analytics: {
+          label: "Analytics", icon: BarChartBig, subTabs: {
+              charts: { label: "Charts", icon: BarChart, component: AnalyticsChartsTab },
+              reports: { label: "Reports", icon: ListPlus, component: AnalyticsReportsTab },
+          }
+      },
+      teams: {
+          label: "Teams", icon: Users, subTabs: {
+              members: { label: "Members", icon: Users, component: MembersTab },
+              teams: { label: "Teams", icon: UsersRound, component: TeamsTab },
+          }
+      },
+      settings: {
+          label: "Settings", icon: Settings, subTabs: {
+              holidays: { label: "Holidays", icon: CalendarDays, component: HolidaysTab },
+          }
+      },
+  };
+
+  // Render the currently active tab content
+  const renderActiveTabContent = () => {
+    if (!selectedProject) {
+      return (
+        <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
+          <CardHeader className="text-center">
+            <CardTitle>No Project Selected</CardTitle>
+            <CardDescription>Please select a project from the dropdown above, or create a new one.</CardDescription>
+          </CardHeader>
+        </Card>
+      );
+    }
+
+    const [mainKey, subKey] = activeTab.split('/');
+    const mainConfig = tabsConfig[mainKey as keyof typeof tabsConfig];
+
+    if (!mainConfig) return null; // Should not happen if activeTab is valid
+
+    let ActiveComponent;
+    let componentProps: any = { // Base props for all components
+        projectId: selectedProject.id,
+        projectName: selectedProject.name,
+    };
+
+    if (mainConfig.subTabs && subKey) {
+        const subConfig = mainConfig.subTabs[subKey as keyof typeof mainConfig.subTabs];
+        if (!subConfig) return null; // Invalid sub-tab
+        ActiveComponent = subConfig.component;
+
+        // Add specific props based on the sub-tab component
+         switch (`${mainKey}/${subKey}`) {
+            case 'dashboard': // Main dashboard tab
+               componentProps = { ...componentProps, sprintData: selectedProject.sprintData };
+               break;
+            case 'sprints/summary':
+               componentProps = { ...componentProps, sprintData: selectedProject.sprintData, onDeleteSprint: handleDeleteSprint };
+               break;
+            case 'sprints/planning':
+                componentProps = {
+                    ...componentProps,
+                    sprints: selectedProject.sprintData.sprints ?? [],
+                    onSavePlanning: handleSavePlanningAndUpdateStatus,
+                    onCreateAndPlanSprint: handleCreateAndPlanSprint,
+                    members: selectedProject.members ?? [],
+                    holidayCalendars: selectedProject.holidayCalendars ?? [],
+                    teams: selectedProject.teams ?? [],
+                    backlog: selectedProject.backlog ?? [],
+                 };
+                break;
+            case 'sprints/retrospective':
+                 // Add props for Retrospective tab if needed
+                 componentProps = { ...componentProps, sprints: selectedProject.sprintData.sprints ?? [] };
+                 break;
+            case 'backlog/management':
+                componentProps = {
+                    ...componentProps,
+                    initialBacklog: selectedProject.backlog ?? [],
+                    onSaveBacklog: handleSaveBacklog,
+                    members: selectedProject.members ?? [],
+                    sprints: selectedProject.sprintData.sprints ?? [],
+                    onMoveToSprint: handleMoveToSprint,
+                 };
+                break;
+            case 'backlog/prioritization':
+            case 'backlog/grooming':
+                // Add props for these tabs if needed
+                componentProps = { ...componentProps, backlog: selectedProject.backlog ?? [] };
+                break;
+            case 'analytics/charts':
+                 componentProps = { ...componentProps, sprintData: selectedProject.sprintData, members: selectedProject.members ?? [] };
+                 break;
+            case 'analytics/reports':
+                 componentProps = { ...componentProps, sprintData: selectedProject.sprintData };
+                 break;
+            case 'teams/members':
+                componentProps = {
+                    ...componentProps,
+                    initialMembers: selectedProject.members ?? [],
+                    onSaveMembers: handleSaveMembers,
+                    holidayCalendars: selectedProject.holidayCalendars ?? [],
+                 };
+                break;
+            case 'teams/teams':
+                 componentProps = {
+                    ...componentProps,
+                    initialTeams: selectedProject.teams ?? [],
+                    allMembers: selectedProject.members ?? [],
+                    onSaveTeams: handleSaveTeams,
+                 };
+                 break;
+            case 'settings/holidays':
+                 componentProps = {
+                    ...componentProps,
+                    initialCalendars: selectedProject.holidayCalendars ?? [],
+                    onSaveCalendars: handleSaveHolidayCalendars,
+                 };
+                 break;
+            default:
+               // Handle main tab case (e.g., dashboard)
+                if (!mainConfig.subTabs) {
+                    ActiveComponent = mainConfig.component;
+                     if (mainKey === 'dashboard') {
+                        componentProps = { ...componentProps, sprintData: selectedProject.sprintData };
+                     }
+                    // Add props for other main tabs without subtabs if any in the future
+                } else {
+                   // Default to first sub-tab if only main key is provided but it has subtabs
+                    const firstSubKey = Object.keys(mainConfig.subTabs)[0];
+                    const firstSubConfig = mainConfig.subTabs[firstSubKey as keyof typeof mainConfig.subTabs];
+                    ActiveComponent = firstSubConfig.component;
+                    // Recalculate props based on default sub tab
+                    // This might need adjustments based on which props each default sub-tab needs
+                    // Example: if default for sprints is summary:
+                    if (mainKey === 'sprints') {
+                       componentProps = { ...componentProps, sprintData: selectedProject.sprintData, onDeleteSprint: handleDeleteSprint };
+                    }
+                    // Add similar logic for other default sub-tabs
+                }
+        }
+    } else {
+        // Handle main tabs without sub-tabs (like Dashboard)
+        ActiveComponent = mainConfig.component;
+         if (mainKey === 'dashboard') {
+            componentProps = { ...componentProps, sprintData: selectedProject.sprintData };
+         }
+        // Add props for other main tabs if needed
+    }
+
+
+    return <ActiveComponent {...componentProps} />;
   };
 
 
@@ -1372,8 +1392,8 @@ export default function Home() {
                   if (value === 'loading') return; // Prevent selecting the loading indicator
                    console.log(`Project selected: ${value}`);
                    setSelectedProjectId(value);
-                   setActiveTab("home"); // Go to home tab on project change
-                   setResetManualFormKey(prevKey => prevKey + 1);
+                   setActiveTab("dashboard"); // Reset to dashboard tab on project change
+                   // setResetManualFormKey(prevKey => prevKey + 1); // No longer needed
                }}
                disabled={isLoading || projects.length === 0} // Disable while loading or if no projects
              >
@@ -1458,103 +1478,47 @@ export default function Home() {
                      <CardDescription>Please wait while the application loads.</CardDescription>
                  </CardHeader>
              </Card>
-         ) : selectedProject ? (
-             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-               <TabsList className="grid w-full grid-cols-8 mb-6"> {/* Updated grid-cols to 8 */}
-                 <TabsTrigger value="home"><HomeIcon className="mr-2 h-4 w-4" />Home</TabsTrigger>
-                 <TabsTrigger value="backlog"><Package className="mr-2 h-4 w-4" />Backlog</TabsTrigger> {/* Added Backlog Trigger */}
-                 <TabsTrigger value="entry"><ListPlus className="mr-2 h-4 w-4" />Entry (Legacy)</TabsTrigger>
-                 <TabsTrigger value="planning"><NotebookPen className="mr-2 h-4 w-4" />Planning</TabsTrigger>
-                 <TabsTrigger value="members"><Users className="mr-2 h-4 w-4" />Members</TabsTrigger>
-                 <TabsTrigger value="teams"><UsersRound className="mr-2 h-4 w-4" />Teams</TabsTrigger>
-                 <TabsTrigger value="holidays"><CalendarDays className="mr-2 h-4 w-4" />Holidays</TabsTrigger>
-                 <TabsTrigger value="reports"><BarChart className="mr-2 h-4 w-4" />Reports</TabsTrigger>
+         ) : (
+             <Tabs value={activeMainTab} onValueChange={handleMainTabChange} className="w-full">
+                {/* Main Tabs List */}
+               <TabsList className="grid w-full grid-cols-6 mb-6">
+                 {Object.entries(tabsConfig).map(([key, config]) => (
+                     <TabsTrigger key={key} value={key}>
+                        <config.icon className="mr-2 h-4 w-4" /> {config.label}
+                     </TabsTrigger>
+                 ))}
                </TabsList>
 
-               <TabsContent value="home">
-                  <HomeTab
-                      projectId={selectedProject.id}
-                      sprintData={selectedProject.sprintData}
-                      projectName={selectedProject.name}
-                      onDeleteSprint={handleDeleteSprint} // Pass delete handler
-                  />
-               </TabsContent>
+                {/* Sub Tabs and Content Area */}
+                {selectedProject ? (
+                    <div className="mt-4">
+                         {/* Render Sub Tabs only if the active main tab has them */}
+                         {tabsConfig[activeMainTab as keyof typeof tabsConfig]?.subTabs && (
+                             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mb-6">
+                                <TabsList className="grid w-full grid-cols-3"> {/* Adjust cols based on max subtabs */}
+                                    {Object.entries(tabsConfig[activeMainTab as keyof typeof tabsConfig].subTabs!).map(([subKey, subConfig]) => (
+                                        <TabsTrigger key={`${activeMainTab}/${subKey}`} value={`${activeMainTab}/${subKey}`}>
+                                           <subConfig.icon className="mr-2 h-4 w-4" /> {subConfig.label}
+                                        </TabsTrigger>
+                                    ))}
+                                </TabsList>
+                                 {/* Content will be rendered below based on the combined activeTab state */}
+                             </Tabs>
+                         )}
 
-               <TabsContent value="backlog">
-                  <BacklogTab
-                    projectId={selectedProject.id}
-                    projectName={selectedProject.name}
-                    initialBacklog={selectedProject.backlog ?? []}
-                    onSaveBacklog={handleSaveBacklog}
-                    members={selectedProject.members ?? []} // Pass members for dropdowns
-                    sprints={selectedProject.sprintData.sprints ?? []} // Pass sprints for Move action
-                    onMoveToSprint={handleMoveToSprint} // Pass move handler
-                  />
-               </TabsContent>
-
-               <TabsContent value="entry">
-                 <EntryTab
-                     key={resetManualFormKey}
-                     onSaveSprints={handleSaveLegacySprints} // Use the legacy save handler
-                     initialSprintData={selectedProject.sprintData}
-                     parseSprintData={parseSprintData}
-                     projectName={selectedProject.name}
-                 />
-               </TabsContent>
-
-               <TabsContent value="planning">
-                   <PlanningTab
-                     sprints={selectedProject.sprintData.sprints ?? []}
-                     onSavePlanning={handleSavePlanningAndUpdateStatus}
-                     onCreateAndPlanSprint={handleCreateAndPlanSprint}
-                     projectName={selectedProject.name}
-                     members={selectedProject.members ?? []}
-                     holidayCalendars={selectedProject.holidayCalendars ?? []}
-                     teams={selectedProject.teams ?? []} // Pass teams data
-                     backlog={selectedProject.backlog ?? []} // Pass backlog data
-                   />
-                </TabsContent>
-
-                <TabsContent value="members">
-                  <MembersTab
-                    projectId={selectedProject.id}
-                    projectName={selectedProject.name}
-                    initialMembers={selectedProject.members ?? []}
-                    onSaveMembers={handleSaveMembers}
-                    holidayCalendars={selectedProject.holidayCalendars ?? []}
-                  />
-                </TabsContent>
-
-                 <TabsContent value="teams">
-                    <TeamsTab
-                        projectId={selectedProject.id}
-                        projectName={selectedProject.name}
-                        initialTeams={selectedProject.teams ?? []}
-                        allMembers={selectedProject.members ?? []}
-                        onSaveTeams={handleSaveTeams}
-                    />
-                </TabsContent>
-
-                <TabsContent value="holidays">
-                  <HolidaysTab
-                    projectId={selectedProject.id}
-                    projectName={selectedProject.name}
-                    initialCalendars={selectedProject.holidayCalendars ?? []}
-                    onSaveCalendars={handleSaveHolidayCalendars}
-                  />
-                </TabsContent>
-
-               <TabsContent value="reports">
-                  <ReportsTab sprintData={selectedProject.sprintData} projectName={selectedProject.name} />
-               </TabsContent>
+                        {/* Render Content based on the full activeTab state */}
+                        {renderActiveTabContent()}
+                    </div>
+                 ) : (
+                    // Render the "No Project Selected" card if no project is selected
+                     <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2 mt-4">
+                        <CardHeader className="text-center">
+                           <CardTitle>No Project Selected</CardTitle>
+                           <CardDescription>Please select a project from the dropdown above, or create a new one.</CardDescription>
+                        </CardHeader>
+                     </Card>
+                 )}
              </Tabs>
-          ) : (
-             <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
-               <CardHeader className="text-center">
-                 <CardTitle>No Project Selected</CardTitle>
-                 <CardDescription>Please select a project from the dropdown above, or create a new one.</CardDescription>
-               </CardHeader>
-             </Card>
           )}
       </main>
 
@@ -1564,7 +1528,472 @@ export default function Home() {
     </div>
   );
 }
+```
+  </change>
+  <change>
+    <file>src/components/dashboard-tab.tsx</file>
+    <description>Create new DashboardTab component to display project overview and key metrics.</description>
+    <content><![CDATA[
+"use client";
+
+import type { SprintData, Sprint } from '@/types/sprint-data';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Info, LineChart, BarChart, Activity } from 'lucide-react';
+import VelocityChart from '@/components/charts/velocity-chart';
+// Import BurndownChart component when it's created
+// import BurndownChart from '@/components/charts/burndown-chart';
+
+interface DashboardTabProps {
+  sprintData: SprintData | null;
+  projectName: string;
+  projectId: string;
+}
+
+export default function DashboardTab({ sprintData, projectName, projectId }: DashboardTabProps) {
+
+  const activeSprint = sprintData?.sprints.find(s => s.status === 'Active');
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Active Sprint Overview */}
+      <Card className="lg:col-span-1">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-primary" /> Active Sprint Overview</CardTitle>
+          <CardDescription>Summary of the currently active sprint for project: {projectName}.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {activeSprint ? (
+            <div className="space-y-2 text-sm">
+              <p><strong>Sprint Number:</strong> {activeSprint.sprintNumber}</p>
+              <p><strong>Status:</strong> <span className="font-semibold text-primary">{activeSprint.status}</span></p>
+              <p><strong>Start Date:</strong> {activeSprint.startDate}</p>
+              <p><strong>End Date:</strong> {activeSprint.endDate}</p>
+              <p><strong>Goal:</strong> {activeSprint.planning?.goal || 'Not defined'}</p>
+              <p><strong>Committed Points:</strong> {activeSprint.committedPoints}</p>
+              {/* Add more relevant active sprint details here */}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center text-muted-foreground p-8 border border-dashed rounded-md min-h-[150px]">
+              <Info className="mb-2 h-6 w-6" />
+              <p>No active sprint found for this project.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Velocity Chart */}
+      <Card className="lg:col-span-1 h-[350px]">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <LineChart className="h-5 w-5 text-primary" /> Velocity
+          </CardTitle>
+          <CardDescription>Committed vs. Completed points over past sprints.</CardDescription>
+        </CardHeader>
+        <CardContent className="h-[calc(100%-100px)] pl-2">
+          {sprintData && sprintData.sprints && sprintData.sprints.length > 0 ? (
+            <VelocityChart data={sprintData.sprints} />
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              <Info className="mr-2 h-5 w-5" /> No sprint data for velocity chart.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Burndown Chart Placeholder */}
+      <Card className="lg:col-span-1 h-[350px] flex flex-col items-center justify-center border-dashed border-2">
+        <CardHeader className="text-center">
+          <CardTitle className="flex items-center justify-center gap-2">
+             <BarChart className="h-5 w-5 text-muted-foreground" /> Burndown Chart
+          </CardTitle>
+          <CardDescription>(Burndown chart will be displayed here)</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center text-muted-foreground">
+          <Info className="mr-2 h-5 w-5" />
+          (Placeholder for Burndown Chart)
+        </CardContent>
+      </Card>
+
+       {/* Other Key Metrics Placeholder */}
+       <Card className="lg:col-span-1 h-[350px] flex flex-col items-center justify-center border-dashed border-2">
+        <CardHeader className="text-center">
+          <CardTitle>Other Metrics</CardTitle>
+          <CardDescription>(Additional key metrics can be shown here)</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center text-muted-foreground">
+          <Info className="mr-2 h-5 w-5" />
+          (Placeholder for other metrics)
+        </CardContent>
+      </Card>
+
+    </div>
+  );
+}
+```
+  </change>
+  <change>
+    <file>src/components/sprint-summary-tab.tsx</file>
+    <description>Create SprintSummaryTab component, based on the previous HomeTab, to display sprint summary table.</description>
+    <content><![CDATA[
+"use client";
+
+import type { SprintData, Sprint } from '@/types/sprint-data'; // Import Sprint type
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge" // Import Badge
+import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Import AlertDialog components
+import { Info, Edit, Circle, Trash2, Eye } from 'lucide-react'; // Added Eye icon
+import Link from 'next/link'; // Import Link
+import { cn } from '@/lib/utils'; // Import cn
+
+interface SprintSummaryTabProps {
+  sprintData: SprintData | null;
+  projectName: string;
+  projectId: string; // Add projectId prop
+  onDeleteSprint: (sprintNumber: number) => void; // Add delete callback prop
+}
+
+export default function SprintSummaryTab({ sprintData, projectName, projectId, onDeleteSprint }: SprintSummaryTabProps) {
+
+  const getStatusBadgeVariant = (status: Sprint['status']): "default" | "secondary" | "outline" | "destructive" | null | undefined => {
+     switch (status) {
+        case 'Active': return 'default'; // Use primary color (blue)
+        case 'Planned': return 'secondary'; // Use secondary color (gray)
+        case 'Completed': return 'outline'; // Use outline style
+        default: return 'secondary';
+     }
+  };
+
+   const getStatusColorClass = (status: Sprint['status']): string => {
+     switch (status) {
+       case 'Active': return 'text-primary'; // Blue
+       case 'Planned': return 'text-muted-foreground'; // Gray
+       case 'Completed': return 'text-green-600'; // Green (using direct Tailwind class for now)
+       default: return 'text-muted-foreground';
+     }
+   };
 
 
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Eye className="h-5 w-5 text-primary" /> Sprint Summary: {projectName}</CardTitle>
+        <CardDescription>
+          Overview of all sprints for the project. Edit legacy details or delete sprints. For planning new sprints, use the 'Planning' sub-tab.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {sprintData && sprintData.sprints && sprintData.sprints.length > 0 ? (
+          <>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[100px]">Sprint #</TableHead>
+                    <TableHead>Start Date</TableHead>
+                    <TableHead>End Date</TableHead>
+                    <TableHead>Status</TableHead>{/* Add Status Header */}
+                    <TableHead className="text-right">Commitment</TableHead>
+                    <TableHead className="text-right">Delivered</TableHead>
+                    <TableHead className="w-[100px] text-center">Actions</TableHead>{/* Adjusted width for two icons */}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sprintData.sprints
+                    .sort((a, b) => a.sprintNumber - b.sprintNumber) // Sort sprints by number
+                    .map((sprint) => (
+                    <TableRow key={sprint.sprintNumber}>
+                      <TableCell className="font-medium">{sprint.sprintNumber}</TableCell>
+                      <TableCell>{sprint.startDate || 'N/A'}</TableCell>
+                      <TableCell>{sprint.endDate || 'N/A'}</TableCell>
+                       <TableCell>
+                           <Badge variant={getStatusBadgeVariant(sprint.status)} className="capitalize">
+                              <Circle className={cn("mr-1 h-2 w-2 fill-current", getStatusColorClass(sprint.status))} />
+                              {sprint.status}
+                           </Badge>
+                       </TableCell>
+                      <TableCell className="text-right">{sprint.committedPoints}</TableCell>
+                      <TableCell className="text-right">{sprint.completedPoints}</TableCell>
+                       <TableCell className="text-center space-x-1">
+                         {/* Edit Button (Legacy Details) */}
+                         <Link
+                           href={`/projects/${projectId}/sprints/${sprint.sprintNumber}/edit`}
+                           passHref
+                           legacyBehavior
+                           aria-disabled={sprint.status === 'Completed'}
+                           tabIndex={sprint.status === 'Completed' ? -1 : undefined}
+                           onClick={(e) => { if (sprint.status === 'Completed') e.preventDefault(); }}
+                         >
+                           <Button
+                              asChild
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Edit Legacy Details for Sprint ${sprint.sprintNumber}`}
+                              title="Edit Legacy Details"
+                              disabled={sprint.status === 'Completed'}
+                              className={cn("h-8 w-8", sprint.status === 'Completed' && "cursor-not-allowed opacity-50")} // Smaller icon button
+                           >
+                             <a><Edit className="h-4 w-4" /></a>
+                           </Button>
+                         </Link>
+                         {/* Delete Button with Confirmation */}
+                         <AlertDialog>
+                           <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Delete Sprint ${sprint.sprintNumber}`}
+                                title="Delete Sprint"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" // Smaller icon button, destructive color
+                              >
+                               <Trash2 className="h-4 w-4" />
+                              </Button>
+                           </AlertDialogTrigger>
+                           <AlertDialogContent>
+                              <AlertDialogHeader>
+                                 <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                 <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete Sprint {sprint.sprintNumber} and all its associated data (details, planning, etc.).
+                                 </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                 <AlertDialogAction onClick={() => onDeleteSprint(sprint.sprintNumber)} className={cn(buttonVariants({ variant: "destructive" }))}>
+                                     Delete Sprint {sprint.sprintNumber}
+                                 </AlertDialogAction>
+                              </AlertDialogFooter>
+                           </AlertDialogContent>
+                         </AlertDialog>
+                       </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center text-muted-foreground p-8 border border-dashed rounded-md min-h-[200px]">
+            <Info className="mb-2 h-8 w-8" />
+             <p className="text-center">No sprint data found for project '{projectName}'.</p>
+             <p className="text-center text-sm">Plan a new sprint in the 'Planning' sub-tab.</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+```
+  </change>
+  <change>
+    <file>src/components/sprint-retrospective-tab.tsx</file>
+    <description>Create placeholder SprintRetrospectiveTab component.</description>
+    <content><![CDATA[
+"use client";
 
+import type { Sprint } from '@/types/sprint-data';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Info, GitCommitVertical } from 'lucide-react';
 
+interface SprintRetrospectiveTabProps {
+  projectId: string;
+  projectName: string;
+  sprints: Sprint[]; // Pass sprints for selection or display
+}
+
+export default function SprintRetrospectiveTab({ projectId, projectName, sprints }: SprintRetrospectiveTabProps) {
+
+  return (
+    <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
+      <CardHeader className="text-center">
+        <CardTitle className="flex items-center justify-center gap-2"><GitCommitVertical className="h-5 w-5 text-primary" /> Sprint Retrospective</CardTitle>
+        <CardDescription>Review past sprints, document learnings, and plan improvements for project '{projectName}'.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex items-center justify-center text-muted-foreground">
+        <Info className="mr-2 h-5 w-5" />
+        (Retrospective features will be implemented here)
+      </CardContent>
+    </Card>
+  );
+}
+```
+  </change>
+  <change>
+    <file>src/components/backlog-prioritization-tab.tsx</file>
+    <description>Create placeholder BacklogPrioritizationTab component.</description>
+    <content><![CDATA[
+"use client";
+
+import type { Task } from '@/types/sprint-data';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Info, Filter } from 'lucide-react';
+
+interface BacklogPrioritizationTabProps {
+  projectId: string;
+  projectName: string;
+  backlog: Task[]; // Pass backlog data for prioritization
+}
+
+export default function BacklogPrioritizationTab({ projectId, projectName, backlog }: BacklogPrioritizationTabProps) {
+
+  return (
+    <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
+      <CardHeader className="text-center">
+        <CardTitle className="flex items-center justify-center gap-2"><Filter className="h-5 w-5 text-primary" /> Backlog Prioritization</CardTitle>
+        <CardDescription>Prioritize backlog items for project '{projectName}' based on value, effort, or other criteria.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex items-center justify-center text-muted-foreground">
+        <Info className="mr-2 h-5 w-5" />
+        (Prioritization tools like drag-and-drop or ranking will be implemented here)
+      </CardContent>
+    </Card>
+  );
+}
+```
+  </change>
+  <change>
+    <file>src/components/backlog-grooming-tab.tsx</file>
+    <description>Create placeholder BacklogGroomingTab component.</description>
+    <content><![CDATA[
+"use client";
+
+import type { Task } from '@/types/sprint-data';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Info, Edit } from 'lucide-react';
+
+interface BacklogGroomingTabProps {
+  projectId: string;
+  projectName: string;
+  backlog: Task[]; // Pass backlog data for grooming
+}
+
+export default function BacklogGroomingTab({ projectId, projectName, backlog }: BacklogGroomingTabProps) {
+
+  return (
+    <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
+      <CardHeader className="text-center">
+        <CardTitle className="flex items-center justify-center gap-2"><Edit className="h-5 w-5 text-primary" /> Backlog Grooming</CardTitle>
+        <CardDescription>Refine backlog items for project '{projectName}': add details, estimate effort, split stories.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex items-center justify-center text-muted-foreground">
+        <Info className="mr-2 h-5 w-5" />
+        (Grooming features like detailed editing, estimation tools will be implemented here)
+      </CardContent>
+    </Card>
+  );
+}
+```
+  </change>
+  <change>
+    <file>src/components/analytics-charts-tab.tsx</file>
+    <description>Create AnalyticsChartsTab component, integrating the VelocityChart and placeholder for Burndown.</description>
+    <content><![CDATA[
+"use client";
+
+import type { SprintData, Member } from '@/types/sprint-data';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import VelocityChart from '@/components/charts/velocity-chart';
+// import BurndownChart from '@/components/charts/burndown-chart'; // Import when created
+// import DeveloperEffortChart from '@/components/charts/developer-effort-chart'; // Import when created
+import { Info, LineChart, BarChart, Users } from 'lucide-react';
+
+interface AnalyticsChartsTabProps {
+  sprintData: SprintData | null;
+  members: Member[]; // Pass members if needed for dev effort chart
+  projectName: string;
+}
+
+export default function AnalyticsChartsTab({ sprintData, members, projectName }: AnalyticsChartsTabProps) {
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Velocity Chart */}
+      <Card className="lg:col-span-1 h-[400px]">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <LineChart className="h-5 w-5 text-primary" /> Velocity Chart
+          </CardTitle>
+          <CardDescription>Committed vs. Completed points for project '{projectName}'.</CardDescription>
+        </CardHeader>
+        <CardContent className="h-[calc(100%-100px)] pl-2">
+          {sprintData && sprintData.sprints && sprintData.sprints.length > 0 ? (
+            <VelocityChart data={sprintData.sprints} />
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              <Info className="mr-2 h-5 w-5" /> No sprint data for velocity chart.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+       {/* Burndown Chart Placeholder */}
+       <Card className="lg:col-span-1 h-[400px] flex flex-col items-center justify-center border-dashed border-2">
+          <CardHeader className="text-center">
+             <CardTitle className="flex items-center justify-center gap-2">
+                <BarChart className="h-5 w-5 text-muted-foreground" /> Burndown Chart
+             </CardTitle>
+             <CardDescription>(Sprint Burndown chart will be displayed here)</CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center justify-center text-muted-foreground">
+             <Info className="mr-2 h-5 w-5" />
+             (Placeholder)
+          </CardContent>
+       </Card>
+
+        {/* Story Points per Developer Placeholder */}
+       <Card className="lg:col-span-1 h-[400px] flex flex-col items-center justify-center border-dashed border-2">
+          <CardHeader className="text-center">
+             <CardTitle className="flex items-center justify-center gap-2">
+                <Users className="h-5 w-5 text-muted-foreground" /> Story Points / Dev
+             </CardTitle>
+             <CardDescription>(Chart showing completed points per developer per sprint)</CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center justify-center text-muted-foreground">
+             <Info className="mr-2 h-5 w-5" />
+             (Placeholder)
+          </CardContent>
+       </Card>
+
+        {/* Add more chart placeholders as needed */}
+
+    </div>
+  );
+}
+```
+  </change>
+  <change>
+    <file>src/components/analytics-reports-tab.tsx</file>
+    <description>Create placeholder AnalyticsReportsTab component.</description>
+    <content><![CDATA[
+"use client";
+
+import type { SprintData } from '@/types/sprint-data';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Info, ListPlus } from 'lucide-react';
+
+interface AnalyticsReportsTabProps {
+  sprintData: SprintData | null; // Pass data needed for reports
+  projectName: string;
+}
+
+export default function AnalyticsReportsTab({ sprintData, projectName }: AnalyticsReportsTabProps) {
+
+  return (
+    <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
+      <CardHeader className="text-center">
+        <CardTitle className="flex items-center justify-center gap-2"><ListPlus className="h-5 w-5 text-primary" /> Reports</CardTitle>
+        <CardDescription>Generate custom or predefined reports for project '{projectName}'.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex items-center justify-center text-muted-foreground">
+        <Info className="mr-2 h-5 w-5" />
+        (Report generation features will be implemented here. e.g., Export data, Sprint summary report)
+      </CardContent>
+    </Card>
+  );
+}
+```
+  </change>
+  <change>
+    <file>src/components/home-tab.tsx</file>
+    <description>Delete HomeTab component as its functionality is moved to DashboardTab and SprintSummaryTab.</description>
+    <content><![CDATA[
