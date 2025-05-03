@@ -73,6 +73,7 @@ const createEmptyTaskRow = (): TaskRow => ({
   id: '',
   description: '',
   storyPoints: '',
+  estimatedTime: '', // Add estimatedTime
   assignee: '',
   status: 'To Do',
 });
@@ -113,6 +114,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
         (loadedPlanning.newTasks || []).map((task, index) => ({
           ...task,
           storyPoints: task.storyPoints?.toString() ?? '',
+          estimatedTime: task.estimatedTime ?? '', // Load estimated time
           assignee: task.assignee ?? '',
           status: task.status ?? 'To Do',
           _internalId: task.id || `initial_new_${index}_${Date.now()}`,
@@ -122,6 +124,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
          (loadedPlanning.spilloverTasks || []).map((task, index) => ({
           ...task,
           storyPoints: task.storyPoints?.toString() ?? '',
+          estimatedTime: task.estimatedTime ?? '', // Load estimated time
           assignee: task.assignee ?? '',
           status: task.status ?? 'To Do',
           _internalId: task.id || `initial_spill_${index}_${Date.now()}`,
@@ -212,11 +215,11 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
       taskRows.forEach((row, index) => {
           const taskPrefix = `${taskType === 'new' ? 'New' : 'Spillover'} Task (Row ${index + 1})`;
           // Skip completely empty rows silently unless there's only one row
-           if (taskRows.length > 1 && !row.description && !row.storyPoints && !row.assignee && row.status === 'To Do') {
+           if (taskRows.length > 1 && !row.description && !row.storyPoints && !row.assignee && row.status === 'To Do' && !row.estimatedTime) {
               return;
            }
            // If it's the only row and it's empty, also skip it
-           if (taskRows.length === 1 && !row.description && !row.storyPoints && !row.assignee && row.status === 'To Do') {
+           if (taskRows.length === 1 && !row.description && !row.storyPoints && !row.assignee && row.status === 'To Do' && !row.estimatedTime) {
                 return;
             }
 
@@ -224,6 +227,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           const description = row.description?.trim();
           const storyPointsRaw = row.storyPoints?.toString().trim();
           const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
+          const estimatedTime = row.estimatedTime?.trim() || undefined; // Add estimated time
           const assignee = row.assignee?.trim() || undefined;
           const status = row.status?.trim() as Task['status'];
 
@@ -231,13 +235,16 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
           if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
                errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
           }
-           if (!status || !taskStatuses.includes(status)) {
+          // Add validation for estimatedTime if needed (e.g., format "Xd Yh")
+          if (!status || !taskStatuses.includes(status)) {
               errors.push(`${taskPrefix}: Invalid status.`);
-           }
+          }
+
           finalTasks.push({
               id: row.id || `task_${selectedSprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
               description: description || '',
               storyPoints: storyPoints,
+              estimatedTime: estimatedTime, // Add estimated time
               assignee: assignee,
               status: status,
           });
@@ -380,16 +387,19 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
    // Helper to render task rows
    const renderTaskTable = (type: 'new' | 'spillover', taskRows: TaskRow[], disabled: boolean) => (
      <div className="space-y-4">
-        <div className="hidden md:grid grid-cols-[2fr_100px_1fr_1fr_40px] gap-x-3 items-center pb-2 border-b">
+         {/* Updated grid layout */}
+        <div className="hidden md:grid grid-cols-[2fr_80px_100px_1fr_1fr_40px] gap-x-3 items-center pb-2 border-b">
             <Label className="text-xs font-medium text-muted-foreground">Description*</Label>
             <Label className="text-xs font-medium text-muted-foreground text-right">Story Pts</Label>
+            <Label className="text-xs font-medium text-muted-foreground text-right">Est. Time</Label> {/* Added Header */}
             <Label className="text-xs font-medium text-muted-foreground">Assignee</Label>
             <Label className="text-xs font-medium text-muted-foreground">Status</Label>
             <div />
         </div>
         <div className="space-y-4 md:space-y-2">
             {taskRows.map((row) => (
-            <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[2fr_100px_1fr_1fr_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
+            <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[2fr_80px_100px_1fr_1fr_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
+                 {/* Description */}
                 <div className="md:col-span-1 col-span-2">
                     <Label htmlFor={`desc-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Description*</Label>
                     <Input
@@ -401,6 +411,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                         disabled={disabled}
                     />
                 </div>
+                 {/* Story Points */}
                 <div className="md:col-span-1 col-span-1">
                     <Label htmlFor={`sp-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Story Pts</Label>
                     <Input
@@ -414,6 +425,19 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                          disabled={disabled}
                     />
                 </div>
+                 {/* Estimated Time */}
+                 <div className="md:col-span-1 col-span-1">
+                    <Label htmlFor={`estTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Est. Time</Label>
+                    <Input
+                        id={`estTime-${type}-${row._internalId}`}
+                        value={row.estimatedTime}
+                        onChange={e => handleTaskInputChange(type, row._internalId, 'estimatedTime', e.target.value)}
+                        placeholder="e.g., 2d"
+                        className="h-9 text-right"
+                        disabled={disabled}
+                    />
+                </div>
+                 {/* Assignee */}
                  <div className="md:col-span-1 col-span-1">
                     <Label htmlFor={`assignee-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Assignee</Label>
                      <Select
@@ -433,6 +457,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                         </SelectContent>
                      </Select>
                 </div>
+                 {/* Status */}
                 <div className="md:col-span-1 col-span-1">
                     <Label htmlFor={`status-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Status</Label>
                      <Select
@@ -450,6 +475,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
                         </SelectContent>
                      </Select>
                 </div>
+                 {/* Delete Button */}
                 <div className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
                     <Button
                         type="button"

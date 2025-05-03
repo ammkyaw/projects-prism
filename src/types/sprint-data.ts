@@ -14,6 +14,7 @@ export interface Task {
   id: string; // Unique ID for the task item
   description: string;
   storyPoints?: number | string; // Can be number or empty string from input
+  estimatedTime?: string; // Optional: e.g., "2d", "4h"
   assignee?: string; // Stores the Member's name
   status?: 'To Do' | 'In Progress' | 'Done' | 'Blocked'; // Added more specific statuses
   startDate?: string; // Optional: YYYY-MM-DD for Gantt chart
