@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Ad
 import * as XLSX from 'xlsx';
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History } from 'lucide-react'; // Added History icon
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History, CheckCircle } from 'lucide-react'; // Added History icon, CheckCircle
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -328,8 +328,9 @@ export default function Home() {
                                const metrics = calculateSprintMetrics(sprintData.startDate, sprintData.duration);
 
                                // Auto-complete based on date if status is not already 'Completed'
-                               if (metrics.endDate !== 'N/A' && clientNow && isPast(parseISO(metrics.endDate)) && status !== 'Completed') {
-                                   status = 'Completed';
+                               if (metrics.endDate !== 'N/A' && clientNow && isPast(parseISO(metrics.endDate)) && status === 'Active') {
+                                   console.warn(`Sprint ${sprintData.sprintNumber} in project ${projectData.id} is past its end date but still 'Active'. Consider marking as 'Completed'.`);
+                                   // Optionally auto-complete: status = 'Completed';
                                }
 
                                 // Validate Planning Tasks (new and spillover) - Now these are sprint tasks
@@ -581,19 +582,32 @@ export default function Home() {
               if (newStatus === 'Active') {
                   tempSprints = tempSprints.map(otherS =>
                       otherS.sprintNumber !== sprintNumber && otherS.status === 'Active'
-                          ? { ...otherS, status: 'Planned' }
+                          ? { ...otherS, status: 'Planned' } // Change other active to Planned
                           : otherS
                   );
+                  // Make sure the target sprint's status is set correctly below
+              } else if (newStatus === 'Completed') {
+                   // Logic to handle completion (e.g., calculate completed points, move unfinished tasks?) - currently just sets status
               }
+
 
               // Second pass: Update the target sprint's planning and status
               const updatedSprints = tempSprints.map(s => {
                   if (s.sprintNumber === sprintNumber) {
                       let finalStatus = s.status;
-                      if (newStatus && newStatus !== s.status) {
-                          finalStatus = newStatus;
-                          statusUpdateMessage = ` Sprint ${sprintNumber} status updated to ${newStatus}.`;
-                      }
+                       // Only update status if newStatus is provided and different
+                       if (newStatus && newStatus !== s.status) {
+                            finalStatus = newStatus;
+                            statusUpdateMessage = ` Sprint ${sprintNumber} status updated to ${newStatus}.`;
+                       } else if (!newStatus && s.status === 'Active' && clientNow && s.endDate && isPast(parseISO(s.endDate))) {
+                             // Auto-complete if end date passed (only if status wasn't explicitly provided)
+                             // We might want to disable auto-complete or make it optional
+                             console.warn(`Auto-completing sprint ${sprintNumber} based on end date.`);
+                             // finalStatus = 'Completed';
+                             // statusUpdateMessage = ` Sprint ${sprintNumber} auto-completed based on end date.`;
+                       }
+
+
                       // Ensure task IDs are present and correctly typed before saving
                        const emptyTask = createEmptyTaskRow();
                       const validatedPlanning: SprintPlanning = {
@@ -613,7 +627,12 @@ export default function Home() {
                               bufferTime: task.bufferTime ?? emptyTask.bufferTime,
                            })),
                       };
-                      return { ...s, planning: validatedPlanning, status: finalStatus };
+                       // Calculate committed points based on saved tasks
+                       const committedPoints = [...(validatedPlanning.newTasks || []), ...(validatedPlanning.spilloverTasks || [])]
+                            .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+
+
+                      return { ...s, planning: validatedPlanning, status: finalStatus, committedPoints: committedPoints };
                   }
                   return s;
               });
@@ -632,7 +651,7 @@ export default function Home() {
         return [...updatedProjects];
      });
      toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
-   }, [selectedProjectId, toast]);
+   }, [selectedProjectId, toast, clientNow]);
 
 
   // Handler to create a new sprint and save its initial planning data (used by PlanningTab)
@@ -677,10 +696,14 @@ export default function Home() {
                  })),
              };
 
+             // Calculate committed points for the new sprint
+             const committedPoints = [...(validatedPlanning.newTasks || []), ...(validatedPlanning.spilloverTasks || [])]
+                .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+
             const newSprint: Sprint = {
                 ...sprintDetails,
-                committedPoints: 0,
-                completedPoints: 0,
+                committedPoints: committedPoints, // Set calculated committed points
+                completedPoints: 0, // Initialize completed points
                 status: 'Planned',
                 details: [],
                 planning: validatedPlanning,
@@ -724,6 +747,49 @@ export default function Home() {
      }
 
   }, [selectedProjectId, toast]);
+
+  // Handler to complete a sprint
+  const handleCompleteSprint = useCallback((sprintNumber: number) => {
+      if (!selectedProjectId) {
+          toast({ variant: "destructive", title: "Error", description: "No project selected." });
+          return;
+      }
+      let currentProjectName = 'N/A';
+
+      setProjects(prevProjects => {
+          const updatedProjects = prevProjects.map(p => {
+              if (p.id === selectedProjectId) {
+                   currentProjectName = p.name;
+                   const updatedSprints = p.sprintData.sprints.map(s => {
+                       if (s.sprintNumber === sprintNumber && s.status === 'Active') {
+                           // Calculate completed points based on 'Done' tasks in the current planning state
+                           const completedPoints = [...(s.planning?.newTasks || []), ...(s.planning?.spilloverTasks || [])]
+                               .filter(task => task.status === 'Done')
+                               .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+
+                            // Move unfinished tasks back to backlog? (Optional - requires more complex logic)
+                           // For now, just update status and points
+
+                           return { ...s, status: 'Completed' as SprintStatus, completedPoints: completedPoints };
+                       }
+                       return s;
+                   });
+                   return {
+                       ...p,
+                       sprintData: {
+                           ...p.sprintData,
+                           sprints: updatedSprints,
+                       },
+                   };
+              }
+              return p;
+          });
+          return updatedProjects;
+      });
+      toast({ title: "Success", description: `Sprint ${sprintNumber} marked as Completed in project '${currentProjectName}'.` });
+       // Optionally switch tab or select next planned sprint
+       setActiveTab('sprints/summary');
+  }, [selectedProjectId, toast, setActiveTab]);
 
 
   // Handler to save members for the *selected* project
@@ -945,17 +1011,20 @@ export default function Home() {
         let revertedTaskDetails: string | null = null;
         let updatePerformed = false; // Track if an update actually happened
 
-        // Use setTimeout to defer state update, avoiding render-during-render issues
-        setTimeout(() => {
+        // Defer state update to avoid render-during-render issues
+        // Use Promise.resolve().then for microtask timing
+        Promise.resolve().then(() => {
             setProjects(prevProjects => {
                 const updatedProjects = prevProjects.map(p => {
                     if (p.id === selectedProjectId) {
                         let foundAndRemoved = false;
+                        let taskToRemoveDetails: Partial<Task> = {};
                         // Remove the task from the specified sprint's planning.newTasks
                         const updatedSprints = p.sprintData.sprints.map(s => {
                             if (s.sprintNumber === sprintNumber && s.planning) {
                                 const taskToRemove = s.planning.newTasks.find(t => t.id === taskId);
                                 if (taskToRemove) {
+                                    taskToRemoveDetails = { ...taskToRemove }; // Capture details before removing
                                     revertedTaskDetails = `${taskToRemove.ticketNumber} (${taskToRemove.title || 'No Title'})`;
                                     foundAndRemoved = true;
                                     return {
@@ -972,20 +1041,28 @@ export default function Home() {
 
                         // If the task wasn't found in the sprint, no need to update backlog
                         if (!foundAndRemoved) {
-                            console.warn(`Task ID ${taskId} not found in Sprint ${sprintNumber} planning.`);
-                            return p; // Return original project state
+                             console.warn(`Task ID ${taskId} not found in Sprint ${sprintNumber} planning.`);
+                             // No toast here, just return unchanged state
+                             return p; // Return original project state
                         }
 
                         // Find the corresponding item in the backlog and reset its 'movedToSprint' status
                         const updatedBacklog = (p.backlog || []).map(item => {
-                            // Match primarily using taskBacklogId if available, as task.id is unique to the sprint instance
-                            const isMatch = taskBacklogId ? item.backlogId === taskBacklogId : false; // Only rely on backlogId
-                            if (isMatch && item.movedToSprint === sprintNumber) {
+                             // Match primarily using taskBacklogId if available, otherwise try matching by ticketNumber if backlogId is missing
+                             const isMatch = taskBacklogId ? item.backlogId === taskBacklogId : item.ticketNumber === taskToRemoveDetails.ticketNumber;
+
+                             if (isMatch && item.movedToSprint === sprintNumber) {
                                 updatePerformed = true; // Mark that we found and updated the backlog item
                                 return { ...item, movedToSprint: undefined }; // Reset movedToSprint
-                            }
-                            return item;
+                             }
+                             return item;
                         });
+
+                        // If the backlog item was not found to be updated (e.g., it was manually deleted from backlog), show a warning
+                        if (!updatePerformed) {
+                             console.warn(`Could not find corresponding backlog item for task ${revertedTaskDetails} (Backlog ID: ${taskBacklogId}) that was marked as moved to sprint ${sprintNumber}.`);
+                             // Decide whether to proceed with sprint update or stop
+                        }
 
                         return {
                             ...p,
@@ -1002,14 +1079,17 @@ export default function Home() {
                  // Show toasts after potential state update
                  if (revertedTaskDetails && updatePerformed) {
                      toast({ title: "Task Reverted", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber} and returned to backlog.` });
-                 } else if (!updatePerformed) {
-                      // Only show warning if it wasn't found (means updatePerformed remained false)
-                      toast({ variant: "warning", title: "Task Not Found", description: `Could not find task ID ${taskId} in Sprint ${sprintNumber} planning or its corresponding backlog item.` });
+                 } else if (revertedTaskDetails && !updatePerformed) {
+                      // Task removed from sprint, but corresponding backlog item not found/updated
+                      toast({ variant: "warning", title: "Task Removed from Sprint", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber}, but its corresponding backlog item couldn't be updated (may have been deleted or modified).` });
+                 } else if (!revertedTaskDetails) {
+                       // This case should be rare due to the check above, but handles if task wasn't found in sprint
+                      toast({ variant: "warning", title: "Task Not Found", description: `Could not find task ID ${taskId} in Sprint ${sprintNumber} planning.` });
                  }
 
                 return updatedProjects; // Return the potentially updated projects
             });
-        }, 0); // Defer with timeout 0
+        }); // End of Promise.resolve().then
 
     }, [selectedProjectId, toast]);
 
@@ -1389,6 +1469,7 @@ export default function Home() {
                     teams: selectedProject.teams ?? [],
                     backlog: selectedProject.backlog?.filter(task => !task.movedToSprint) ?? [], // Only pass non-moved items
                     onRevertTask: handleRevertTaskToBacklog, // Pass revert function
+                    onCompleteSprint: handleCompleteSprint, // Pass complete function
                  };
                 break;
             case 'sprints/retrospective':
@@ -1618,7 +1699,5 @@ export default function Home() {
     </div>
   );
 }
-
-    
 
     

@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info, PackagePlus } from 'lucide-react'; // Renamed CalendarIcon, Added PackagePlus
+import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info, PackagePlus, CheckCircle } from 'lucide-react'; // Added CheckCircle
 import type { Sprint, SprintPlanning, Task, Member, SprintStatus, HolidayCalendar, Team } from '@/types/sprint-data'; // Added HolidayCalendar, Team
 import { initialSprintPlanning, taskStatuses, predefinedRoles, taskPriorities } from '@/types/sprint-data'; // Added taskPriorities
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +23,7 @@ import SprintTimelineChart from '@/components/charts/sprint-timeline-chart';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"; // Added Dialog components
 import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox
 import { ScrollArea } from '@/components/ui/scroll-area'; // Added ScrollArea
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Added AlertDialog
 
 const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
 
@@ -146,6 +147,7 @@ interface SprintPlanningTabProps {
   teams: Team[]; // Add teams prop
   backlog: Task[]; // Add backlog prop
   onRevertTask: (sprintNumber: number, taskId: string, taskBacklogId: string | undefined) => void; // Add revert callback
+  onCompleteSprint: (sprintNumber: number) => void; // Add complete callback
 }
 
 interface TaskRow extends Task {
@@ -175,7 +177,7 @@ const createEmptyTaskRow = (): TaskRow => ({
 });
 
 
-export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars, teams, backlog, onRevertTask }: SprintPlanningTabProps) {
+export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars, teams, backlog, onRevertTask, onCompleteSprint }: SprintPlanningTabProps) {
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | null>(null);
   const [planningData, setPlanningData] = useState<SprintPlanning>(initialSprintPlanning);
   const [newTasks, setNewTasks] = useState<TaskRow[]>([]);
@@ -646,6 +648,12 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
 
 
        onSavePlanning(selectedSprint.sprintNumber, finalPlanningData, 'Active');
+   };
+
+   // Handler for the "Complete Sprint" button
+   const handleCompleteSprintClick = () => {
+      if (!selectedSprintNumber || !isSprintActive) return;
+      onCompleteSprint(selectedSprintNumber);
    };
 
    const getStatusBadgeVariant = (status: Sprint['status']): "default" | "secondary" | "outline" | "destructive" | null | undefined => {
@@ -1135,7 +1143,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
                              <TableHead>Start Date</TableHead>
                              <TableHead>End Date</TableHead>
                              <TableHead>Status</TableHead>
-                             <TableHead className="w-[80px] text-center">Actions</TableHead>
+                             <TableHead className="w-[120px] text-center">Actions</TableHead> {/* Adjusted width */}
                            </TableRow>
                          </TableHeader>
                          <TableBody>
@@ -1157,6 +1165,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
                                    onClick={() => handleSelectExistingSprint(sprint.sprintNumber)}
                                    aria-label={`View/Edit Plan for Sprint ${sprint.sprintNumber}`}
                                    title="View/Edit Plan"
+                                   className="h-8 w-8" // Ensure consistent size
                                  >
                                    <Edit className="h-4 w-4" />
                                  </Button>
@@ -1173,11 +1182,40 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
                                        }}
                                        aria-label={`Start Sprint ${sprint.sprintNumber}`}
                                        title="Start Sprint"
-                                       className="text-green-600 hover:text-green-700"
+                                       className="h-8 w-8 text-green-600 hover:text-green-700" // Consistent size
                                     >
                                       <PlayCircle className="h-4 w-4" />
                                     </Button>
                                  )}
+                                 {sprint.status === 'Active' && (
+                                      <AlertDialog>
+                                          <AlertDialogTrigger asChild>
+                                              <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  aria-label={`Complete Sprint ${sprint.sprintNumber}`}
+                                                  title="Complete Sprint"
+                                                  className="h-8 w-8 text-blue-600 hover:text-blue-700" // Consistent size
+                                              >
+                                                  <CheckCircle className="h-4 w-4" />
+                                              </Button>
+                                           </AlertDialogTrigger>
+                                           <AlertDialogContent>
+                                              <AlertDialogHeader>
+                                                 <AlertDialogTitle>Complete Sprint {sprint.sprintNumber}?</AlertDialogTitle>
+                                                 <AlertDialogDescription>
+                                                    This action will mark the sprint as 'Completed'. Completed points will be calculated based on tasks marked 'Done'. This cannot be easily undone.
+                                                 </AlertDialogDescription>
+                                              </AlertDialogHeader>
+                                              <AlertDialogFooter>
+                                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                 <AlertDialogAction onClick={handleCompleteSprintClick} >
+                                                     Complete Sprint
+                                                 </AlertDialogAction>
+                                              </AlertDialogFooter>
+                                           </AlertDialogContent>
+                                      </AlertDialog>
+                                  )}
                                </TableCell>
                              </TableRow>
                            ))}
@@ -1192,7 +1230,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
                 <>
                     <CardContent className="space-y-6 border-t pt-6 mt-6">
                        <h3 className="text-xl font-semibold">Planning Details for Sprint {selectedSprintNumber}</h3>
-                       {renderPlanningForm(isSprintCompleted)}
+                       {renderPlanningForm(isSprintCompleted || isSprintActive)} {/* Disable form if active or completed */}
                     </CardContent>
                     <CardFooter className="border-t pt-4 flex justify-end gap-2">
                          {isSprintPlanned && (
@@ -1200,7 +1238,30 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
                                  <PlayCircle className="mr-2 h-4 w-4" /> Start Sprint
                              </Button>
                          )}
-                         <Button onClick={handleSaveExistingSprintPlanning} disabled={isSprintCompleted}>
+                         {isSprintActive && (
+                              <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                      <Button variant="outline" size="sm" className="border-blue-600 text-blue-600 hover:bg-blue-50">
+                                          <CheckCircle className="mr-2 h-4 w-4" /> Mark as Complete
+                                      </Button>
+                                   </AlertDialogTrigger>
+                                   <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                         <AlertDialogTitle>Complete Sprint {selectedSprintNumber}?</AlertDialogTitle>
+                                         <AlertDialogDescription>
+                                            This action will mark the sprint as 'Completed'. Completed points will be calculated based on tasks marked 'Done'. This cannot be easily undone.
+                                         </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                         <AlertDialogAction onClick={handleCompleteSprintClick} >
+                                             Complete Sprint
+                                         </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                   </AlertDialogContent>
+                              </AlertDialog>
+                         )}
+                         <Button onClick={handleSaveExistingSprintPlanning} disabled={isSprintCompleted || isSprintActive}>
                              Save Planning
                          </Button>
                      </CardFooter>
@@ -1212,7 +1273,5 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
     </div>
   );
 }
-
-    
 
     
