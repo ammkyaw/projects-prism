@@ -5,13 +5,13 @@ import { cn } from "@/lib/utils"
 const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => ( // Added children prop
   <div className="relative w-full overflow-auto">
     <table
       ref={ref}
       className={cn("w-full caption-bottom text-sm", className)}
       {...props} // Ensure props are spread directly onto the table tag
-    />
+    >{children}</table> {/* Render children directly inside table */}
   </div>
 ))
 Table.displayName = "Table"

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo } from 'react'; // Added React import
@@ -147,122 +146,124 @@ export default function HistoryTab({ projectId, projectName, historyItems }: His
             ) : (
               <div className="overflow-x-auto">
                  {/* Adjust min-width if necessary to accommodate new columns */}
-                <Table className="min-w-[1500px]"> {/* Ensure Table component wraps direct children */}
-                  <TableHeader>
-                    {/* Mirror headers from BacklogTab Management, add Sprint #, remove actions */}
-                    <TableRow>
-                       <TableHead className="w-[120px]">
-                           <Button variant="ghost" onClick={() => requestSort('backlogId')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                               Backlog ID {getSortIndicator('backlogId')}
-                           </Button>
-                       </TableHead>
-                       <TableHead>
-                           <Button variant="ghost" onClick={() => requestSort('title')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                               Title {getSortIndicator('title')}
-                           </Button>
-                       </TableHead>
-                       <TableHead className="w-[120px]">
-                           <Button variant="ghost" onClick={() => requestSort('taskType')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                               Task Type {getSortIndicator('taskType')}
-                           </Button>
-                       </TableHead>
-                       <TableHead className="w-[120px]">
-                            <Button variant="ghost" onClick={() => requestSort('initiator')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                                Initiator {getSortIndicator('initiator')}
-                            </Button>
-                       </TableHead>
-                       <TableHead className="w-[120px]">
-                            <Button variant="ghost" onClick={() => requestSort('createdDate')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                                Created Date {getSortIndicator('createdDate')}
-                            </Button>
-                       </TableHead>
-                       <TableHead className="w-[100px]">
-                           <Button variant="ghost" onClick={() => requestSort('priority')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                               Priority {getSortIndicator('priority')}
-                           </Button>
-                       </TableHead>
-                        <TableHead className="w-[100px]">
-                            Dependencies
-                        </TableHead>
-                         {/* New Flag Headers */}
-                        <TableHead className="w-[60px] text-center">
-                             <Button variant="ghost" onClick={() => requestSort('needsGrooming')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
-                                Groom? {getSortIndicator('needsGrooming')}
-                            </Button>
-                        </TableHead>
-                        <TableHead className="w-[60px] text-center">
-                            <Button variant="ghost" onClick={() => requestSort('readyForSprint')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
-                                Ready? {getSortIndicator('readyForSprint')}
-                            </Button>
-                        </TableHead>
-                        <TableHead className="w-[100px]"> {/* Add History Status Header */}
-                            <Button variant="ghost" onClick={() => requestSort('historyStatus')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                                Status {getSortIndicator('historyStatus')}
-                            </Button>
-                        </TableHead>
-                        <TableHead className="w-[100px]">
-                            <Button variant="ghost" onClick={() => requestSort('movedToSprint')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                                Sprint # {getSortIndicator('movedToSprint')}
-                            </Button>
-                        </TableHead>
-                       <TableHead className="w-[80px] text-right">Story Pts</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sortedHistory.map(task => (
-                      <TableRow key={task.id}>
-                        {/* Backlog ID */}
-                        <TableCell className="font-medium">
-                          <button
-                              type="button"
-                              onClick={() => handleViewDetails(task)}
-                              className="text-primary underline cursor-pointer hover:text-primary/80"
-                              aria-label={`View details for ${task.backlogId}`}
-                          >
-                              {task.backlogId}
-                          </button>
-                        </TableCell>
-                        {/* Title */}
-                        <TableCell>{task.title}</TableCell>
-                        {/* Task Type */}
-                        <TableCell>{task.taskType}</TableCell>
-                        {/* Initiator */}
-                        <TableCell>{task.initiator || '-'}</TableCell>
-                        {/* Created Date */}
-                        <TableCell>{task.createdDate && isValid(parseISO(task.createdDate)) ? format(parseISO(task.createdDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
-                        {/* Priority */}
-                        <TableCell>{task.priority}</TableCell>
-                         {/* Dependencies */}
-                         <TableCell className="text-xs">
-                             {(task.dependsOn && task.dependsOn.length > 0) ? task.dependsOn.join(', ') : <span className="italic text-muted-foreground">None</span>}
-                         </TableCell>
-                          {/* Needs Grooming */}
-                          <TableCell className="text-center">
-                              <Checkbox checked={task.needsGrooming} disabled className="h-4 w-4"/>
-                          </TableCell>
-                          {/* Ready for Sprint */}
-                          <TableCell className="text-center">
-                              <Checkbox checked={task.readyForSprint} disabled className="h-4 w-4"/>
-                          </TableCell>
-                         {/* History Status */}
-                         <TableCell>
-                            {task.historyStatus ? (
-                                <Badge variant="outline" className="capitalize">
-                                    {getHistoryStatusIcon(task.historyStatus)} {task.historyStatus}
-                                </Badge>
-                            ) : (
-                                <span className="text-muted-foreground italic">N/A</span>
-                            )}
-                        </TableCell>
-                         {/* Moved To Sprint # */}
-                         <TableCell>{task.movedToSprint ?? '-'}</TableCell> {/* Show '-' if no sprint # */}
-                        {/* Story Points */}
-                        <TableCell className="text-right">{task.storyPoints ?? '-'}</TableCell>
+                <div className="min-w-[1500px]"> {/* Ensure Table component wraps direct children */}
+                  <Table>
+                    <TableHeader>
+                      {/* Mirror headers from BacklogTab Management, add Sprint #, remove actions */}
+                      <TableRow>
+                         <TableHead className="w-[120px]">
+                             <Button variant="ghost" onClick={() => requestSort('backlogId')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                 Backlog ID {getSortIndicator('backlogId')}
+                             </Button>
+                         </TableHead>
+                         <TableHead>
+                             <Button variant="ghost" onClick={() => requestSort('title')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                 Title {getSortIndicator('title')}
+                             </Button>
+                         </TableHead>
+                         <TableHead className="w-[120px]">
+                             <Button variant="ghost" onClick={() => requestSort('taskType')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                 Task Type {getSortIndicator('taskType')}
+                             </Button>
+                         </TableHead>
+                         <TableHead className="w-[120px]">
+                              <Button variant="ghost" onClick={() => requestSort('initiator')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                  Initiator {getSortIndicator('initiator')}
+                              </Button>
+                         </TableHead>
+                         <TableHead className="w-[120px]">
+                              <Button variant="ghost" onClick={() => requestSort('createdDate')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                  Created Date {getSortIndicator('createdDate')}
+                              </Button>
+                         </TableHead>
+                         <TableHead className="w-[100px]">
+                             <Button variant="ghost" onClick={() => requestSort('priority')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                 Priority {getSortIndicator('priority')}
+                             </Button>
+                         </TableHead>
+                          <TableHead className="w-[100px]">
+                              Dependencies
+                          </TableHead>
+                           {/* New Flag Headers */}
+                          <TableHead className="w-[60px] text-center">
+                               <Button variant="ghost" onClick={() => requestSort('needsGrooming')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
+                                  Groom? {getSortIndicator('needsGrooming')}
+                              </Button>
+                          </TableHead>
+                          <TableHead className="w-[60px] text-center">
+                              <Button variant="ghost" onClick={() => requestSort('readyForSprint')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
+                                  Ready? {getSortIndicator('readyForSprint')}
+                              </Button>
+                          </TableHead>
+                          <TableHead className="w-[100px]"> {/* Add History Status Header */}
+                              <Button variant="ghost" onClick={() => requestSort('historyStatus')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                  Status {getSortIndicator('historyStatus')}
+                              </Button>
+                          </TableHead>
+                          <TableHead className="w-[100px]">
+                              <Button variant="ghost" onClick={() => requestSort('movedToSprint')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                  Sprint # {getSortIndicator('movedToSprint')}
+                              </Button>
+                          </TableHead>
+                         <TableHead className="w-[80px] text-right">Story Pts</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedHistory.map(task => (
+                        <TableRow key={task.id}>
+                          {/* Backlog ID */}
+                          <TableCell className="font-medium">
+                            <button
+                                type="button"
+                                onClick={() => handleViewDetails(task)}
+                                className="text-primary underline cursor-pointer hover:text-primary/80"
+                                aria-label={`View details for ${task.backlogId}`}
+                            >
+                                {task.backlogId}
+                            </button>
+                          </TableCell>
+                          {/* Title */}
+                          <TableCell>{task.title}</TableCell>
+                          {/* Task Type */}
+                          <TableCell>{task.taskType}</TableCell>
+                          {/* Initiator */}
+                          <TableCell>{task.initiator || '-'}</TableCell>
+                          {/* Created Date */}
+                          <TableCell>{task.createdDate && isValid(parseISO(task.createdDate)) ? format(parseISO(task.createdDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
+                          {/* Priority */}
+                          <TableCell>{task.priority}</TableCell>
+                           {/* Dependencies */}
+                           <TableCell className="text-xs">
+                               {(task.dependsOn && task.dependsOn.length > 0) ? task.dependsOn.join(', ') : <span className="italic text-muted-foreground">None</span>}
+                           </TableCell>
+                            {/* Needs Grooming */}
+                            <TableCell className="text-center">
+                                <Checkbox checked={task.needsGrooming} disabled className="h-4 w-4"/>
+                            </TableCell>
+                            {/* Ready for Sprint */}
+                            <TableCell className="text-center">
+                                <Checkbox checked={task.readyForSprint} disabled className="h-4 w-4"/>
+                            </TableCell>
+                           {/* History Status */}
+                           <TableCell>
+                              {task.historyStatus ? (
+                                  <Badge variant="outline" className="capitalize">
+                                      {getHistoryStatusIcon(task.historyStatus)} {task.historyStatus}
+                                  </Badge>
+                              ) : (
+                                  <span className="text-muted-foreground italic">N/A</span>
+                              )}
+                          </TableCell>
+                           {/* Moved To Sprint # */}
+                           <TableCell>{task.movedToSprint ?? '-'}</TableCell> {/* Show '-' if no sprint # */}
+                          {/* Story Points */}
+                          <TableCell className="text-right">{task.storyPoints ?? '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+             </div>
            )}
         </CardContent>
       </Card>

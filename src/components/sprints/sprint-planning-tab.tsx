@@ -155,8 +155,8 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
   const isSprintActive = selectedSprint?.status === 'Active';
   const isSprintPlanned = selectedSprint?.status === 'Planned';
 
-  // Determine if the current form should be disabled
-  const isFormDisabled = isSprintCompleted; // Only disable if completed
+  // Determine if the current form should be disabled (Only completed sprints are fully disabled)
+  const isFormDisabled = isSprintCompleted;
 
   const currentSprintStartDate = useMemo(() => {
      if (isCreatingNewSprint && newSprintForm.startDate) {
@@ -1244,3 +1244,4 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
     </div>
   );
 }
+
