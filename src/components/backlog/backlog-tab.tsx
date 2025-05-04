@@ -21,7 +21,7 @@ import SelectDependenciesDialog from '@/components/select-dependencies-dialog'; 
 interface BacklogTabProps {
   projectId: string;
   projectName: string;
-  initialBacklog: Task[]; // Expect only non-moved items
+  initialBacklog: Task[]; // Receive ALL backlog items for the project
   onSaveBacklog: (backlog: Task[]) => void;
   members: Member[];
   sprints: Sprint[];
@@ -37,13 +37,14 @@ interface BacklogRow extends Omit<Task, 'status'> {
   ref?: React.RefObject<HTMLDivElement>; // Add ref for scrolling
 }
 
-// Helper function to generate the next backlog ID
-const generateNextBacklogId = (existingIds: string[]): string => {
+// Helper function to generate the next backlog ID based on *all* items
+const generateNextBacklogId = (allProjectBacklogItems: Task[]): string => {
   const currentYear = getYear(new Date()).toString().slice(-2); // Get last two digits of the year
   const prefix = `BL-${currentYear}`;
   let maxNum = 0;
 
-  existingIds.forEach(id => {
+  allProjectBacklogItems.forEach(item => {
+    const id = item.backlogId; // Use the actual backlogId
     if (id && id.startsWith(prefix)) {
       const numPart = parseInt(id.substring(prefix.length), 10);
       if (!isNaN(numPart) && numPart > maxNum) {
@@ -58,8 +59,8 @@ const generateNextBacklogId = (existingIds: string[]): string => {
 };
 
 
-const createEmptyBacklogRow = (existingIds: string[]): BacklogRow => {
-    const nextId = generateNextBacklogId(existingIds);
+const createEmptyBacklogRow = (allProjectBacklogItems: Task[]): BacklogRow => {
+    const nextId = generateNextBacklogId(allProjectBacklogItems);
     return {
         ...initialBacklogTask,
         _internalId: `backlog_${Date.now()}_${Math.random()}`,
@@ -89,6 +90,11 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection } | null>(null); // State for sorting
   const [isFilteringReady, setIsFilteringReady] = useState(false); // State for filter
 
+  // Memoize only the backlog items that are NOT moved to a sprint for display
+  const displayableBacklogItems = useMemo(() => {
+      return initialBacklog.filter(task => !task.movedToSprint);
+  }, [initialBacklog]);
+
 
   // Map internal IDs to refs for scrolling
   const rowRefs = useRef<Map<string, React.RefObject<HTMLDivElement>>>(new Map());
@@ -108,11 +114,10 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       return sprints.filter(s => s.status === 'Active' || s.status === 'Planned').sort((a, b) => a.sprintNumber - b.sprintNumber);
   }, [sprints]);
 
-  // Initialize or update rows based on initialBacklog prop
+  // Initialize or update rows based on displayableBacklogItems
   useEffect(() => {
       rowRefs.current.clear(); // Clear refs when backlog changes
-      const existingIds = initialBacklog.map(task => task.backlogId ?? ''); // Get existing IDs for generation
-      const mappedBacklog = initialBacklog.map((task, index) => {
+      const mappedBacklog = displayableBacklogItems.map((task, index) => {
           const internalId = task.id || `initial_backlog_${index}_${Date.now()}`;
           // Ensure each row has a ref
           if (!rowRefs.current.has(internalId)) {
@@ -129,19 +134,19 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
               createdDateObj: parseDateString(task.createdDate),
               initiator: task.initiator ?? '',
               dependsOn: task.dependsOn ?? [],
-              backlogId: task.backlogId ?? generateNextBacklogId(existingIds), // Ensure ID exists
+              backlogId: task.backlogId ?? generateNextBacklogId(initialBacklog), // Generate ID based on ALL items if missing
               needsGrooming: task.needsGrooming ?? false,
               readyForSprint: task.readyForSprint ?? false,
           };
       });
       setBacklogRows(mappedBacklog);
       if (mappedBacklog.length === 0) {
-          const newRow = createEmptyBacklogRow(existingIds);
+          const newRow = createEmptyBacklogRow(initialBacklog); // Use all items for ID generation
           rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
           setBacklogRows([{ ...newRow, ref: rowRefs.current.get(newRow._internalId) }]);
       }
       setHasUnsavedChanges(false);
-  }, [initialBacklog, projectId]);
+  }, [displayableBacklogItems, projectId, initialBacklog]); // Add initialBacklog dependency
 
 
   // Track unsaved changes
@@ -169,7 +174,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                ticketNumber: undefined,
            })).sort((a, b) => (a.backlogId || '').localeCompare(b.backlogId || ''));
 
-       const originalBacklogString = JSON.stringify(cleanBacklog(initialBacklog));
+       const originalBacklogString = JSON.stringify(cleanBacklog(initialBacklog.filter(t => !t.movedToSprint))); // Compare against initial non-moved items
        const currentBacklogString = JSON.stringify(
            cleanBacklog(
                backlogRows.filter(row => row.backlogId?.trim() || row.title?.trim() || row.storyPoints)
@@ -264,8 +269,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
 
   const handleAddRow = () => {
-      const existingIds = backlogRows.map(row => row.backlogId ?? '');
-      const newRow = createEmptyBacklogRow(existingIds);
+      const newRow = createEmptyBacklogRow(initialBacklog); // Use all items for ID generation
       rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
       setBacklogRows(prev => [...prev, { ...newRow, ref: rowRefs.current.get(newRow._internalId) }]);
   };
@@ -275,8 +279,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       setBacklogRows(prevRows => {
           const newRows = prevRows.filter(row => row._internalId !== internalId);
           if (newRows.length === 0) {
-              const existingIds = newRows.map(row => row.backlogId ?? ''); // Use remaining IDs
-              const newRow = createEmptyBacklogRow(existingIds);
+              const newRow = createEmptyBacklogRow(initialBacklog); // Use all items for ID generation
               rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
               return [{ ...newRow, ref: rowRefs.current.get(newRow._internalId) }];
           }
@@ -465,12 +468,17 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       return;
     }
 
-    finalBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
+    // Add back the items that were already moved to sprints (from initialBacklog)
+    const movedItems = initialBacklog.filter(task => !!task.movedToSprint);
+    const fullBacklogToSave = [...finalBacklog, ...movedItems];
+
+    fullBacklogToSave.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
 
 
-    onSaveBacklog(finalBacklog);
+    onSaveBacklog(fullBacklogToSave); // Save the combined and sorted backlog
     setHasUnsavedChanges(false);
      // Update state to reflect sorted/cleaned data with potentially new IDs
+     // Only map the items that should be displayed
      setBacklogRows(finalBacklog.map((task, index) => {
          const internalId = task.id || `saved_backlog_${index}_${Date.now()}`;
           if (!rowRefs.current.has(internalId)) {
@@ -488,7 +496,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
          };
      }));
      if (finalBacklog.length === 0) {
-           const newRow = createEmptyBacklogRow([]);
+           const newRow = createEmptyBacklogRow(initialBacklog); // Use all items for ID gen
            rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
            setBacklogRows([{ ...newRow, ref: rowRefs.current.get(newRow._internalId) }]);
      }
@@ -864,10 +872,3 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
     </>
   );
 }
-
-
-
-
-    
-
-    

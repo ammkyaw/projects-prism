@@ -23,7 +23,7 @@ import MembersTab from '@/components/teams/members-tab'; // Updated path
 import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
 import TeamsTab from '@/components/teams/teams-tab'; // Updated path
 import AddMembersDialog from '@/components/add-members-dialog';
-import HistoryTab from '@/components/history-tab'; // Import HistoryTab component
+import HistoryTab from '@/components/backlog/history-tab'; // Import HistoryTab component
 
 // Placeholder Sub-Tab Components
 import SprintSummaryTab from '@/components/sprints/sprint-summary-tab'; // Updated path
@@ -293,6 +293,8 @@ export default function Home() {
                              initiator: typeof taskData.initiator === 'string' ? taskData.initiator : undefined,
                              dependsOn: Array.isArray(taskData.dependsOn) ? taskData.dependsOn.filter((dep: any): dep is string => typeof dep === 'string') : undefined,
                              movedToSprint: typeof taskData.movedToSprint === 'number' ? taskData.movedToSprint : undefined, // Validate history field
+                              needsGrooming: typeof taskData.needsGrooming === 'boolean' ? taskData.needsGrooming : false, // Validate and default flag
+                              readyForSprint: typeof taskData.readyForSprint === 'boolean' ? taskData.readyForSprint : false, // Validate and default flag
                               // Sprint-specific fields should be undefined in backlog context
                              devEstimatedTime: undefined,
                              qaEstimatedTime: undefined,
@@ -358,6 +360,8 @@ export default function Home() {
                                            priority: typeof taskData.priority === 'string' && taskPriorities.includes(taskData.priority as any) ? taskData.priority as Task['priority'] : 'Medium', // Validate and default priority
                                            dependsOn: Array.isArray(taskData.dependsOn) ? taskData.dependsOn.filter((dep: any): dep is string => typeof dep === 'string') : undefined,
                                            movedToSprint: undefined, // History field not relevant within sprint context
+                                            needsGrooming: undefined, // Not relevant in sprint
+                                            readyForSprint: undefined, // Not relevant in sprint
                                            // Backlog specific fields should not be present in sprint tasks unless needed for context
                                            taskType: undefined, // Not typically stored in sprint task
                                            createdDate: undefined,
@@ -904,6 +908,8 @@ export default function Home() {
                        // Status is not saved for backlog items
                        priority: task.priority ?? 'Medium', // Ensure priority
                        movedToSprint: task.movedToSprint, // Preserve history field
+                       needsGrooming: task.needsGrooming ?? false, // Preserve flag
+                       readyForSprint: task.readyForSprint ?? false, // Preserve flag
                    }));
                    return { ...p, backlog: validatedBacklog };
                }
@@ -962,6 +968,8 @@ export default function Home() {
                        // createdDate: undefined, // Keep createdDate? Decide later.
                        initiator: backlogItem.initiator, // Keep initiator
                        movedToSprint: undefined, // Clear movedToSprint for sprint task
+                        needsGrooming: undefined, // Clear flag
+                        readyForSprint: undefined, // Clear flag
                    };
 
                    // Instead of removing, update the item in backlog to mark it as moved
@@ -1011,9 +1019,8 @@ export default function Home() {
         let revertedTaskDetails: string | null = null;
         let updatePerformed = false; // Track if an update actually happened
 
-        // Defer state update to avoid render-during-render issues
-        // Use Promise.resolve().then for microtask timing
-        Promise.resolve().then(() => {
+        // Defer state update to avoid potential render-during-render issues with toast
+        setTimeout(() => {
             setProjects(prevProjects => {
                 const updatedProjects = prevProjects.map(p => {
                     if (p.id === selectedProjectId) {
@@ -1089,8 +1096,7 @@ export default function Home() {
 
                 return updatedProjects; // Return the potentially updated projects
             });
-        }); // End of Promise.resolve().then
-
+         }, 0); // End of setTimeout
     }, [selectedProjectId, toast]);
 
 
@@ -1261,6 +1267,8 @@ export default function Home() {
                 'StoryPoints': task.storyPoints,
                 'DependsOn': (task.dependsOn || []).join(', '), // Flatten dependency array
                 'MovedToSprint': task.movedToSprint ?? '', // Add movedToSprint history
+                 'NeedsGrooming': task.needsGrooming ? 'Yes' : 'No', // Add flag
+                 'ReadyForSprint': task.readyForSprint ? 'Yes' : 'No', // Add flag
                  // Other backlog specific fields if needed
             }));
             const wsBacklog = XLSX.utils.json_to_sheet(backlogData);
@@ -1467,7 +1475,7 @@ export default function Home() {
                     members: selectedProject.members ?? [],
                     holidayCalendars: selectedProject.holidayCalendars ?? [],
                     teams: selectedProject.teams ?? [],
-                    backlog: selectedProject.backlog?.filter(task => !task.movedToSprint) ?? [], // Only pass non-moved items
+                    backlog: selectedProject.backlog?.filter(task => !task.movedToSprint && task.readyForSprint) ?? [], // Only pass ready items not already moved
                     onRevertTask: handleRevertTaskToBacklog, // Pass revert function
                     onCompleteSprint: handleCompleteSprint, // Pass complete function
                  };
@@ -1479,7 +1487,7 @@ export default function Home() {
             case 'backlog/management':
                 componentProps = {
                     ...componentProps,
-                    initialBacklog: selectedProject.backlog?.filter(task => !task.movedToSprint) ?? [], // Only pass non-moved items
+                    initialBacklog: selectedProject.backlog ?? [], // Pass ALL items for ID generation
                     onSaveBacklog: handleSaveBacklog,
                     members: selectedProject.members ?? [],
                     sprints: selectedProject.sprintData.sprints ?? [],
@@ -1699,5 +1707,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
