@@ -169,7 +169,14 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 return null;
             }
 
-            let taskStartObj = parseISO(task.startDate!);
+            let taskStartObj: Date;
+             try {
+                 taskStartObj = parseISO(task.startDate!);
+             } catch (e) {
+                 console.error(`Task ${index + 1} (${task.ticketNumber}): Error parsing start date: ${task.startDate}`, e);
+                 return null;
+             }
+
             let lastPhaseEndDateObj = taskStartObj; // Tracks the end date of the last valid phase for dependency
 
              // Ensure the effective start date of the *first* phase is a working day
@@ -410,7 +417,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
              interval={0} // Show all calculated ticks
              allowDuplicatedCategory={true} // Allow sparse ticks
            />
-           {/* Weekend Reference Areas */}
+           {/* Weekend Reference Areas - Rendered First */}
            {weekendIndices.map((index) => (
                 <ReferenceArea
                     key={`weekend-area-${index}`}
@@ -418,15 +425,13 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                     x2={index + 1} // End of the weekend day index (exclusive for full day coverage)
                     ifOverflow="extendDomain" // Extend beyond chart bounds if needed
                     fill={weekendColor} // Use the defined black weekend color
-                    fillOpacity={0.3} // Add some opacity
+                    fillOpacity={1} // Use 100% opacity
                     yAxisId={0} // Specify the Y-axis ID if needed (usually 0 for default)
-                    label={(props) => ( // Remove label rendering if not needed
-                         null // Return null to hide the label text but keep the area
-                     )}
+                    label={null} // Hide label text but keep the area
                     style={{ pointerEvents: 'none' }} // Prevent interaction
                 />
            ))}
-            {/* Holiday Reference Areas */}
+            {/* Holiday Reference Areas - Rendered Second */}
             {Array.from(holidayMap.entries()).map(([index, holidayNames]) => (
                  <ReferenceArea
                     key={`holiday-area-${index}`}
@@ -434,7 +439,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                     x2={index + 1} // End of the holiday day index (exclusive)
                     ifOverflow="extendDomain"
                     fill={holidayColor} // Use the defined dark red holiday color
-                    fillOpacity={0.2} // Add some opacity
+                    fillOpacity={1} // Use 100% opacity
                     yAxisId={0} // Specify the Y-axis ID
                     label={(props) => {
                         const holidayNamesString = Array.from(holidayNames).join(', ');
@@ -442,8 +447,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                             <TooltipProvider>
                                 <UITooltip>
                                     <TooltipTrigger asChild>
-                                        {/* Trigger is the area itself, but we can't directly attach. We'll show tooltip via interaction */}
-                                         <g> {/* Wrap in <g> if needed, though ReferenceArea might not support direct children like this */}
+                                         <g> {/* Wrap in <g> if needed */}
                                             {/* Transparent rect for tooltip trigger area - might be tricky */}
                                          </g>
                                     </TooltipTrigger>
@@ -485,7 +489,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
               }}
              />
            <Legend content={null} /> {/* Hide default legend */}
-           {/* Render bars for each phase. Removed stackId to ensure independent positioning */}
+           {/* Render bars for each phase - Rendered Last */}
            <Bar dataKey="devRange" radius={2} barSize={10} fill={chartConfig.dev.color} name="Development" yAxisId={0} />
            <Bar dataKey="qaRange" radius={2} barSize={10} fill={chartConfig.qa.color} name="QA" yAxisId={0} />
            <Bar dataKey="bufferRange" radius={2} barSize={10} fill={chartConfig.buffer.color} name="Buffer" yAxisId={0} />
@@ -495,3 +499,6 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     </ChartContainer>
   );
 }
+
+
+    
