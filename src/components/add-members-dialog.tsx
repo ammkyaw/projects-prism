@@ -43,6 +43,7 @@ function AddMembersDialog({ isOpen, onOpenChange, onSaveMembers, existingMembers
   useEffect(() => {
     // Only initialize if the dialog is opening (was closed, now open)
     if (isOpen && !prevIsOpen) {
+      console.log("Dialog opening, initializing rows. Existing:", existingMembers); // Debug log
       const initialRows = existingMembers.length > 0
         ? existingMembers.map((member, index) => ({
             ...member,
@@ -50,6 +51,9 @@ function AddMembersDialog({ isOpen, onOpenChange, onSaveMembers, existingMembers
           }))
         : [createEmptyMemberRow()];
       setMemberRows(initialRows);
+    } else if (!isOpen && prevIsOpen) {
+       console.log("Dialog closing, resetting rows."); // Debug log
+       setMemberRows([]); // Reset rows when closing to avoid stale data if reopened quickly
     }
     // Update previous state for the next render
     setPrevIsOpen(isOpen);
@@ -69,6 +73,7 @@ function AddMembersDialog({ isOpen, onOpenChange, onSaveMembers, existingMembers
   };
 
   const handleInputChange = (internalId: string, field: 'name' | 'role', value: string) => {
+    console.log(`Input change: ${internalId}, Field: ${field}, Value: ${value}`); // Debug log
     setMemberRows(rows =>
       rows.map(row => (row._internalId === internalId ? { ...row, [field]: value } : row))
     );
@@ -174,7 +179,7 @@ function AddMembersDialog({ isOpen, onOpenChange, onSaveMembers, existingMembers
                                />
                            </div>
                            {/* Role */}
-                           <div className="md:col-span-1 col-span-2">
+                           <div className="md:col-span-1 col-span-1">
                                 <Label htmlFor={`dialog-role-${row._internalId}`} className="md:hidden text-xs font-medium">Role*</Label>
                                 <Select value={row.role ?? ''} onValueChange={(value) => handleRoleChange(row._internalId, value)}> {/* Handle potential undefined value */}
                                     <SelectTrigger id={`dialog-role-${row._internalId}`} className="h-9">
