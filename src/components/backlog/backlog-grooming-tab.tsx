@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'; // Added useMemo
-import type { Task } from '@/types/sprint-data';
+import type { Task, HistoryStatus } from '@/types/sprint-data'; // Added HistoryStatus
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,17 +11,19 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"; // Import Dialog components
-import { Info, Edit, Save, XCircle, HelpCircle, BookOpenCheck } from 'lucide-react'; // Added HelpCircle, BookOpenCheck
+import { Info, Edit, Save, XCircle, HelpCircle, BookOpenCheck, Split } from 'lucide-react'; // Added Split icon
 import { useToast } from "@/hooks/use-toast";
 import { taskPriorities } from '@/types/sprint-data'; // Import priorities
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Import Tooltip components
+import SplitBacklogItemDialog from '@/components/split-backlog-item-dialog'; // Import Split Dialog
 
 interface BacklogGroomingTabProps {
   projectId: string;
   projectName: string;
   initialBacklog: Task[]; // Receive initial backlog (all items)
   onSaveBacklog: (backlog: Task[]) => void; // Callback to save changes (saves ALL items, not just groomed)
+  onSplitBacklogItem: (originalTaskId: string, splitTasks: Task[]) => void; // Add split handler prop
 }
 
 interface EditableBacklogItem extends Task {
@@ -29,13 +31,18 @@ interface EditableBacklogItem extends Task {
   isEditing?: boolean;
 }
 
-export default function BacklogGroomingTab({ projectId, projectName, initialBacklog, onSaveBacklog }: BacklogGroomingTabProps) {
+export default function BacklogGroomingTab({ projectId, projectName, initialBacklog, onSaveBacklog, onSplitBacklogItem }: BacklogGroomingTabProps) {
   const [allEditableBacklog, setAllEditableBacklog] = useState<EditableBacklogItem[]>([]); // Store ALL items
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSplitDialogOpen, setIsSplitDialogOpen] = useState(false); // State for Split dialog
+  const [splittingTask, setSplittingTask] = useState<Task | null>(null); // Task being split
   const { toast } = useToast();
 
-   // Filtered list for display (only items needing grooming)
-   const groomingItems = useMemo(() => allEditableBacklog.filter(item => item.needsGrooming), [allEditableBacklog]);
+   // Filtered list for display (only items needing grooming and not already moved/split/merged)
+   const groomingItems = useMemo(() =>
+       allEditableBacklog.filter(item => item.needsGrooming && !item.historyStatus),
+       [allEditableBacklog]
+   );
 
 
    // Initialize state when initialBacklog changes
@@ -55,8 +62,8 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
 
    // Track unsaved changes by comparing current state with initial props
    useEffect(() => {
-        const cleanBacklog = (tasks: Task[]): Omit<Task, 'id' | 'status' | 'movedToSprint'>[] =>
-           (tasks || []).map(({ id, status, movedToSprint, ...rest }: any) => ({ // Add null check
+        const cleanBacklog = (tasks: Task[]): Omit<Task, 'id' | 'status' | 'movedToSprint' | 'historyStatus'>[] =>
+           (tasks || []).map(({ id, status, movedToSprint, historyStatus, ...rest }: any) => ({ // Add null check, exclude historyStatus
                backlogId: rest.backlogId?.trim() || '',
                title: rest.title?.trim() || '',
                description: rest.description?.trim() || '',
@@ -78,10 +85,11 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                ticketNumber: undefined,
            })).sort((a, b) => (a.backlogId || '').localeCompare(b.backlogId || ''));
 
-       const originalBacklogString = JSON.stringify(cleanBacklog(initialBacklog || [])); // Add null check
+        // Compare against the *displayable* initial items (those not moved/split/merged)
+       const originalBacklogString = JSON.stringify(cleanBacklog(initialBacklog?.filter(t => !t.historyStatus) || []));
        const currentBacklogString = JSON.stringify(
             cleanBacklog(
-                allEditableBacklog // Compare with the FULL current editable state
+                allEditableBacklog.filter(t => !t.historyStatus) // Compare with the FULL current editable state (excluding historical)
             )
        );
        setHasUnsavedChanges(originalBacklogString !== currentBacklogString);
@@ -96,7 +104,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
     );
   };
 
-  const handleInputChange = (internalId: string, field: keyof Omit<EditableBacklogItem, '_internalId' | 'id' | 'isEditing' | 'needsGrooming' | 'readyForSprint'>, value: string | number | undefined) => {
+  const handleInputChange = (internalId: string, field: keyof Omit<EditableBacklogItem, '_internalId' | 'id' | 'isEditing' | 'needsGrooming' | 'readyForSprint' | 'historyStatus' | 'movedToSprint'>, value: string | number | undefined) => {
     setAllEditableBacklog(prev =>
       prev.map(item =>
         item._internalId === internalId ? { ...item, [field]: value ?? '' } : item
@@ -116,12 +124,28 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
        );
    };
 
+   // Handler for opening the split dialog
+   const handleOpenSplitDialog = (item: EditableBacklogItem) => {
+        setSplittingTask(item);
+        setIsSplitDialogOpen(true);
+   };
+
+   // Handler for saving the split items (passed to the dialog)
+   const handleConfirmSplit = (originalTaskId: string, splitTasks: Task[]) => {
+        console.log("Confirming split:", originalTaskId, splitTasks);
+        onSplitBacklogItem(originalTaskId, splitTasks);
+        setIsSplitDialogOpen(false);
+        setSplittingTask(null);
+   };
+
   const handleSaveAll = () => {
     let hasErrors = false;
-    const finalBacklog: Task[] = [];
+    // We only save changes for items that are NOT historical
+    const itemsToSave = allEditableBacklog.filter(item => !item.historyStatus);
+    const finalBacklogPortion: Task[] = [];
     const backlogIds = new Set<string>();
 
-    allEditableBacklog.forEach((item, index) => { // Iterate over ALL items
+    itemsToSave.forEach((item, index) => { // Iterate over items needing potential save
         const backlogId = item.backlogId?.trim() || '';
         const title = item.title?.trim();
         const description = item.description?.trim();
@@ -146,7 +170,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
 
         if (backlogId) backlogIds.add(backlogId.toLowerCase());
 
-        finalBacklog.push({
+        finalBacklogPortion.push({
             ...item, // Keep other original fields like taskType, createdDate etc.
             id: item.id || `groom_save_${index}_${Date.now()}`, // Ensure ID
             backlogId: backlogId,
@@ -157,6 +181,9 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
             priority: priority as Task['priority'],
             needsGrooming, // Save flag state
             readyForSprint, // Save flag state
+             // Ensure historical fields are preserved if they somehow exist (though they shouldn't be in itemsToSave)
+            historyStatus: item.historyStatus,
+            movedToSprint: item.movedToSprint,
         });
     });
 
@@ -164,10 +191,14 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
         return;
     }
 
-    // Sort before saving
-    finalBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
+    // Get historical items from the main state to combine before saving
+    const historicalItems = allEditableBacklog.filter(item => item.historyStatus);
+    const fullBacklogToSave = [...finalBacklogPortion, ...historicalItems];
 
-    onSaveBacklog(finalBacklog); // Save the entire updated backlog
+    // Sort before saving
+    fullBacklogToSave.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
+
+    onSaveBacklog(fullBacklogToSave); // Save the entire updated backlog (active + historical)
     setHasUnsavedChanges(false);
     // Collapse all edit forms after saving
     setAllEditableBacklog(prev => prev.map(item => ({ ...item, isEditing: false })));
@@ -181,7 +212,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
           <div className="flex justify-between items-center">
               <div>
                  <CardTitle className="flex items-center gap-2"><Edit className="h-5 w-5 text-primary" /> Backlog Grooming</CardTitle> {/* Updated Icon */}
-                 <CardDescription>Refine backlog items marked as 'Needs Grooming' for project '{projectName}'. Add details, estimate effort, mark as ready for sprint.</CardDescription>
+                 <CardDescription>Refine backlog items marked as 'Needs Grooming' for project '{projectName}'. Add details, estimate effort, mark as ready for sprint, or split stories.</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                  {/* Definition of Ready Dialog */}
@@ -293,40 +324,49 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                                    rows={4}
                                />
                            </div>
-                           {/* Flags for Grooming/Ready */}
-                            <div className="flex items-center space-x-4">
-                              <div className="flex items-center space-x-2">
-                                  <Checkbox
-                                      id={`groom-needs-${item._internalId}`}
-                                      checked={item.needsGrooming}
-                                      onCheckedChange={(checked) => handleCheckboxChange(item._internalId, 'needsGrooming', checked)}
-                                  />
-                                  <Label htmlFor={`groom-needs-${item._internalId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                      Needs Grooming
-                                  </Label>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                  <Checkbox
-                                      id={`groom-ready-${item._internalId}`}
-                                      checked={item.readyForSprint}
-                                      onCheckedChange={(checked) => handleCheckboxChange(item._internalId, 'readyForSprint', checked)}
-                                  />
-                                  <Label htmlFor={`groom-ready-${item._internalId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                      Ready for Sprint
-                                  </Label>
-                                  <TooltipProvider>
-                                      <Tooltip>
-                                          <TooltipTrigger asChild>
-                                              <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                              <p className="text-xs max-w-xs">DoR: Story must be small, clear, prioritized, and have no blockers.</p>
-                                          </TooltipContent>
-                                      </Tooltip>
-                                  </TooltipProvider>
-                              </div>
+                           {/* Flags and Split Button */}
+                            <div className="flex items-center justify-between space-x-4">
+                               <div className="flex items-center space-x-4">
+                                  <div className="flex items-center space-x-2">
+                                      <Checkbox
+                                          id={`groom-needs-${item._internalId}`}
+                                          checked={item.needsGrooming}
+                                          onCheckedChange={(checked) => handleCheckboxChange(item._internalId, 'needsGrooming', checked)}
+                                      />
+                                      <Label htmlFor={`groom-needs-${item._internalId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                          Needs Grooming
+                                      </Label>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                      <Checkbox
+                                          id={`groom-ready-${item._internalId}`}
+                                          checked={item.readyForSprint}
+                                          onCheckedChange={(checked) => handleCheckboxChange(item._internalId, 'readyForSprint', checked)}
+                                      />
+                                      <Label htmlFor={`groom-ready-${item._internalId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                          Ready for Sprint
+                                      </Label>
+                                      <TooltipProvider>
+                                          <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                  <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                  <p className="text-xs max-w-xs">DoR: Story must be small, clear, prioritized, and have no blockers.</p>
+                                              </TooltipContent>
+                                          </Tooltip>
+                                      </TooltipProvider>
+                                  </div>
+                               </div>
+                               <Button
+                                   variant="outline"
+                                   size="sm"
+                                   onClick={() => handleOpenSplitDialog(item)}
+                               >
+                                   <Split className="mr-2 h-4 w-4" /> Split Story
+                               </Button>
                             </div>
-                            {/* Add fields for Estimation, Splitting later */}
+                            {/* Add fields for Estimation later */}
                       </CardContent>
                     )}
                   </Card>
@@ -342,6 +382,17 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
              </CardFooter>
           )}
       </Card>
+
+        {/* Split Backlog Item Dialog */}
+        {splittingTask && (
+            <SplitBacklogItemDialog
+                isOpen={isSplitDialogOpen}
+                onOpenChange={setIsSplitDialogOpen}
+                originalTask={splittingTask}
+                onConfirmSplit={handleConfirmSplit}
+                allProjectBacklogItems={initialBacklog} // Pass all items for ID generation
+            />
+        )}
     </>
   );
 }

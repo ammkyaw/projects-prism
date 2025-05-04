@@ -35,7 +35,7 @@ import AnalyticsChartsTab from '@/components/analytics-charts-tab';
 import AnalyticsReportsTab from '@/components/analytics-reports-tab'; // Updated path
 
 
-import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember } from '@/types/sprint-data'; // Updated Task type reference
+import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember, HistoryStatus } from '@/types/sprint-data'; // Added HistoryStatus
 import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam, initialBacklogTask, taskPriorities } from '@/types/sprint-data'; // Import taskPriorities
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -293,7 +293,7 @@ export default function Home() {
                              initiator: typeof taskData.initiator === 'string' ? taskData.initiator : undefined,
                              dependsOn: Array.isArray(taskData.dependsOn) ? taskData.dependsOn.filter((dep: any): dep is string => typeof dep === 'string') : undefined,
                              movedToSprint: typeof taskData.movedToSprint === 'number' ? taskData.movedToSprint : undefined, // Validate history field
-                             historyStatus: taskData.historyStatus, // Add history status
+                             historyStatus: typeof taskData.historyStatus === 'string' ? taskData.historyStatus as HistoryStatus : undefined, // Validate history status
                              needsGrooming: typeof taskData.needsGrooming === 'boolean' ? taskData.needsGrooming : false, // Validate and default flag
                              readyForSprint: typeof taskData.readyForSprint === 'boolean' ? taskData.readyForSprint : false, // Validate and default flag
                               // Sprint-specific fields should be undefined in backlog context
@@ -1104,6 +1104,76 @@ export default function Home() {
     }, [selectedProjectId, toast]);
 
 
+    // Handler to split a backlog item
+    const handleSplitBacklogItem = useCallback((originalTaskId: string, splitTasks: Task[]) => {
+        if (!selectedProjectId) {
+            toast({ variant: "destructive", title: "Error", description: "No project selected." });
+            return;
+        }
+
+        let originalTaskDetails: string | null = null;
+        let newIds: string[] = [];
+
+        setProjects(prevProjects => {
+            const updatedProjects = prevProjects.map(p => {
+                if (p.id === selectedProjectId) {
+                    const originalBacklogIndex = (p.backlog ?? []).findIndex(item => item.id === originalTaskId);
+                    if (originalBacklogIndex === -1) {
+                        console.error("Original backlog item not found for splitting:", originalTaskId);
+                        toast({ variant: "destructive", title: "Error", description: "Original item not found." });
+                        return p;
+                    }
+
+                    const originalItem = p.backlog![originalBacklogIndex];
+                    originalTaskDetails = `${originalItem.backlogId} (${originalItem.title || 'No Title'})`;
+
+                    // 1. Mark the original item with 'Split' status in history
+                    const markedOriginalItem = {
+                        ...originalItem,
+                        historyStatus: 'Split' as HistoryStatus,
+                        movedToSprint: undefined, // Ensure it's not marked as moved to a sprint
+                    };
+
+                    // 2. Prepare new split tasks with unique IDs
+                    const newSplitTasksWithIds = splitTasks.map((task, index) => ({
+                        ...task,
+                        id: `split_${originalTaskId}_${index}_${Date.now()}`, // Generate unique ID
+                    }));
+                     newIds = newSplitTasksWithIds.map(t => t.backlogId || t.id); // Store new IDs for toast
+
+                    // 3. Update the backlog array
+                    const updatedBacklog = [
+                        // Keep items before the original
+                        ...(p.backlog?.slice(0, originalBacklogIndex) ?? []),
+                        // Add the marked original item (now historical)
+                        markedOriginalItem,
+                        // Add the new split items
+                        ...newSplitTasksWithIds,
+                        // Keep items after the original
+                        ...(p.backlog?.slice(originalBacklogIndex + 1) ?? []),
+                    ];
+
+                    return {
+                        ...p,
+                        backlog: updatedBacklog,
+                    };
+                }
+                return p;
+            });
+            return updatedProjects;
+        });
+
+        if (originalTaskDetails) {
+            toast({
+                title: "Item Split",
+                description: `Backlog item '${originalTaskDetails}' marked as Split. New items added: ${newIds.join(', ')}.`,
+                duration: 5000,
+            });
+        }
+    }, [selectedProjectId, toast]);
+
+
+
   // Handler to add members to the *newly created* project (from dialog)
    const handleAddMembersToNewProject = useCallback((addedMembers: Member[]) => {
        if (!newlyCreatedProjectId) return;
@@ -1502,14 +1572,15 @@ export default function Home() {
             case 'backlog/grooming':
                 componentProps = {
                      ...componentProps,
-                     initialBacklog: selectedProject.backlog?.filter(task => !task.movedToSprint) ?? [], // Only pass non-moved items
-                     onSaveBacklog: handleSaveBacklog
+                     initialBacklog: selectedProject.backlog ?? [], // Pass full backlog
+                     onSaveBacklog: handleSaveBacklog,
+                     onSplitBacklogItem: handleSplitBacklogItem, // Pass split handler
                  };
                 break;
              case 'backlog/history': // Updated sub-tab path
                 componentProps = {
                     ...componentProps,
-                    historyItems: selectedProject.backlog?.filter(task => !!task.movedToSprint) ?? [], // Pass only moved items
+                    historyItems: selectedProject.backlog?.filter(task => !!task.historyStatus) ?? [], // Pass items with history status
                  };
                 break;
             case 'analytics/charts':
