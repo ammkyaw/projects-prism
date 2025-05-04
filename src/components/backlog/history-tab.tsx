@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo } from 'react'; // Added React import
@@ -257,7 +258,7 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
                                   <Button
                                       variant="ghost"
                                       size="icon"
-                                      onClick={() => onUndoBacklogAction(task.id)}
+                                      onClick={() => onUndoBacklogAction(task.id)} // Use the passed callback
                                       className="h-7 w-7 text-blue-600 hover:text-blue-700"
                                       title={`Undo ${task.historyStatus}`}
                                   >
@@ -343,4 +344,3 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
     </>
   );
 }
-

@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -857,7 +858,7 @@ export default function Home() {
 
                      const newSplitTasksWithIds = splitTasks.map((task, index) => {
                          // Split results now get their own unique, standard IDs
-                         const backlogId = generateNextBacklogId(allItemsForIdGen);
+                         const backlogId = task.backlogId || generateNextBacklogId(allItemsForIdGen); // Use provided ID or generate
                          allItemsForIdGen.push({ ...task, backlogId }); // Simulate adding the new item for next ID gen
 
                          return {
@@ -937,7 +938,7 @@ export default function Home() {
                 // Add the new merged task
                  const allItemsForIdGen = [...updatedBacklog, ...itemsToMarkHistorical]; // Use full context for ID generation
                  // Merged items now get a standard new ID, not one ending in '-m'
-                 const newMergedBacklogId = generateNextBacklogId(allItemsForIdGen);
+                 const newMergedBacklogId = mergedTask.backlogId || generateNextBacklogId(allItemsForIdGen); // Use provided or generate
 
                 const newMergedTaskWithId: Task = {
                    ...mergedTask,
@@ -982,9 +983,13 @@ export default function Home() {
 
         let undoneActionType: HistoryStatus | undefined;
         let undoneItemDetails: string | null = null;
+        let restoredItemIds: string[] = [];
+        let removedItemIds: string[] = [];
 
         setProjects(prevProjects => {
             let updatedBacklog: Task[] = [];
+            let projectUpdated = false;
+
             const updatedProjects = prevProjects.map(p => {
                 if (p.id === selectedProjectId) {
                     updatedBacklog = [...(p.backlog || [])];
@@ -992,55 +997,73 @@ export default function Home() {
 
                     if (historyItemIndex === -1) {
                         console.error("History item not found or not eligible for undo:", taskId);
-                        toast({ variant: "destructive", title: "Error", description: "Cannot undo this action." });
+                        toast({ variant: "destructive", title: "Error", description: "Cannot undo this action (item not found or ineligible)." });
                         return p; // Return unchanged project
                     }
 
                     const historyItem = updatedBacklog[historyItemIndex];
                     undoneActionType = historyItem.historyStatus;
                     undoneItemDetails = `${historyItem.backlogId} (${historyItem.title || 'No Title'})`;
-
-                    // Remove the items created by the action (Split/Merge)
-                     const originalBacklogId = historyItem.backlogId;
-                     if (!originalBacklogId) {
-                         console.error(`Cannot undo action for item ID ${taskId} without a backlogId.`);
-                         toast({ variant: "destructive", title: "Error", description: "Original item has no Backlog ID." });
-                         return p;
-                     }
+                     projectUpdated = true; // Assume update will happen
 
                     if (undoneActionType === 'Split') {
-                        // Find and remove items created by this split
-                        // This relies on the split items having IDs starting with the original + unique suffix OR being the direct result
-                        // For simplicity, let's assume we remove items that might have been generated based on ID structure - needs robust linking in real app
-                         console.log(`Attempting to undo Split for base ID: ${originalBacklogId}`);
-                         // This filtering is weak; needs better tracking (e.g., 'splitFromId' field)
-                         updatedBacklog = updatedBacklog.filter(item => !(item.id.startsWith(`split_${taskId}`))); // Example: remove items with IDs derived from the original split event
-                    } else if (undoneActionType === 'Merge') {
-                         // Restore all items originally part of this merge (the ones marked 'Merge')
-                          console.log(`Attempting to undo Merge involving item with Backlog ID: ${originalBacklogId}`);
-                         // Find and remove the single item created by the merge action (this is difficult without a link)
-                         // A placeholder for finding the merge result - NEEDS BETTER TRACKING (e.g., mergeEventId)
-                          console.warn(`Cannot reliably remove the merged result item without better tracking.`);
-                         // updatedBacklog = updatedBacklog.filter(item => item.id !== 'ID_OF_MERGE_RESULT'); // Placeholder
+                         // 1. Restore the original item (remove historyStatus)
+                          historyItem.historyStatus = undefined;
+                          restoredItemIds.push(historyItem.id);
 
-                         // Find and restore *all* items marked as 'Merge' related to this event (again, needs better linking)
-                         // For now, we just restore the one clicked.
-                          updatedBacklog = updatedBacklog.map((item) => {
-                             if (item.id === taskId && item.historyStatus === 'Merge') {
-                                 return { ...item, historyStatus: undefined };
-                             }
-                             // Ideally, find others with same mergeEventId and restore them too.
-                             return item;
+                         // 2. Find and remove items created by this split
+                          // Assume split items have IDs starting with `split_${originalTaskId}_`
+                          updatedBacklog = updatedBacklog.filter(item => {
+                              if (item.id.startsWith(`split_${taskId}_`)) {
+                                   removedItemIds.push(item.backlogId || item.id);
+                                   return false; // Remove this item
+                              }
+                              return true;
                           });
-                    }
+                          // Update the restored original item in the filtered list
+                           const restoredIndex = updatedBacklog.findIndex(item => item.id === taskId);
+                           if (restoredIndex !== -1) {
+                               updatedBacklog[restoredIndex] = historyItem;
+                           } else {
+                               // Should not happen if historyItemIndex was valid, but handle defensively
+                               updatedBacklog.push(historyItem);
+                           }
 
-                    // Restore the status of the *specific historical item* that was clicked for Undo
-                    updatedBacklog = updatedBacklog.map((item) => {
-                        if (item.id === taskId) {
-                            return { ...item, historyStatus: undefined };
-                        }
-                        return item;
-                    });
+                    } else if (undoneActionType === 'Merge') {
+                         // 1. Restore *all* original items involved in this merge (those marked 'Merge' with the same original base ID or context)
+                          // This requires better linking, for now, we only restore the clicked one and others potentially identifiable
+                          const originalItemsToRestore = updatedBacklog.filter(
+                              item => item.historyStatus === 'Merge' && item.id === taskId // Simplistic: restore only the clicked history item
+                              // TODO: Need a way to link all items from the same merge event (e.g., mergeEventId)
+                          );
+
+                          originalItemsToRestore.forEach(item => {
+                              item.historyStatus = undefined;
+                              restoredItemIds.push(item.id);
+                          });
+
+                          // Update the restored items in the main list
+                           updatedBacklog = updatedBacklog.map(item => {
+                               const restored = originalItemsToRestore.find(r => r.id === item.id);
+                               return restored || item;
+                           });
+
+                          // 2. Find and remove the single item created by the merge action
+                          // Requires linking (e.g., mergedFromIds field on the result item)
+                           const mergedResult = updatedBacklog.find(item => item.id.startsWith(`merged_`)); // Placeholder: This is unreliable
+                           if (mergedResult) {
+                               removedItemIds.push(mergedResult.backlogId || mergedResult.id);
+                               updatedBacklog = updatedBacklog.filter(item => item.id !== mergedResult.id);
+                           } else {
+                               console.warn(`Could not reliably find and remove the merged result item for undoing merge related to ${undoneItemDetails}. Manual cleanup might be needed.`);
+                               toast({ variant: "warning", title: "Undo Incomplete", description: "Could not remove the merged result item automatically." });
+                           }
+                    } else {
+                        // Should not happen, but handle unknown status
+                        console.error("Unknown history status for undo:", undoneActionType);
+                        projectUpdated = false; // Do not proceed
+                        return p;
+                    }
 
                     return {
                         ...p,
@@ -1050,13 +1073,20 @@ export default function Home() {
                 return p;
             });
 
+            // Only proceed if an update was actually performed
+            if (!projectUpdated) {
+               return prevProjects; // Return original state if no update occurred
+            }
+
             return updatedProjects;
         });
 
         if (undoneItemDetails && undoneActionType) {
+            const restoredCount = restoredItemIds.length;
+            const removedCount = removedItemIds.length;
             toast({
                 title: `${undoneActionType} Undone`,
-                description: `Action for item '${undoneItemDetails}' undone. Related items may need manual cleanup if linking is imperfect.`,
+                description: `Action for original item(s) related to '${undoneItemDetails}' undone. ${restoredCount} item(s) restored, ${removedCount} item(s) removed.`,
                 duration: 5000,
             });
         }
@@ -1475,25 +1505,21 @@ export default function Home() {
                     generateNextBacklogId: generateNextBacklogId, // Pass the helper
                  };
                 break;
-             case 'backlog/prioritization': // Re-added
-                 componentProps = {
-                     ...componentProps,
-                     initialBacklog: selectedProject.backlog?.filter(task => !task.historyStatus && !task.movedToSprint) ?? [], // Pass only active, non-moved backlog items
-                      onSaveBacklog: (updatedPrioritizedBacklog: Task[]) => {
-                          // Combine updated prioritized items with historical/moved items before saving
-                          const historicalItems = selectedProject.backlog?.filter(task => task.historyStatus || task.movedToSprint) ?? [];
-                          const fullBacklog = [...updatedPrioritizedBacklog, ...historicalItems];
-                          handleUpdateSavedBacklogItem(fullBacklog); // Use a general save handler if needed
-                          // OR: Create a specific handler for prioritized save if logic differs significantly
-                     },
-                 };
-                 break;
             case 'backlog/grooming':
                 componentProps = {
                      ...componentProps,
                      initialBacklog: selectedProject.backlog ?? [], // Pass full backlog
                       // Grooming usually modifies existing items, so reuse update handler or create specific one
-                      onSaveBacklog: (groomedBacklog: Task[]) => { handleUpdateSavedBacklogItem(groomedBacklog); },
+                      onSaveBacklog: (groomedBacklog: Task[]) => {
+                          // Determine which items were updated in grooming
+                          const updatedIds = new Set(groomedBacklog.filter(t => !t.historyStatus).map(t => t.id));
+                          const combined = [
+                              ...groomedBacklog, // Groomed items (may include newly marked historical)
+                              ...(selectedProject.backlog?.filter(t => t.historyStatus && !groomedBacklog.some(gt => gt.id === t.id)) || []) // Keep existing historical not touched in grooming
+                          ];
+                           setProjects(prev => prev.map(p => p.id === selectedProjectId ? { ...p, backlog: combined } : p));
+                           toast({ title: "Backlog Groomed", description: "Changes saved." });
+                      },
                      onSplitBacklogItem: handleSplitBacklogItem, // Pass split handler
                      onMergeBacklogItems: handleMergeBacklogItems, // Pass merge handler
                      onUndoBacklogAction: handleUndoBacklogAction, // Pass undo handler

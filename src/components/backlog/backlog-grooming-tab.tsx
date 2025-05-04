@@ -28,6 +28,7 @@ interface BacklogGroomingTabProps {
   onMergeBacklogItems: (taskIdsToMerge: string[], mergedTask: Task) => void; // Add merge handler prop
   onUndoBacklogAction: (taskId: string) => void; // Add undo handler prop
   generateNextBacklogId: (allProjectBacklogItems: Task[]) => string; // Add helper prop for merging
+  allProjectBacklogItems: Task[]; // Needed for checking ID uniqueness
 }
 
 interface EditableBacklogItem extends Task {
@@ -35,7 +36,7 @@ interface EditableBacklogItem extends Task {
   isEditing?: boolean;
 }
 
-export default function BacklogGroomingTab({ projectId, projectName, initialBacklog, onSaveBacklog, onSplitBacklogItem, onMergeBacklogItems, onUndoBacklogAction, generateNextBacklogId }: BacklogGroomingTabProps) {
+export default function BacklogGroomingTab({ projectId, projectName, initialBacklog, onSaveBacklog, onSplitBacklogItem, onMergeBacklogItems, onUndoBacklogAction, generateNextBacklogId, allProjectBacklogItems }: BacklogGroomingTabProps) {
   const [allEditableBacklog, setAllEditableBacklog] = useState<EditableBacklogItem[]>([]); // Store ALL items
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSplitDialogOpen, setIsSplitDialogOpen] = useState(false); // State for Split dialog
@@ -45,13 +46,13 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
 
    // Filtered list for display (only items needing grooming and not already moved/split/merged)
    const groomingItems = useMemo(() =>
-       allEditableBacklog.filter(item => item.needsGrooming && !item.historyStatus),
+       allEditableBacklog.filter(item => item.needsGrooming && !item.historyStatus), // Ensure historyStatus items are excluded
        [allEditableBacklog]
    );
 
    // Filtered list for Merge dialog (all non-historical items)
     const mergeCandidates = useMemo(() =>
-       allEditableBacklog.filter(item => !item.historyStatus),
+       allEditableBacklog.filter(item => !item.historyStatus), // Ensure historyStatus items are excluded
        [allEditableBacklog]
     );
 
@@ -163,39 +164,12 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
 
    // Handler for the Undo button
    const handleUndoClick = (item: EditableBacklogItem) => {
-      if (!item.backlogId) {
-          toast({ variant: "destructive", title: "Error", description: "Cannot undo action for item without Backlog ID." });
-          return;
-      }
-       // Extract the base ID (e.g., BL-250001 from BL-250001-a or BL-250001-m)
-        const baseIdMatch = item.backlogId.match(/^(BL-\d{6})/); // Adjust regex if ID format changes
-        const baseId = baseIdMatch ? baseIdMatch[1] : null;
-
-
-       if (!baseId) {
-           toast({ variant: "destructive", title: "Error", description: "Could not determine original item ID to undo." });
-           return;
-       }
-
-       // Find the original item(s) in the full backlog (including history)
-       // For Split: Find the item with the baseId and 'Split' status
-       // For Merge: Find *all* items with 'Merge' status that might relate (this needs better tracking ideally)
-       // We need to find the *historical* record of the original item(s)
-       const originalItems = initialBacklog.filter(
-            task => task.backlogId === baseId && (task.historyStatus === 'Split' || task.historyStatus === 'Merge')
-       );
-
-       if (originalItems.length === 0) {
-          toast({ variant: "destructive", title: "Error", description: `Original historical item(s) for ${baseId} not found.` });
-          return;
-       }
-
-       // Assuming undo is triggered from one of the results, we need the *original* historical item's ID
-       // For simplicity, let's assume we just need the ID of the first found original historical item
-       const originalItemId = originalItems[0].id;
-
-       // Call the main undo handler with the ID of the original historical item
-       onUndoBacklogAction(originalItemId);
+        if (!item.id) {
+             toast({ variant: "destructive", title: "Error", description: "Cannot undo action for an item without a persistent ID." });
+             return;
+        }
+        // The action was performed on the item with item.id, so we pass that ID to undo
+       onUndoBacklogAction(item.id);
    };
 
 
@@ -280,10 +254,8 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
   // Check if a backlog ID indicates a split or merged item based on the format (e.g., ends with -suffix)
   const isSplitOrMergedItem = (backlogId: string | undefined): boolean => {
      if (!backlogId) return false;
-     // Checks if the ID ends with '-[number]' (split) or was potentially created by merge (harder to tell without better linking)
-     return /-\d+$/.test(backlogId);
-     // Note: Checking for merge results is complex without a direct link.
-     // Relying on the historical record might be better if needed.
+     // Checks if the ID matches the pattern BL-YYNNNN-suffix or BL-YYNNNN-m
+     return /^BL-\d{6}-[a-zA-Z0-9]+$/.test(backlogId);
   };
 
   return (
@@ -466,7 +438,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                                      <Button
                                          variant="outline"
                                          size="sm"
-                                         onClick={() => handleUndoClick(item)}
+                                         onClick={() => handleUndoClick(item)} // Use handleUndoClick
                                          className="text-blue-600 hover:text-blue-700"
                                          title="Undo Split/Merge"
                                      >
@@ -506,7 +478,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                 onOpenChange={setIsSplitDialogOpen}
                 originalTask={splittingTask}
                 onConfirmSplit={handleConfirmSplit}
-                allProjectBacklogItems={initialBacklog} // Pass all items for ID generation
+                allProjectBacklogItems={allProjectBacklogItems} // Pass all items for ID generation uniqueness check
             />
         )}
 
@@ -517,7 +489,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
              availableBacklogItems={mergeCandidates} // Pass only non-historical items
              onConfirmMerge={handleConfirmMerge}
              generateNextBacklogId={generateNextBacklogId} // Pass helper
-             allProjectBacklogItems={initialBacklog} // Pass all items for ID check
+             allProjectBacklogItems={allProjectBacklogItems} // Pass all items for ID check
          />
     </>
   );
