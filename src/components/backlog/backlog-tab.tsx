@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PlusCircle, Trash2, Package, Save, ArrowUpDown, View, ArrowRightSquare, LinkIcon } from 'lucide-react'; // Added ArrowUpDown
@@ -14,7 +15,7 @@ import type { Task, Member, Sprint, SprintStatus, TaskType } from '@/types/sprin
 import { taskTypes, taskPriorities, initialBacklogTask } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, getYear } from 'date-fns'; // Added getYear
 import SelectDependenciesDialog from '@/components/select-dependencies-dialog'; // Import the new dialog
 
 interface BacklogTabProps {
@@ -27,7 +28,7 @@ interface BacklogTabProps {
   onMoveToSprint: (backlogItemId: string, targetSprintNumber: number) => void;
 }
 
-type SortKey = 'backlogId' | 'title' | 'priority' | 'createdDate';
+type SortKey = 'backlogId' | 'title' | 'priority' | 'createdDate' | 'needsGrooming' | 'readyForSprint'; // Added sorting keys
 type SortDirection = 'asc' | 'desc';
 
 interface BacklogRow extends Omit<Task, 'status'> {
@@ -36,14 +37,42 @@ interface BacklogRow extends Omit<Task, 'status'> {
   ref?: React.RefObject<HTMLDivElement>; // Add ref for scrolling
 }
 
-const createEmptyBacklogRow = (): BacklogRow => ({
-  ...initialBacklogTask,
-  _internalId: `backlog_${Date.now()}_${Math.random()}`,
-  id: '',
-  createdDate: format(new Date(), 'yyyy-MM-dd'),
-  createdDateObj: new Date(),
-  dependsOn: [], // Initialize dependsOn
-});
+// Helper function to generate the next backlog ID
+const generateNextBacklogId = (existingIds: string[]): string => {
+  const currentYear = getYear(new Date()).toString().slice(-2); // Get last two digits of the year
+  const prefix = `BL-${currentYear}`;
+  let maxNum = 0;
+
+  existingIds.forEach(id => {
+    if (id && id.startsWith(prefix)) {
+      const numPart = parseInt(id.substring(prefix.length), 10);
+      if (!isNaN(numPart) && numPart > maxNum) {
+        maxNum = numPart;
+      }
+    }
+  });
+
+  const nextNum = maxNum + 1;
+  const nextNumPadded = nextNum.toString().padStart(4, '0'); // Pad with leading zeros to 4 digits
+  return `${prefix}${nextNumPadded}`;
+};
+
+
+const createEmptyBacklogRow = (existingIds: string[]): BacklogRow => {
+    const nextId = generateNextBacklogId(existingIds);
+    return {
+        ...initialBacklogTask,
+        _internalId: `backlog_${Date.now()}_${Math.random()}`,
+        id: '',
+        backlogId: nextId, // Assign generated ID
+        createdDate: format(new Date(), 'yyyy-MM-dd'),
+        createdDateObj: new Date(),
+        dependsOn: [], // Initialize dependsOn
+        needsGrooming: true, // Default new items to need grooming
+        readyForSprint: false,
+    };
+};
+
 
 export default function BacklogTab({ projectId, projectName, initialBacklog, onSaveBacklog, members, sprints, onMoveToSprint }: BacklogTabProps) {
   const [backlogRows, setBacklogRows] = useState<BacklogRow[]>([]);
@@ -81,6 +110,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
   // Initialize or update rows based on initialBacklog prop
   useEffect(() => {
       rowRefs.current.clear(); // Clear refs when backlog changes
+      const existingIds = initialBacklog.map(task => task.backlogId ?? ''); // Get existing IDs for generation
       const mappedBacklog = initialBacklog.map((task, index) => {
           const internalId = task.id || `initial_backlog_${index}_${Date.now()}`;
           // Ensure each row has a ref
@@ -98,12 +128,14 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
               createdDateObj: parseDateString(task.createdDate),
               initiator: task.initiator ?? '',
               dependsOn: task.dependsOn ?? [],
-              backlogId: task.backlogId ?? task.ticketNumber ?? task.id,
+              backlogId: task.backlogId ?? generateNextBacklogId(existingIds), // Ensure ID exists
+              needsGrooming: task.needsGrooming ?? false,
+              readyForSprint: task.readyForSprint ?? false,
           };
       });
       setBacklogRows(mappedBacklog);
       if (mappedBacklog.length === 0) {
-          const newRow = createEmptyBacklogRow();
+          const newRow = createEmptyBacklogRow(existingIds);
           rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
           setBacklogRows([{ ...newRow, ref: rowRefs.current.get(newRow._internalId) }]);
       }
@@ -125,6 +157,8 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                createdDate: rest.createdDate ?? '',
                initiator: rest.initiator?.trim() || '',
                dependsOn: (rest.dependsOn || []).sort(), // Sort dependencies for consistent comparison
+               needsGrooming: !!rest.needsGrooming, // Ensure boolean
+               readyForSprint: !!rest.readyForSprint, // Ensure boolean
                devEstimatedTime: undefined,
                qaEstimatedTime: undefined,
                bufferTime: undefined,
@@ -170,6 +204,14 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                          aValue = a.backlogId?.toLowerCase() || '';
                          bValue = b.backlogId?.toLowerCase() || '';
                          break;
+                     case 'needsGrooming': // Sort booleans (false first)
+                         aValue = a.needsGrooming ? 1 : 0;
+                         bValue = b.needsGrooming ? 1 : 0;
+                         break;
+                    case 'readyForSprint': // Sort booleans (false first)
+                         aValue = a.readyForSprint ? 1 : 0;
+                         bValue = b.readyForSprint ? 1 : 0;
+                         break;
                     default:
                         aValue = (a[sortConfig.key] as any)?.toString().toLowerCase() || '';
                         bValue = (b[sortConfig.key] as any)?.toString().toLowerCase() || '';
@@ -209,7 +251,8 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
 
   const handleAddRow = () => {
-      const newRow = createEmptyBacklogRow();
+      const existingIds = backlogRows.map(row => row.backlogId ?? '');
+      const newRow = createEmptyBacklogRow(existingIds);
       rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
       setBacklogRows(prev => [...prev, { ...newRow, ref: rowRefs.current.get(newRow._internalId) }]);
   };
@@ -219,7 +262,8 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       setBacklogRows(prevRows => {
           const newRows = prevRows.filter(row => row._internalId !== internalId);
           if (newRows.length === 0) {
-              const newRow = createEmptyBacklogRow();
+              const existingIds = newRows.map(row => row.backlogId ?? ''); // Use remaining IDs
+              const newRow = createEmptyBacklogRow(existingIds);
               rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
               return [{ ...newRow, ref: rowRefs.current.get(newRow._internalId) }];
           }
@@ -228,7 +272,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
   };
 
 
-  const handleInputChange = (internalId: string, field: keyof Omit<BacklogRow, 'id' | '_internalId' | 'dependsOn' | 'createdDateObj' | 'ref' | 'movedToSprint'>, value: string | number | undefined) => {
+  const handleInputChange = (internalId: string, field: keyof Omit<BacklogRow, 'id' | '_internalId' | 'dependsOn' | 'createdDateObj' | 'ref' | 'movedToSprint' | 'needsGrooming' | 'readyForSprint'>, value: string | number | undefined) => {
     setBacklogRows(rows =>
       rows.map(row => (row._internalId === internalId ? { ...row, [field]: value ?? '' } : row))
     );
@@ -252,6 +296,14 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
      }
     handleInputChange(internalId, field, finalValue);
   };
+
+   const handleCheckboxChange = (internalId: string, field: 'needsGrooming' | 'readyForSprint', checked: boolean | 'indeterminate') => {
+     setBacklogRows(rows =>
+       rows.map(row =>
+         row._internalId === internalId ? { ...row, [field]: !!checked } : row // Ensure boolean
+       )
+     );
+   };
 
   const handleViewDetails = (task: BacklogRow) => {
       if (task.backlogId?.trim()) {
@@ -331,6 +383,8 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       const initiator = row.initiator?.trim() || undefined;
       const dependsOn = row.dependsOn || [];
       const priority = row.priority ?? 'Medium';
+      const needsGrooming = !!row.needsGrooming;
+      const readyForSprint = !!row.readyForSprint;
 
       let rowErrors: string[] = [];
       if (!backlogId) rowErrors.push("Backlog ID required");
@@ -372,6 +426,8 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
         initiator,
         dependsOn,
         priority: priority as Task['priority'],
+        needsGrooming,
+        readyForSprint,
         // Keep movedToSprint if it exists (although this component should only see non-moved items)
         movedToSprint: row.movedToSprint,
         // These should remain undefined for backlog items
@@ -407,12 +463,14 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
              ref: rowRefs.current.get(internalId),
              createdDateObj: parseDateString(task.createdDate),
              dependsOn: task.dependsOn ?? [], // Ensure dependsOn is always an array
+             needsGrooming: task.needsGrooming ?? false,
+             readyForSprint: task.readyForSprint ?? false,
          };
      }));
      if (finalBacklog.length === 0) {
-          const newRow = createEmptyBacklogRow();
-          rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
-          setBacklogRows([{ ...newRow, ref: rowRefs.current.get(newRow._internalId) }]);
+           const newRow = createEmptyBacklogRow([]);
+           rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
+           setBacklogRows([{ ...newRow, ref: rowRefs.current.get(newRow._internalId) }]);
      }
   };
 
@@ -440,9 +498,10 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="overflow-x-auto" ref={backlogContainerRef}>
-            <div className="min-w-[1200px] space-y-4">
-                {/* Backlog Table Header */}
-                <div className="hidden md:grid grid-cols-[100px_1fr_120px_120px_120px_100px_100px_80px_40px] gap-x-3 items-center pb-2 border-b sticky top-0 bg-card z-10"> {/* Added sticky header */}
+             {/* Adjust min-width to accommodate new columns */}
+            <div className="min-w-[1600px] space-y-4">
+                {/* Backlog Table Header - Add headers for new flags */}
+                <div className="hidden md:grid grid-cols-[120px_1fr_120px_120px_120px_100px_100px_80px_60px_60px_80px_40px] gap-x-3 items-center pb-2 border-b sticky top-0 bg-card z-10"> {/* Updated grid */}
                      <Button variant="ghost" onClick={() => requestSort('backlogId')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
                         Backlog ID* {getSortIndicator('backlogId')}
                      </Button>
@@ -458,17 +517,24 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                         Priority* {getSortIndicator('priority')}
                      </Button>
                     <Label className="text-xs font-medium text-muted-foreground">Dependencies</Label>
+                    {/* New Flag Headers */}
+                     <Button variant="ghost" onClick={() => requestSort('needsGrooming')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
+                       Groom? {getSortIndicator('needsGrooming')}
+                    </Button>
+                    <Button variant="ghost" onClick={() => requestSort('readyForSprint')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
+                       Ready? {getSortIndicator('readyForSprint')}
+                    </Button>
                     <Label className="text-xs font-medium text-muted-foreground text-center">Actions</Label>
                     <div />
                 </div>
 
-                {/* Backlog Rows */}
+                {/* Backlog Rows - Add inputs for new flags */}
                 <div className="space-y-4 md:space-y-2">
                 {sortedBacklogRows.map((row) => ( // Use sortedBacklogRows here
                     <div
                         key={row._internalId}
                         ref={row.ref} // Assign ref to the row container
-                        className="grid grid-cols-2 md:grid-cols-[100px_1fr_120px_120px_120px_100px_100px_80px_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0 transition-colors duration-1000" // Add transition for highlight
+                        className="grid grid-cols-2 md:grid-cols-[120px_1fr_120px_120px_120px_100px_100px_80px_60px_60px_80px_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0 transition-colors duration-1000" // Updated grid
                     >
                         {/* Backlog ID */}
                         <div className="md:col-span-1 col-span-1 relative">
@@ -478,8 +544,9 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                                  value={row.backlogId ?? ''}
                                  onChange={e => handleInputChange(row._internalId, 'backlogId', e.target.value)}
                                  placeholder="ID-123"
-                                 className={cn("h-9", row.backlogId?.trim() && "text-transparent")} // Hide text if ID exists and link is shown
+                                 className={cn("h-9", row.backlogId?.trim() ? "text-transparent" : "")} // Hide text if ID exists and link is shown
                                  required
+                                 disabled // Disable direct editing of auto-generated ID
                              />
                              {row.backlogId?.trim() && (
                                 <button
@@ -592,16 +659,36 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                                 </Button>
                              </div>
                          </div>
+                          {/* Needs Grooming Checkbox */}
+                          <div className="md:col-span-1 col-span-1 flex items-center justify-center pt-2 md:pt-0">
+                             <Label htmlFor={`needs-grooming-${row._internalId}`} className="md:hidden text-xs font-medium">Groom?</Label>
+                             <Checkbox
+                                id={`needs-grooming-${row._internalId}`}
+                                checked={row.needsGrooming}
+                                onCheckedChange={(checked) => handleCheckboxChange(row._internalId, 'needsGrooming', checked)}
+                                className="h-5 w-5"
+                             />
+                          </div>
+                           {/* Ready for Sprint Checkbox */}
+                           <div className="md:col-span-1 col-span-1 flex items-center justify-center pt-2 md:pt-0">
+                             <Label htmlFor={`ready-sprint-${row._internalId}`} className="md:hidden text-xs font-medium">Ready?</Label>
+                             <Checkbox
+                                id={`ready-sprint-${row._internalId}`}
+                                checked={row.readyForSprint}
+                                onCheckedChange={(checked) => handleCheckboxChange(row._internalId, 'readyForSprint', checked)}
+                                className="h-5 w-5"
+                             />
+                           </div>
                           {/* Actions Cell */}
                           <div className="md:col-span-1 col-span-2 flex items-center gap-1 justify-center">
                              <Button
                                  variant="ghost"
                                  size="icon"
                                  className="h-7 w-7"
-                                 disabled={availableSprints.length === 0 || !row.id?.trim()} // Disable if no sprints or row is not saved yet
+                                 disabled={availableSprints.length === 0 || !row.id?.trim() || !row.readyForSprint} // Disable if not ready for sprint
                                  onClick={() => handleOpenMoveDialog(row.id)}
                                  aria-label="Move to Sprint"
-                                 title={availableSprints.length === 0 ? "No active/planned sprints" : "Move to Sprint"}
+                                 title={!row.readyForSprint ? "Mark as 'Ready?' to move" : availableSprints.length === 0 ? "No active/planned sprints" : "Move to Sprint"}
                              >
                                  <ArrowRightSquare className="h-4 w-4" />
                              </Button>
@@ -677,6 +764,14 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                         <Label className="text-right font-medium text-muted-foreground">Story Points</Label>
                         <span className="col-span-2">{viewingTask.storyPoints || '-'}</span>
                     </div>
+                     <div className="grid grid-cols-3 items-center gap-4">
+                         <Label className="text-right font-medium text-muted-foreground">Needs Grooming</Label>
+                         <span className="col-span-2">{viewingTask.needsGrooming ? 'Yes' : 'No'}</span>
+                     </div>
+                     <div className="grid grid-cols-3 items-center gap-4">
+                         <Label className="text-right font-medium text-muted-foreground">Ready for Sprint</Label>
+                         <span className="col-span-2">{viewingTask.readyForSprint ? 'Yes' : 'No'}</span>
+                     </div>
                 </div>
              )}
             <DialogFooter>
@@ -739,3 +834,5 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
     </>
   );
 }
+
+

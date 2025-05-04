@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react'; // Added React, useEffect, useCallback
+import React, { useState, useEffect, useCallback, useMemo } from 'react'; // Added useMemo
 import type { Task } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea'; // Added Textarea
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { Info, Edit, Save, XCircle } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { taskPriorities } from '@/types/sprint-data'; // Import priorities
@@ -17,8 +18,8 @@ import { cn } from '@/lib/utils';
 interface BacklogGroomingTabProps {
   projectId: string;
   projectName: string;
-  initialBacklog: Task[]; // Receive initial backlog
-  onSaveBacklog: (backlog: Task[]) => void; // Callback to save changes
+  initialBacklog: Task[]; // Receive initial backlog (all items)
+  onSaveBacklog: (backlog: Task[]) => void; // Callback to save changes (saves ALL items, not just groomed)
 }
 
 interface EditableBacklogItem extends Task {
@@ -27,17 +28,23 @@ interface EditableBacklogItem extends Task {
 }
 
 export default function BacklogGroomingTab({ projectId, projectName, initialBacklog, onSaveBacklog }: BacklogGroomingTabProps) {
-  const [editableBacklog, setEditableBacklog] = useState<EditableBacklogItem[]>([]);
+  const [allEditableBacklog, setAllEditableBacklog] = useState<EditableBacklogItem[]>([]); // Store ALL items
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const { toast } = useToast();
 
+   // Filtered list for display (only items needing grooming)
+   const groomingItems = useMemo(() => allEditableBacklog.filter(item => item.needsGrooming), [allEditableBacklog]);
+
+
    // Initialize state when initialBacklog changes
    useEffect(() => {
-       setEditableBacklog(
+       setAllEditableBacklog(
            (initialBacklog || []).map((task, index) => ({ // Add null check for initialBacklog
                ...task,
                _internalId: task.id || `groom_${index}_${Date.now()}`,
                storyPoints: task.storyPoints?.toString() ?? '', // Ensure story points are string for input
+               needsGrooming: task.needsGrooming ?? false, // Ensure boolean
+               readyForSprint: task.readyForSprint ?? false, // Ensure boolean
                isEditing: false,
            }))
        );
@@ -58,6 +65,8 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                createdDate: rest.createdDate ?? '',
                initiator: rest.initiator?.trim() || '',
                dependsOn: (rest.dependsOn || []).sort(),
+               needsGrooming: !!rest.needsGrooming,
+               readyForSprint: !!rest.readyForSprint,
                devEstimatedTime: undefined,
                qaEstimatedTime: undefined,
                bufferTime: undefined,
@@ -70,23 +79,23 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
        const originalBacklogString = JSON.stringify(cleanBacklog(initialBacklog || [])); // Add null check
        const currentBacklogString = JSON.stringify(
             cleanBacklog(
-                editableBacklog // Compare with the current editable state
+                allEditableBacklog // Compare with the FULL current editable state
             )
        );
        setHasUnsavedChanges(originalBacklogString !== currentBacklogString);
-   }, [editableBacklog, initialBacklog]);
+   }, [allEditableBacklog, initialBacklog]);
 
 
   const handleEditToggle = (internalId: string) => {
-    setEditableBacklog(prev =>
+    setAllEditableBacklog(prev =>
       prev.map(item =>
         item._internalId === internalId ? { ...item, isEditing: !item.isEditing } : { ...item, isEditing: false } // Only one can be edited at a time
       )
     );
   };
 
-  const handleInputChange = (internalId: string, field: keyof Omit<EditableBacklogItem, '_internalId' | 'id' | 'isEditing'>, value: string | number | undefined) => {
-    setEditableBacklog(prev =>
+  const handleInputChange = (internalId: string, field: keyof Omit<EditableBacklogItem, '_internalId' | 'id' | 'isEditing' | 'needsGrooming' | 'readyForSprint'>, value: string | number | undefined) => {
+    setAllEditableBacklog(prev =>
       prev.map(item =>
         item._internalId === internalId ? { ...item, [field]: value ?? '' } : item
       )
@@ -97,12 +106,20 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
         handleInputChange(internalId, 'priority', value);
    };
 
+   const handleCheckboxChange = (internalId: string, field: 'needsGrooming' | 'readyForSprint', checked: boolean | 'indeterminate') => {
+       setAllEditableBacklog(prev =>
+           prev.map(item =>
+               item._internalId === internalId ? { ...item, [field]: !!checked } : item
+           )
+       );
+   };
+
   const handleSaveAll = () => {
     let hasErrors = false;
     const finalBacklog: Task[] = [];
     const backlogIds = new Set<string>();
 
-    editableBacklog.forEach((item, index) => {
+    allEditableBacklog.forEach((item, index) => { // Iterate over ALL items
         const backlogId = item.backlogId?.trim() || '';
         const title = item.title?.trim();
         const description = item.description?.trim();
@@ -110,6 +127,8 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
         const storyPointsRaw = item.storyPoints?.toString().trim();
         const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
         const priority = item.priority ?? 'Medium';
+        const needsGrooming = !!item.needsGrooming; // Ensure boolean
+        const readyForSprint = !!item.readyForSprint; // Ensure boolean
 
         let itemErrors: string[] = [];
         if (!backlogId) itemErrors.push(`Row ${index + 1}: Backlog ID required`);
@@ -134,6 +153,8 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
             acceptanceCriteria: acceptanceCriteria, // Save acceptance criteria
             storyPoints: storyPoints,
             priority: priority as Task['priority'],
+            needsGrooming, // Save flag state
+            readyForSprint, // Save flag state
         });
     });
 
@@ -144,10 +165,10 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
     // Sort before saving
     finalBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
 
-    onSaveBacklog(finalBacklog);
+    onSaveBacklog(finalBacklog); // Save the entire updated backlog
     setHasUnsavedChanges(false);
     // Collapse all edit forms after saving
-    setEditableBacklog(prev => prev.map(item => ({ ...item, isEditing: false })));
+    setAllEditableBacklog(prev => prev.map(item => ({ ...item, isEditing: false })));
     toast({ title: "Success", description: "Backlog grooming changes saved." });
   };
 
@@ -156,8 +177,8 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
       <CardHeader>
         <div className="flex justify-between items-center">
             <div>
-               <CardTitle className="flex items-center justify-center gap-2"><Edit className="h-5 w-5 text-primary" /> Backlog Grooming</CardTitle>
-               <CardDescription>Refine backlog items for project '{projectName}': add details, estimate effort, split stories.</CardDescription>
+               <CardTitle className="flex items-center gap-2"><Edit className="h-5 w-5 text-primary" /> Backlog Grooming</CardTitle> {/* Updated Icon */}
+               <CardDescription>Refine backlog items marked as 'Needs Grooming' for project '{projectName}'. Add details, estimate effort, mark as ready for sprint.</CardDescription>
             </div>
             <Button onClick={handleSaveAll} disabled={!hasUnsavedChanges}>
                 <Save className="mr-2 h-4 w-4" /> Save All Changes
@@ -165,15 +186,15 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
         </div>
       </CardHeader>
       <CardContent>
-        {editableBacklog.length === 0 ? (
+        {groomingItems.length === 0 ? ( // Check filtered list for display
              <div className="flex flex-col items-center justify-center min-h-[200px] border-dashed border-2 rounded-md p-6">
                 <Info className="h-8 w-8 text-muted-foreground mb-2" />
-                <p className="text-muted-foreground">No backlog items to groom.</p>
-                <p className="text-sm text-muted-foreground">Add items in the 'Management' tab.</p>
+                <p className="text-muted-foreground">No backlog items currently marked as needing grooming.</p>
+                <p className="text-sm text-muted-foreground">Check items in the 'Management' tab.</p>
              </div>
          ) : (
             <div className="space-y-4">
-              {editableBacklog.map(item => (
+              {groomingItems.map(item => ( // Map over filtered list for display
                 <Card key={item._internalId} className={cn("transition-all", item.isEditing ? "shadow-lg border-primary" : "")}>
                   <CardHeader className="flex flex-row justify-between items-center py-3 px-4">
                     <div className="flex items-center gap-2">
@@ -241,6 +262,29 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                                  rows={4}
                              />
                          </div>
+                         {/* Flags for Grooming/Ready */}
+                          <div className="flex items-center space-x-4">
+                            <div className="flex items-center space-x-2">
+                                <Checkbox
+                                    id={`groom-needs-${item._internalId}`}
+                                    checked={item.needsGrooming}
+                                    onCheckedChange={(checked) => handleCheckboxChange(item._internalId, 'needsGrooming', checked)}
+                                />
+                                <Label htmlFor={`groom-needs-${item._internalId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                    Needs Grooming
+                                </Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <Checkbox
+                                    id={`groom-ready-${item._internalId}`}
+                                    checked={item.readyForSprint}
+                                    onCheckedChange={(checked) => handleCheckboxChange(item._internalId, 'readyForSprint', checked)}
+                                />
+                                <Label htmlFor={`groom-ready-${item._internalId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                    Ready for Sprint
+                                </Label>
+                            </div>
+                          </div>
                           {/* Add fields for Estimation, Splitting later */}
                     </CardContent>
                   )}
@@ -249,7 +293,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
             </div>
          )}
       </CardContent>
-        {editableBacklog.length > 0 && (
+        {groomingItems.length > 0 && ( // Only show footer if items are displayed
            <CardFooter className="border-t pt-4 flex justify-end">
                <Button onClick={handleSaveAll} disabled={!hasUnsavedChanges}>
                    <Save className="mr-2 h-4 w-4" /> Save All Changes
@@ -259,3 +303,4 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
     </Card>
   );
 }
+

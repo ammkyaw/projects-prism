@@ -48,7 +48,7 @@ export const taskTypes: TaskType[] = [
 // Represents a single task within a sprint plan or backlog
 export interface Task {
   id: string; // Unique ID for the task item
-  backlogId?: string; // Optional: The original ID from the backlog if moved
+  backlogId?: string; // Unique, auto-generated Backlog ID (e.g., BL-YYNNNN)
   ticketNumber?: string; // Primary identifier for tasks *within* a sprint (e.g., JIRA key), can be same as backlogId initially
   title?: string; // Optional: A more descriptive title for the task
   description?: string; // Optional: Detailed description of the task
@@ -67,6 +67,8 @@ export interface Task {
   taskType?: TaskType; // Type of task/work item
   createdDate?: string; // YYYY-MM-DD, when the item was added to the backlog
   initiator?: string; // Name or ID of the person who added the item
+  needsGrooming?: boolean; // Flag to indicate if item needs refinement
+  readyForSprint?: boolean; // Flag to indicate if item is ready to be pulled into a sprint
   // --- History Tracking ---
   movedToSprint?: number; // Optional: The sprint number this backlog item was moved to. Used for history.
   // Legacy fields - keep if needed for migration or detail view, but planning uses new fields
@@ -171,8 +173,8 @@ export const initialTeam: Omit<Team, 'id'> = {
 // Initial empty state for a new Task in the backlog
 // Note: 'status' is implicitly 'Backlog' when an item is in the backlog array.
 export const initialBacklogTask: Omit<Task, 'id'> = {
-    backlogId: '', // Keep backlogId for user input
-    ticketNumber: '', // Keep ticketNumber separate for when it moves to sprint
+    backlogId: '', // Will be auto-generated
+    ticketNumber: '',
     title: '',
     description: '',
     acceptanceCriteria: undefined, // Added acceptance criteria
@@ -182,6 +184,8 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     createdDate: '', // Will be set on creation
     initiator: '', // Will be set (maybe manually for now)
     dependsOn: [],
+    needsGrooming: false, // Initialize new flags
+    readyForSprint: false,
     movedToSprint: undefined, // Initialize as not moved
     // Fields typically set during sprint planning:
     devEstimatedTime: undefined,
