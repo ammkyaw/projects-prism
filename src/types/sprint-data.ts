@@ -1,5 +1,3 @@
-
-
 // Represents the status of a sprint
 export type SprintStatus = 'Planned' | 'Active' | 'Completed';
 
@@ -52,7 +50,7 @@ export type HistoryStatus = 'Move' | 'Split' | 'Merge';
 // Represents a single task within a sprint plan or backlog
 export interface Task {
   id: string; // Unique ID for the task item
-  backlogId?: string; // Unique, auto-generated Backlog ID (e.g., BL-YYNNNN)
+  backlogId?: string | ''; // Allow empty string for manual input
   ticketNumber?: string; // Primary identifier for tasks *within* a sprint (e.g., JIRA key), can be same as backlogId initially
   title?: string; // Optional: A more descriptive title for the task
   description?: string; // Optional: Detailed description of the task
@@ -178,7 +176,7 @@ export const initialTeam: Omit<Team, 'id'> = {
 // Initial empty state for a new Task in the backlog
 // Note: 'status' is implicitly 'Backlog' when an item is in the backlog array.
 export const initialBacklogTask: Omit<Task, 'id'> = {
-    backlogId: '', // Will be auto-generated
+    backlogId: '', // Allow manual entry
     ticketNumber: '',
     title: '',
     description: '',
@@ -201,4 +199,3 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     reviewer: undefined,
     startDate: undefined,
 };
-

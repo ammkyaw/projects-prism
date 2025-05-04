@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -24,25 +23,7 @@ interface MergeBacklogDialogProps {
   onConfirmMerge: (taskIdsToMerge: string[], mergedTask: Task) => void;
 }
 
-// Helper to generate the next merged backlog ID (reuse logic, ensure '-m' suffix)
-const generateNextBacklogId = (allProjectBacklogItems: Task[], baseId?: string, suffix?: string): string => {
-    // Merged IDs always get a new base ID + '-m'
-   const currentYear = getYear(new Date()).toString().slice(-2);
-   const prefix = `BL-${currentYear}`;
-   let maxNum = 0;
-   allProjectBacklogItems.forEach(item => {
-     const id = item.backlogId;
-     if (id && id.startsWith(prefix) && !id.includes('-') && !id.includes('m')) {
-       const numPart = parseInt(id.substring(prefix.length), 10);
-       if (!isNaN(numPart) && numPart > maxNum) {
-         maxNum = numPart;
-       }
-     }
-   });
-   const nextNum = maxNum + 1;
-   const nextNumPadded = nextNum.toString().padStart(4, '0');
-   return `${prefix}${nextNumPadded}-m`;
- };
+// Removed generateNextBacklogId for merged items
 
  // Helper function to get the highest priority among selected tasks
  const getHighestPriority = (tasks: Task[]): Task['priority'] => {
@@ -101,6 +82,7 @@ export default function MergeBacklogDialog({
     const acceptanceCriteria = selectedTasks.map(t => t.acceptanceCriteria || '').filter(Boolean).join('\n\n---\n\n');
 
     setMergedTaskDetails({
+      backlogId: '', // Start with empty ID for manual entry
       title: `Merged: ${titles}`,
       priority: getHighestPriority(selectedTasks), // Default to highest priority among selected
       description: descriptions,
@@ -120,7 +102,15 @@ export default function MergeBacklogDialog({
 
   const handleConfirm = () => {
     // Validate required fields for the new merged task
-    const { title, priority, taskType, createdDate } = mergedTaskDetails;
+    const { backlogId, title, priority, taskType, createdDate } = mergedTaskDetails;
+    if (!backlogId?.trim()) { // Validate manually entered ID
+        toast({ variant: "destructive", title: "Validation Error", description: "Merged task Backlog ID is required." });
+        return;
+    }
+    if (availableBacklogItems.some(t => t.backlogId?.toLowerCase() === backlogId.toLowerCase())) { // Check uniqueness
+        toast({ variant: "destructive", title: "Validation Error", description: `Backlog ID "${backlogId}" already exists.` });
+        return;
+    }
     if (!title?.trim()) {
         toast({ variant: "destructive", title: "Validation Error", description: "Merged task Title is required." });
         return;
@@ -143,8 +133,8 @@ export default function MergeBacklogDialog({
        ...initialBacklogTask, // Start with defaults
        ...mergedTaskDetails, // Apply edited details
        id: '', // Will be set by parent
-       backlogId: '', // Will be set by parent using generateNextBacklogId
-       ticketNumber: '', // Will be set by parent
+       backlogId: backlogId.trim(), // Use the validated manual ID
+       ticketNumber: backlogId.trim(), // Use backlogId as initial ticketNumber
        needsGrooming: true, // Merged items always need grooming
        readyForSprint: false,
     };
@@ -153,7 +143,7 @@ export default function MergeBacklogDialog({
     onOpenChange(false); // Close dialog
   };
 
-   const handleInputChange = (field: keyof Omit<Task, 'id' | 'backlogId' | 'ticketNumber' | 'historyStatus' | 'movedToSprint' | 'status' | 'startDate'>, value: string | number | string[] | undefined) => {
+   const handleInputChange = (field: keyof Omit<Task, 'id' | 'ticketNumber' | 'historyStatus' | 'movedToSprint' | 'status' | 'startDate'>, value: string | number | string[] | undefined) => { // Adjusted fields
         setMergedTaskDetails(prev => ({ ...prev, [field]: value ?? '' }));
    };
 
@@ -179,7 +169,7 @@ export default function MergeBacklogDialog({
            )}
            {step === 'confirm' && (
              <DialogDescription>
-                 Review and edit the details for the new merged backlog item. Original items will be marked as 'Merged' in History.
+                 Review and edit the details for the new merged backlog item. Enter a unique Backlog ID. Original items will be marked as 'Merged' in History.
              </DialogDescription>
            )}
         </DialogHeader>
@@ -230,6 +220,15 @@ export default function MergeBacklogDialog({
              <ScrollArea className="max-h-[60vh] w-full rounded-md border p-4 mt-4">
                 <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                         <div className="space-y-1">
+                            <Label htmlFor="merged-backlog-id">Backlog ID*</Label>
+                            <Input
+                               id="merged-backlog-id"
+                               value={mergedTaskDetails.backlogId ?? ''}
+                               onChange={e => handleInputChange('backlogId', e.target.value)}
+                               placeholder="Enter unique Backlog ID"
+                            />
+                         </div>
                         <div className="space-y-1 md:col-span-2">
                            <Label htmlFor="merged-title">Title*</Label>
                            <Input

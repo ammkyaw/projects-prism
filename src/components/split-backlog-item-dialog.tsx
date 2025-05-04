@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -21,48 +20,21 @@ interface SplitBacklogItemDialogProps {
   onOpenChange: (open: boolean) => void;
   originalTask: Task; // The task being split
   onConfirmSplit: (originalTaskId: string, splitTasks: Task[]) => void;
-  allProjectBacklogItems: Task[]; // Needed for generating next ID
+  allProjectBacklogItems: Task[]; // Needed for checking ID uniqueness
 }
 
 interface SplitTaskRow extends Partial<Task> {
   _internalId: string;
 }
 
-// Helper function to generate the next backlog ID based on *all* items (reused from BacklogTab)
-const generateNextBacklogId = (allProjectBacklogItems: Task[], baseId?: string, suffix?: string): string => {
-   if (baseId && suffix) {
-       return `${baseId}-${suffix}`;
-   }
+// Removed generateNextBacklogId function specific to split
 
-  const currentYear = getYear(new Date()).toString().slice(-2); // Get last two digits of the year
-  const prefix = `BL-${currentYear}`;
-  let maxNum = 0;
-
-  allProjectBacklogItems.forEach(item => {
-    const id = item.backlogId; // Use the actual backlogId
-    if (id && id.startsWith(prefix) && !id.includes('-')) { // Only consider base IDs
-      const numPart = parseInt(id.substring(prefix.length), 10);
-      if (!isNaN(numPart) && numPart > maxNum) {
-        maxNum = numPart;
-      }
-    }
-  });
-
-  const nextNum = maxNum + 1;
-  const nextNumPadded = nextNum.toString().padStart(4, '0'); // Pad with leading zeros to 4 digits
-  return `${prefix}${nextNumPadded}`;
-};
-
-
-const createEmptySplitTaskRow = (baseTask: Task, suffix: string, allItems: Task[]): SplitTaskRow => {
-    // Attempt to generate ID like BL-YYNNNN-a, but if base ID isn't set, generate a completely new one
-    const backlogId = baseTask.backlogId ? generateNextBacklogId(allItems, baseTask.backlogId, suffix) : generateNextBacklogId(allItems);
-
+const createEmptySplitTaskRow = (baseTask: Task, partNumber: number): SplitTaskRow => {
     return {
-        _internalId: `split_${baseTask.id}_${suffix}_${Date.now()}`,
+        _internalId: `split_${baseTask.id}_part${partNumber}_${Date.now()}`,
         id: '', // New ID needed on save
-        backlogId: backlogId, // Append suffix
-        title: `${baseTask.title} (Part ${suffix.toUpperCase()})` ?? `Split Task ${suffix.toUpperCase()}`,
+        backlogId: '', // User will enter ID manually
+        title: `${baseTask.title} (Part ${partNumber})` ?? `Split Task ${partNumber}`,
         description: baseTask.description ?? '',
         acceptanceCriteria: '', // Start AC fresh
         storyPoints: '', // Reset story points, needs re-estimation
@@ -90,24 +62,17 @@ export default function SplitBacklogItemDialog({
     if (isOpen && originalTask) {
       // Initialize with two split tasks by default when dialog opens
       setSplitTaskRows([
-        createEmptySplitTaskRow(originalTask, 'a', allProjectBacklogItems),
-        createEmptySplitTaskRow(originalTask, 'b', allProjectBacklogItems),
+        createEmptySplitTaskRow(originalTask, 1),
+        createEmptySplitTaskRow(originalTask, 2),
       ]);
     } else {
       setSplitTaskRows([]); // Reset when closed
     }
-  }, [isOpen, originalTask, allProjectBacklogItems]);
-
-  const getNextSuffix = () => {
-    const lastSuffixCharCode = splitTaskRows.length > 0
-      ? splitTaskRows[splitTaskRows.length - 1].backlogId?.split('-').pop()?.charCodeAt(0) ?? 'a'.charCodeAt(0) - 1
-      : 'a'.charCodeAt(0) - 1;
-    return String.fromCharCode(lastSuffixCharCode + 1);
-  };
+  }, [isOpen, originalTask]); // Removed allProjectBacklogItems dependency
 
   const handleAddSplitTaskRow = () => {
-    const nextSuffix = getNextSuffix();
-    setSplitTaskRows(prev => [...prev, createEmptySplitTaskRow(originalTask, nextSuffix, allProjectBacklogItems)]);
+    const nextPartNumber = splitTaskRows.length + 1;
+    setSplitTaskRows(prev => [...prev, createEmptySplitTaskRow(originalTask, nextPartNumber)]);
   };
 
   const handleRemoveSplitTaskRow = (internalId: string) => {
@@ -122,7 +87,7 @@ export default function SplitBacklogItemDialog({
     });
   };
 
-  const handleInputChange = (internalId: string, field: keyof Omit<SplitTaskRow, '_internalId' | 'id' | 'backlogId'>, value: string | number | undefined) => {
+  const handleInputChange = (internalId: string, field: keyof Omit<SplitTaskRow, '_internalId' | 'id'>, value: string | number | undefined) => { // Adjust fields as needed
     setSplitTaskRows(rows =>
       rows.map(row => (row._internalId === internalId ? { ...row, [field]: value ?? '' } : row))
     );
@@ -156,14 +121,14 @@ export default function SplitBacklogItemDialog({
      }
 
     splitTaskRows.forEach((row, index) => {
-      const backlogId = row.backlogId?.trim();
+      const backlogId = row.backlogId?.trim(); // Now manually entered
       const title = row.title?.trim();
       const storyPointsRaw = row.storyPoints?.toString().trim();
       const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
       const priority = row.priority ?? 'Medium';
 
       let rowErrors: string[] = [];
-      if (!backlogId) rowErrors.push(`Split Task ${index + 1}: Backlog ID is missing (should be auto-generated).`);
+      if (!backlogId) rowErrors.push(`Split Task ${index + 1}: Backlog ID is required.`); // ID is now mandatory
       if (backlogId && (newBacklogIds.has(backlogId.toLowerCase()) || allProjectBacklogItems.some(t => t.backlogId?.toLowerCase() === backlogId.toLowerCase() && t.id !== originalTask.id))) {
            rowErrors.push(`Split Task ${index + 1}: Duplicate Backlog ID "${backlogId}".`);
       }
@@ -237,7 +202,7 @@ export default function SplitBacklogItemDialog({
             <Split className="h-5 w-5 text-primary" /> Split Backlog Item: {originalTask.backlogId}
           </DialogTitle>
           <DialogDescription>
-            Divide '{originalTask.title}' into smaller, manageable tasks. New items will inherit some details but need re-estimation and grooming.
+            Divide '{originalTask.title}' into smaller, manageable tasks. Enter a unique Backlog ID for each new item. New items inherit some details but need re-estimation and grooming.
           </DialogDescription>
         </DialogHeader>
 
@@ -257,6 +222,15 @@ export default function SplitBacklogItemDialog({
                      <Trash2 className="h-4 w-4" />
                  </Button>
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                     <div className="space-y-1">
+                        <Label htmlFor={`split-id-${row._internalId}`}>Backlog ID*</Label>
+                        <Input
+                           id={`split-id-${row._internalId}`}
+                           value={row.backlogId ?? ''}
+                           onChange={e => handleInputChange(row._internalId, 'backlogId', e.target.value)}
+                           placeholder="Enter unique Backlog ID"
+                        />
+                     </div>
                     <div className="space-y-1 md:col-span-2">
                        <Label htmlFor={`split-title-${row._internalId}`}>Title*</Label>
                        <Input

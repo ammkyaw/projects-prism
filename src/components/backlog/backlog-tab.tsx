@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -37,47 +36,15 @@ interface BacklogRow extends Omit<Task, 'status'> {
   ref?: React.RefObject<HTMLDivElement>; // Add ref for scrolling
 }
 
-// Helper function to generate the next backlog ID based on *all* items
-const generateNextBacklogId = (allProjectBacklogItems: Task[], currentUnsavedRows: BacklogRow[]): string => {
-    const currentYear = getYear(new Date()).toString().slice(-2); // Get last two digits of the year
-    const prefix = `BL-${currentYear}`;
-    let maxNum = 0;
+// Removed generateNextBacklogId function
 
-    // Check saved items first
-    allProjectBacklogItems.forEach(item => {
-      const id = item.backlogId; // Use the actual backlogId
-      if (id && id.startsWith(prefix) && !id.includes('-') && !id.includes('m')) { // Only consider base BL-YYxxxx IDs
-        const numPart = parseInt(id.substring(prefix.length), 10);
-        if (!isNaN(numPart) && numPart > maxNum) {
-          maxNum = numPart;
-        }
-      }
-    });
-
-    // Check unsaved items
-    currentUnsavedRows.forEach(item => {
-       const id = item.backlogId;
-       if (id && id.startsWith(prefix) && !id.includes('-') && !id.includes('m')) {
-         const numPart = parseInt(id.substring(prefix.length), 10);
-         if (!isNaN(numPart) && numPart > maxNum) {
-           maxNum = numPart;
-         }
-       }
-     });
-
-    const nextNum = maxNum + 1;
-    const nextNumPadded = nextNum.toString().padStart(4, '0'); // Pad with leading zeros to 4 digits
-    return `${prefix}${nextNumPadded}`;
-  };
-
-
-const createEmptyBacklogRow = (allProjectBacklogItems: Task[], currentUnsavedRows: BacklogRow[]): BacklogRow => {
-    const nextId = generateNextBacklogId(allProjectBacklogItems, currentUnsavedRows);
+const createEmptyBacklogRow = (): BacklogRow => {
+    // Removed ID generation - backlogId will be entered manually
     return {
         ...initialBacklogTask,
         _internalId: `backlog_${Date.now()}_${Math.random()}`,
         id: '',
-        backlogId: nextId, // Assign generated ID
+        backlogId: '', // Initialize as empty string for manual input
         createdDate: format(new Date(), 'yyyy-MM-dd'),
         createdDateObj: new Date(),
         dependsOn: [], // Initialize dependsOn
@@ -146,28 +113,23 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
               createdDateObj: parseDateString(task.createdDate),
               initiator: task.initiator ?? '',
               dependsOn: task.dependsOn ?? [],
-              backlogId: task.backlogId ?? generateNextBacklogId(initialBacklog, backlogRows), // Generate ID based on ALL items if missing
+              backlogId: task.backlogId ?? '', // Use existing ID or empty string
               needsGrooming: task.needsGrooming ?? false,
               readyForSprint: task.readyForSprint ?? false,
           };
       });
       setBacklogRows(mappedBacklog);
       // DO NOT add an empty row by default
-      // if (mappedBacklog.length === 0) {
-      //     const newRow = createEmptyBacklogRow(initialBacklog, backlogRows); // Use all items for ID generation
-      //     rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
-      //     setBacklogRows([{ ...newRow, ref: rowRefs.current.get(newRow._internalId) }]);
-      // }
       setHasUnsavedChanges(false);
-  }, [displayableBacklogItems, projectId, initialBacklog]); // Removed backlogRows dependency to prevent loop
+  }, [displayableBacklogItems, projectId]); // Removed initialBacklog, backlogRows dependencies
 
 
   // Track unsaved changes
    useEffect(() => {
-        const cleanBacklog = (tasks: Task[]): Omit<Task, 'id' | 'status' | 'createdDateObj' | '_internalId' | 'movedToSprint' | 'historyStatus'>[] =>
-           tasks.map(({ id, status, createdDateObj, _internalId, backlogId, ref, movedToSprint, historyStatus, ...rest }: any) => ({ // Exclude ref and movedToSprint/historyStatus
+        const cleanBacklog = (tasks: (Task | BacklogRow)[]): Omit<Task, 'id' | 'status' | 'createdDateObj' | '_internalId' | 'movedToSprint' | 'historyStatus'>[] =>
+           tasks.map(({ id, status, createdDateObj, _internalId, ref, movedToSprint, historyStatus, ...rest }: any) => ({ // Exclude ref and movedToSprint/historyStatus
                ...rest,
-               backlogId: (backlogId || rest.ticketNumber || id)?.trim(),
+               backlogId: (rest.backlogId || rest.ticketNumber)?.trim() || '', // Use backlogId or ticketNumber, fallback empty
                title: rest.title?.trim() || '',
                description: rest.description?.trim() || '',
                storyPoints: rest.storyPoints?.toString().trim() || '',
@@ -184,7 +146,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                assignee: undefined,
                reviewer: undefined,
                startDate: undefined,
-               ticketNumber: undefined,
+               ticketNumber: undefined, // Don't compare ticketNumber directly here if using backlogId
            })).sort((a, b) => (a.backlogId || '').localeCompare(b.backlogId || ''));
 
        const originalBacklogString = JSON.stringify(cleanBacklog(initialBacklog.filter(t => !t.movedToSprint && !t.historyStatus))); // Compare against initial non-moved/non-historical items
@@ -282,7 +244,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
 
   const handleAddRow = () => {
-      const newRow = createEmptyBacklogRow(initialBacklog, backlogRows); // Pass both for accurate ID generation
+      const newRow = createEmptyBacklogRow();
       rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
       setBacklogRows(prev => [...prev, { ...newRow, ref: rowRefs.current.get(newRow._internalId) }]);
   };
@@ -291,13 +253,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       rowRefs.current.delete(internalId); // Remove ref when row is removed
       setBacklogRows(prevRows => {
           const newRows = prevRows.filter(row => row._internalId !== internalId);
-          // DO NOT add an empty row if all are removed
-          // if (newRows.length === 0) {
-          //     const newRow = createEmptyBacklogRow(initialBacklog, newRows); // Use all items for ID generation
-          //     rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
-          //     return [{ ...newRow, ref: rowRefs.current.get(newRow._internalId) }];
-          // }
-          return newRows;
+          return newRows; // No need to add empty row
       });
   };
 
@@ -420,7 +376,9 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
       let rowErrors: string[] = [];
       if (!backlogId) rowErrors.push("Backlog ID required");
-      if (backlogId && backlogIds.has(backlogId.toLowerCase())) rowErrors.push(`Duplicate Backlog ID "${backlogId}"`);
+      if (backlogId && (backlogIds.has(backlogId.toLowerCase()) || initialBacklog.some(t => t.id !== row.id && t.backlogId?.toLowerCase() === backlogId.toLowerCase()))) { // Check against existing and unsaved
+           rowErrors.push(`Duplicate Backlog ID "${backlogId}"`);
+      }
       if (!title) rowErrors.push("Title required");
       if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) rowErrors.push("Invalid Story Points");
       if (!createdDate || !isValid(parseISO(createdDate))) rowErrors.push("Invalid Created Date (use YYYY-MM-DD)");
@@ -447,7 +405,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
        if (backlogId) backlogIds.add(backlogId.toLowerCase());
 
       finalBacklogPortion.push({
-        id: row.id || `backlog_${projectId}_${Date.now()}_${index}`,
+        id: row.id || `backlog_${projectId}_${Date.now()}_${index}`, // Keep existing ID or generate new if truly new
         backlogId: backlogId,
         ticketNumber: backlogId,
         title,
@@ -504,12 +462,6 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
              readyForSprint: task.readyForSprint ?? false,
          };
      }));
-     // DO NOT add an empty row after saving
-     // if (finalBacklogPortion.length === 0) {
-     //       const newRow = createEmptyBacklogRow(initialBacklog, []); // Pass empty array for current rows
-     //       rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
-     //       setBacklogRows([{ ...newRow, ref: rowRefs.current.get(newRow._internalId) }]);
-     // }
   };
 
    // Memoized list of potential dependencies (other backlog items)
@@ -591,20 +543,20 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                                  id={`backlog-id-${row._internalId}`}
                                  value={row.backlogId ?? ''}
                                  onChange={e => handleInputChange(row._internalId, 'backlogId', e.target.value)}
-                                 placeholder="ID-123"
-                                 className={cn("h-9", row.backlogId?.trim() ? "text-transparent" : "")} // Hide text if ID exists and link is shown
+                                 placeholder="Enter ID (e.g., BL-YYNNNN)" // Placeholder for manual entry
+                                 className={cn("h-9")} // Removed conditional hiding
                                  required
-                                // Keep disabled, as ID should be auto-generated or copied
-                                 disabled
+                                 // No longer disabled
                              />
-                             {row.backlogId?.trim() && (
+                             {/* Show details link only if ID exists and has been potentially saved */}
+                             {row.id && row.backlogId?.trim() && (
                                 <button
                                     type="button"
                                     onClick={() => handleViewDetails(row)}
-                                    className="absolute inset-0 z-10 flex items-center pl-3 text-sm font-medium text-primary underline cursor-pointer bg-transparent border-none hover:text-primary/80"
+                                    className="absolute top-1/2 right-2 z-10 -translate-y-1/2 text-primary hover:text-primary/80 cursor-pointer"
                                     aria-label={`View details for ${row.backlogId}`}
                                 >
-                                    {row.backlogId}
+                                    <View className="h-4 w-4" />
                                 </button>
                              )}
                         </div>

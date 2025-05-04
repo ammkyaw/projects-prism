@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'; // Added useMemo
@@ -166,7 +165,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
           toast({ variant: "destructive", title: "Error", description: "Cannot undo action for item without Backlog ID." });
           return;
       }
-       // Extract the base ID (e.g., BL-250001 from BL-250001-a)
+       // Extract the base ID (e.g., BL-250001 from BL-250001-a or BL-250001-m)
        const baseIdMatch = item.backlogId.match(/^(BL-\d{6})/); // Adjust regex if ID format changes
        const baseId = baseIdMatch ? baseIdMatch[1] : null;
 
@@ -175,18 +174,25 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
            return;
        }
 
-       // Find the original item in the full backlog (including history)
-       const originalItem = initialBacklog.find(
-           task => task.backlogId === baseId && (task.historyStatus === 'Split' || task.historyStatus === 'Merge')
+       // Find the original item(s) in the full backlog (including history)
+       // For Split: Find the item with the baseId and 'Split' status
+       // For Merge: Find *all* items with 'Merge' status that might relate (this needs better tracking ideally)
+       // We need to find the *historical* record of the original item(s)
+       const originalItems = initialBacklog.filter(
+           task => (task.backlogId === baseId && (task.historyStatus === 'Split' || task.historyStatus === 'Merge'))
        );
 
-       if (!originalItem) {
-          toast({ variant: "destructive", title: "Error", description: `Original item for ${baseId} not found in history.` });
+       if (originalItems.length === 0) {
+          toast({ variant: "destructive", title: "Error", description: `Original historical item(s) for ${baseId} not found.` });
           return;
        }
 
+       // Assuming undo is triggered from one of the results, we need the *original* historical item's ID
+       // For simplicity, let's assume we just need the ID of the first found original historical item
+       const originalItemId = originalItems[0].id;
+
        // Call the main undo handler with the ID of the original historical item
-       onUndoBacklogAction(originalItem.id);
+       onUndoBacklogAction(originalItemId);
    };
 
 
@@ -498,5 +504,3 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
     </>
   );
 }
-
-
