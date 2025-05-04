@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -6,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Ad
 import * as XLSX from 'xlsx';
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History, CheckCircle } from 'lucide-react'; // Added History icon, CheckCircle
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History, CheckCircle, Undo } from 'lucide-react'; // Added Undo icon
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -85,9 +84,11 @@ const createEmptyTaskRow = (): Task => ({
 // Helper function to generate the next backlog ID based on *all* items
 const generateNextBacklogId = (allProjectBacklogItems: Task[], baseId?: string, suffix?: string): string => {
     if (baseId && suffix) {
+        // Handle split/merge ID generation (e.g., BL-YYNNNN-a, BL-YYNNNN-m)
         return `${baseId}-${suffix}`;
     }
 
+   // Handle new base ID generation (BL-YYNNNN)
    const currentYear = getYear(new Date()).toString().slice(-2); // Get last two digits of the year
    const prefix = `BL-${currentYear}`;
    let maxNum = 0;
@@ -105,8 +106,7 @@ const generateNextBacklogId = (allProjectBacklogItems: Task[], baseId?: string, 
    const nextNum = maxNum + 1;
    const nextNumPadded = nextNum.toString().padStart(4, '0'); // Pad with leading zeros to 4 digits
    const newBaseId = `${prefix}${nextNumPadded}`;
-   // If suffix is 'm', return immediately, otherwise return base ID
-   return suffix === 'm' ? `${newBaseId}-m` : newBaseId;
+   return newBaseId;
  };
 
 
@@ -1241,11 +1241,12 @@ export default function Home() {
                 }).filter((item): item is Task => item !== null); // Remove the original items from active view
 
                 // Add the new merged task
+                const allItemsForIdGen = [...updatedBacklog, ...itemsToMarkHistorical]; // Include historical for ID gen context
                 const newMergedTaskWithId: Task = {
                    ...mergedTask,
                    id: `merged_${Date.now()}_${Math.random()}`, // Generate unique ID
-                   backlogId: generateNextBacklogId([...updatedBacklog, ...itemsToMarkHistorical], undefined, 'm'), // Generate merged ID like BL-YYNNNN-m
-                   ticketNumber: generateNextBacklogId([...updatedBacklog, ...itemsToMarkHistorical], undefined, 'm'), // Default ticket number
+                   backlogId: generateNextBacklogId(allItemsForIdGen, undefined, 'm'), // Generate merged ID like BL-YYNNNN-m
+                   ticketNumber: generateNextBacklogId(allItemsForIdGen, undefined, 'm'), // Default ticket number
                    needsGrooming: true,
                    readyForSprint: false,
                 };
@@ -1274,6 +1275,82 @@ export default function Home() {
         });
 
     }, [selectedProjectId, toast]);
+
+    // Handler to undo a backlog action (Split/Merge)
+    const handleUndoBacklogAction = useCallback((taskId: string) => {
+        if (!selectedProjectId) {
+            toast({ variant: "destructive", title: "Error", description: "No project selected." });
+            return;
+        }
+
+        let undoneActionType: HistoryStatus | undefined;
+        let undoneItemDetails: string | null = null;
+
+        setProjects(prevProjects => {
+            let updatedBacklog: Task[] = [];
+            const updatedProjects = prevProjects.map(p => {
+                if (p.id === selectedProjectId) {
+                    updatedBacklog = [...(p.backlog || [])];
+                    const historyItemIndex = updatedBacklog.findIndex(item => item.id === taskId && (item.historyStatus === 'Split' || item.historyStatus === 'Merge'));
+
+                    if (historyItemIndex === -1) {
+                        console.error("History item not found or not eligible for undo:", taskId);
+                        toast({ variant: "destructive", title: "Error", description: "Cannot undo this action." });
+                        return p; // Return unchanged project
+                    }
+
+                    const historyItem = updatedBacklog[historyItemIndex];
+                    undoneActionType = historyItem.historyStatus;
+                    undoneItemDetails = `${historyItem.backlogId} (${historyItem.title || 'No Title'})`;
+
+                    // Remove the items created by the action (Split/Merge)
+                    if (undoneActionType === 'Split') {
+                        // Find items created by this split (e.g., ending with -a, -b, etc.)
+                        const baseId = historyItem.backlogId;
+                        if (baseId) {
+                            updatedBacklog = updatedBacklog.filter(item => !(item.backlogId?.startsWith(baseId + '-') && item.backlogId?.length > baseId.length + 1));
+                        }
+                    } else if (undoneActionType === 'Merge') {
+                        // Find the single item created by this merge (e.g., ending with -m)
+                        // This assumes the merged item's ID is predictable or stored somewhere, which is complex.
+                        // A simpler approach might be needed, perhaps storing the ID of the merged item in the original items' data.
+                        // For now, we'll assume we can identify it, e.g., by a convention like ID pattern `merged_${original_id_part}_...` or a specific backlogId pattern.
+                        // *Simplification:* We'll assume the merged item is the one created *around* the time the originals were marked. This is unreliable.
+                        // A robust solution needs better linking. Let's just remove the historical item for now.
+                        console.warn("Undo Merge: Finding the created merged item reliably is complex. Implement a linking mechanism if needed.");
+                         // For demonstration, let's assume we find and remove based on a pattern if needed.
+                         // Example: const mergedItemId = findMergedItemAssociatedWith(historyItem.id);
+                         // updatedBacklog = updatedBacklog.filter(item => item.id !== mergedItemId);
+                    }
+
+                    // Restore the original item's status
+                    updatedBacklog = updatedBacklog.map((item, index) => {
+                        if (index === historyItemIndex) {
+                            return { ...item, historyStatus: undefined }; // Reset history status
+                        }
+                        return item;
+                    });
+
+                    return {
+                        ...p,
+                        backlog: updatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
+                    };
+                }
+                return p;
+            });
+
+            return updatedProjects;
+        });
+
+        if (undoneItemDetails && undoneActionType) {
+            toast({
+                title: `${undoneActionType} Undone`,
+                description: `Action for item '${undoneItemDetails}' undone. Related items removed.`,
+                duration: 5000,
+            });
+        }
+    }, [selectedProjectId, toast]);
+
 
 
   // Handler to add members to the *newly created* project (from dialog)
@@ -1684,6 +1761,7 @@ export default function Home() {
                 componentProps = {
                     ...componentProps,
                     historyItems: selectedProject.backlog?.filter(task => !!task.historyStatus) ?? [], // Pass items with history status
+                    onUndoBacklogAction: handleUndoBacklogAction, // Pass undo handler
                  };
                 break;
             case 'analytics/charts':

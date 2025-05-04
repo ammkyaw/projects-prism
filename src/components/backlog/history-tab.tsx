@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo } from 'react'; // Added React import
@@ -7,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
-import { Info, History, ArrowUpDown, LinkIcon, View, Move, GitMerge, Split } from 'lucide-react'; // Import icons for history status
+import { Info, History, ArrowUpDown, LinkIcon, View, Move, GitMerge, Split, Undo } from 'lucide-react'; // Import icons for history status and Undo
 import { taskPriorities, taskTypes } from '@/types/sprint-data';
 import { format, parseISO, isValid } from 'date-fns';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogClose, DialogFooter } from "@/components/ui/dialog";
@@ -18,7 +17,8 @@ import { Badge } from "@/components/ui/badge"; // Import Badge
 interface HistoryTabProps {
   projectId: string;
   projectName: string;
-  historyItems: Task[]; // Pass only items that have been moved (task.movedToSprint is set)
+  historyItems: Task[]; // Pass only items that have been moved/split/merged
+  onUndoBacklogAction: (taskId: string) => void; // Callback to undo split/merge
 }
 
 type SortKey = 'priority' | 'title' | 'taskType' | 'createdDate' | 'movedToSprint' | 'historyStatus' | 'backlogId' | 'initiator' | 'needsGrooming' | 'readyForSprint'; // Added historyStatus
@@ -34,7 +34,7 @@ const getHistoryStatusIcon = (status: HistoryStatus | undefined) => {
   }
 };
 
-export default function HistoryTab({ projectId, projectName, historyItems }: HistoryTabProps) {
+export default function HistoryTab({ projectId, projectName, historyItems, onUndoBacklogAction }: HistoryTabProps) {
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection } | null>(null);
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
@@ -105,8 +105,13 @@ export default function HistoryTab({ projectId, projectName, historyItems }: His
         return (a.backlogId ?? '').localeCompare(b.backlogId ?? '');
       });
     } else {
-        // Default sort by sprint number moved to, then priority
-        sortableItems.sort((a, b) => (a.movedToSprint ?? Infinity) - (b.movedToSprint ?? Infinity) || taskPriorities.indexOf(a.priority || 'Medium') - taskPriorities.indexOf(b.priority || 'Medium'));
+        // Default sort by historyStatus (Move, Split, Merge), then movedToSprint, then priority
+        const statusOrder: HistoryStatus[] = ['Move', 'Split', 'Merge'];
+        sortableItems.sort((a, b) =>
+            (statusOrder.indexOf(a.historyStatus!) - statusOrder.indexOf(b.historyStatus!)) ||
+            (a.movedToSprint ?? Infinity) - (b.movedToSprint ?? Infinity) ||
+            taskPriorities.indexOf(a.priority || 'Medium') - taskPriorities.indexOf(b.priority || 'Medium')
+        );
     }
     return sortableItems;
   }, [historyItems, sortConfig]);
@@ -136,21 +141,20 @@ export default function HistoryTab({ projectId, projectName, historyItems }: His
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><History className="h-5 w-5 text-primary" /> Backlog History</CardTitle>
-          <CardDescription>View backlog items that have been moved to sprints for project '{projectName}'. Click headers to sort.</CardDescription>
+          <CardDescription>View backlog items that have been moved, split, or merged for project '{projectName}'. Click headers to sort.</CardDescription>
         </CardHeader>
         <CardContent>
           {sortedHistory.length === 0 ? (
                <div className="flex flex-col items-center justify-center min-h-[200px] border-dashed border-2 rounded-md p-6">
                   <Info className="h-8 w-8 text-muted-foreground mb-2" />
-                  <p className="text-muted-foreground">No backlog items have been moved to sprints yet.</p>
+                  <p className="text-muted-foreground">No historical backlog items found.</p>
                </div>
             ) : (
               <div className="overflow-x-auto">
                  {/* Adjust min-width if necessary to accommodate new columns */}
-                <div className="min-w-[1500px]"> {/* Ensure Table component wraps direct children */}
+                <div className="min-w-[1500px]">
                   <Table>
                     <TableHeader>
-                      {/* Mirror headers from BacklogTab Management, add Sprint #, remove actions */}
                       <TableRow>
                          <TableHead className="w-[120px]">
                              <Button variant="ghost" onClick={() => requestSort('backlogId')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
@@ -185,7 +189,6 @@ export default function HistoryTab({ projectId, projectName, historyItems }: His
                           <TableHead className="w-[100px]">
                               Dependencies
                           </TableHead>
-                           {/* New Flag Headers */}
                           <TableHead className="w-[60px] text-center">
                                <Button variant="ghost" onClick={() => requestSort('needsGrooming')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
                                   Groom? {getSortIndicator('needsGrooming')}
@@ -207,12 +210,12 @@ export default function HistoryTab({ projectId, projectName, historyItems }: His
                               </Button>
                           </TableHead>
                          <TableHead className="w-[80px] text-right">Story Pts</TableHead>
+                         <TableHead className="w-[80px] text-center">Actions</TableHead> {/* Added Action Header */}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {sortedHistory.map(task => (
                         <TableRow key={task.id}>
-                          {/* Backlog ID */}
                           <TableCell className="font-medium">
                             <button
                                 type="button"
@@ -223,29 +226,20 @@ export default function HistoryTab({ projectId, projectName, historyItems }: His
                                 {task.backlogId}
                             </button>
                           </TableCell>
-                          {/* Title */}
                           <TableCell>{task.title}</TableCell>
-                          {/* Task Type */}
                           <TableCell>{task.taskType}</TableCell>
-                          {/* Initiator */}
                           <TableCell>{task.initiator || '-'}</TableCell>
-                          {/* Created Date */}
                           <TableCell>{task.createdDate && isValid(parseISO(task.createdDate)) ? format(parseISO(task.createdDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
-                          {/* Priority */}
                           <TableCell>{task.priority}</TableCell>
-                           {/* Dependencies */}
                            <TableCell className="text-xs">
                                {(task.dependsOn && task.dependsOn.length > 0) ? task.dependsOn.join(', ') : <span className="italic text-muted-foreground">None</span>}
                            </TableCell>
-                            {/* Needs Grooming */}
                             <TableCell className="text-center">
                                 <Checkbox checked={task.needsGrooming} disabled className="h-4 w-4"/>
                             </TableCell>
-                            {/* Ready for Sprint */}
                             <TableCell className="text-center">
                                 <Checkbox checked={task.readyForSprint} disabled className="h-4 w-4"/>
                             </TableCell>
-                           {/* History Status */}
                            <TableCell>
                               {task.historyStatus ? (
                                   <Badge variant="outline" className="capitalize">
@@ -255,10 +249,22 @@ export default function HistoryTab({ projectId, projectName, historyItems }: His
                                   <span className="text-muted-foreground italic">N/A</span>
                               )}
                           </TableCell>
-                           {/* Moved To Sprint # */}
-                           <TableCell>{task.movedToSprint ?? '-'}</TableCell> {/* Show '-' if no sprint # */}
-                          {/* Story Points */}
+                           <TableCell>{task.movedToSprint ?? '-'}</TableCell>
                           <TableCell className="text-right">{task.storyPoints ?? '-'}</TableCell>
+                           {/* Action Cell with Undo Button */}
+                          <TableCell className="text-center">
+                              {(task.historyStatus === 'Split' || task.historyStatus === 'Merge') && (
+                                  <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => onUndoBacklogAction(task.id)}
+                                      className="h-7 w-7 text-blue-600 hover:text-blue-700"
+                                      title={`Undo ${task.historyStatus}`}
+                                  >
+                                      <Undo className="h-4 w-4" />
+                                  </Button>
+                              )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -337,3 +343,4 @@ export default function HistoryTab({ projectId, projectName, historyItems }: His
     </>
   );
 }
+
