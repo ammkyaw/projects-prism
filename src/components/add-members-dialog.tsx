@@ -37,23 +37,23 @@ const createEmptyMemberRow = (): MemberRow => ({
 function AddMembersDialog({ isOpen, onOpenChange, onSaveMembers, existingMembers, projectId }: AddMembersDialogProps) {
   const [memberRows, setMemberRows] = useState<MemberRow[]>([]);
   const { toast } = useToast();
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen); // Track previous open state
 
-  // Initialize rows when dialog opens or existing members change
+  // Initialize rows only when the dialog *opens*
   useEffect(() => {
-    if (isOpen) {
-        // If editing existing members, map them; otherwise, start with one empty row.
-        const initialRows = existingMembers.length > 0
-            ? existingMembers.map((member, index) => ({
-                  ...member,
-                  _internalId: member.id || `initial_dialog_${index}_${Date.now()}`,
-              }))
-            : [createEmptyMemberRow()];
-        setMemberRows(initialRows);
-    } else {
-        // Reset when dialog closes
-        // setMemberRows([]); // Keep state to avoid data loss if re-opened quickly after toast dismissal
+    // Only initialize if the dialog is opening (was closed, now open)
+    if (isOpen && !prevIsOpen) {
+      const initialRows = existingMembers.length > 0
+        ? existingMembers.map((member, index) => ({
+            ...member,
+            _internalId: member.id || `initial_dialog_${index}_${Date.now()}`,
+          }))
+        : [createEmptyMemberRow()];
+      setMemberRows(initialRows);
     }
-  }, [isOpen, existingMembers]);
+    // Update previous state for the next render
+    setPrevIsOpen(isOpen);
+  }, [isOpen, prevIsOpen, existingMembers]); // Depend on isOpen and prevIsOpen
 
 
   const handleAddRow = () => {
