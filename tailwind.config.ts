@@ -82,11 +82,16 @@ export default {
   				to: {
   					height: '0'
   				}
-  			}
+  			},
+            'fade-in-50': { // Added keyframe for tooltip fade-in
+                 from: { opacity: '0' },
+                 to: { opacity: '1' },
+            },
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out'
+  			'accordion-up': 'accordion-up 0.2s ease-out',
+            'fade-in-50': 'fade-in-50 0.2s ease-out', // Added animation for tooltip fade-in
   		}
   	}
   },

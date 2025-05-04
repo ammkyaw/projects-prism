@@ -10,10 +10,11 @@ import { Textarea } from '@/components/ui/textarea'; // Added Textarea
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
-import { Info, Edit, Save, XCircle } from 'lucide-react';
+import { Info, Edit, Save, XCircle, HelpCircle } from 'lucide-react'; // Added HelpCircle
 import { useToast } from "@/hooks/use-toast";
 import { taskPriorities } from '@/types/sprint-data'; // Import priorities
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Import Tooltip components
 
 interface BacklogGroomingTabProps {
   projectId: string;
@@ -283,6 +284,16 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                                 <Label htmlFor={`groom-ready-${item._internalId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                                     Ready for Sprint
                                 </Label>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p className="text-xs max-w-xs">DoR: Story must be small, clear, prioritized, and have no blockers.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
                             </div>
                           </div>
                           {/* Add fields for Estimation, Splitting later */}
@@ -303,7 +314,3 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
     </Card>
   );
 }
-
-
-
-    
