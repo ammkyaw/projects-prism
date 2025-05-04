@@ -46,6 +46,9 @@ export const taskTypes: TaskType[] = [
     'New Feature', 'Improvement', 'Bug', 'Refactoring', 'Documentation', 'Security', 'Infra', 'CI/CD', 'Compliance'
 ];
 
+// Represents the status of a backlog item in history
+export type HistoryStatus = 'Move' | 'Split' | 'Merge';
+
 // Represents a single task within a sprint plan or backlog
 export interface Task {
   id: string; // Unique ID for the task item
@@ -71,7 +74,8 @@ export interface Task {
   needsGrooming?: boolean; // Flag to indicate if item needs refinement
   readyForSprint?: boolean; // Flag to indicate if item is ready to be pulled into a sprint
   // --- History Tracking ---
-  movedToSprint?: number; // Optional: The sprint number this backlog item was moved to. Used for history.
+  movedToSprint?: number; // Optional: The sprint number this backlog item was moved to.
+  historyStatus?: HistoryStatus; // Optional: Status indicating how the item moved to history (Move, Split, Merge).
   // Legacy fields - keep if needed for migration or detail view, but planning uses new fields
   devTime?: string; // Legacy, replaced by devEstimatedTime
 }
@@ -188,6 +192,7 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     needsGrooming: false, // Default new items to NOT need grooming
     readyForSprint: false,
     movedToSprint: undefined, // Initialize as not moved
+    historyStatus: undefined, // Initialize history status
     // Fields typically set during sprint planning:
     devEstimatedTime: undefined,
     qaEstimatedTime: undefined, // Don't default these in backlog
@@ -196,8 +201,3 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     reviewer: undefined,
     startDate: undefined,
 };
-
-
-
-
-    
