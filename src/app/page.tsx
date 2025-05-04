@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx';
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Added CardContent
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History, CheckCircle, Undo } from 'lucide-react'; // Added Undo icon
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History, CheckCircle, Undo, ArrowUpDown } from 'lucide-react'; // Added ArrowUpDown icon
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -23,12 +23,13 @@ import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
 import TeamsTab from '@/components/teams/teams-tab'; // Updated path
 import AddMembersDialog from '@/components/add-members-dialog';
 import HistoryTab from '@/components/backlog/history-tab'; // Import HistoryTab component
+import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Updated path
+import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
 
 // Placeholder Sub-Tab Components
 import SprintSummaryTab from '@/components/sprints/sprint-summary-tab'; // Updated path
 import SprintPlanningTab from '@/components/sprints/sprint-planning-tab'; // New component for planning
 import SprintRetrospectiveTab from '@/components/sprints/sprint-retrospective-tab'; // Updated path
-import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
 import AnalyticsChartsTab from '@/components/analytics-charts-tab';
 import AnalyticsReportsTab from '@/components/analytics-reports-tab'; // Updated path
 
@@ -161,7 +162,7 @@ export default function Home() {
      try {
          const savedData = localStorage.getItem('appData');
          const savedProjectId = localStorage.getItem('selectedProjectId');
-         console.log("Retrieved 'appData' from localStorage:", savedData?.substring(0, 100) + '...'); // Log truncated data
+         console.log("Retrieved 'appData' from localStorage:", savedData ? savedData.substring(0, 100) + '...' : 'null'); // Log truncated data or null
          console.log("Retrieved 'selectedProjectId' from localStorage:", savedProjectId);
 
          if (savedData) {
@@ -234,7 +235,7 @@ export default function Home() {
 
      // Effect to save data to localStorage whenever projects change (now empty on first load)
      useEffect(() => {
-         // Only run save logic after initial clearing/load is complete
+         // Only run save logic after initial load is complete
          if (!isLoading) {
              console.log("Projects state changed, attempting to save to localStorage...");
              try {
@@ -251,13 +252,13 @@ export default function Home() {
                  });
              }
          } else {
-             console.log("Skipping save to localStorage during initial clearing/loading.");
+             console.log("Skipping save to localStorage during initial loading.");
          }
      }, [projects, isLoading, toast]); // Add isLoading dependency
 
      // Effect to save the selected project ID
      useEffect(() => {
-         if (!isLoading) { // Only save after initial clearing/load
+         if (!isLoading) { // Only save after initial load
              try {
                  if (selectedProjectId) {
                      console.log(`Saving selected project ID to localStorage: ${selectedProjectId}`);
@@ -276,7 +277,7 @@ export default function Home() {
                   });
              }
          } else {
-             console.log("Skipping saving selected project ID during initial clearing/loading.");
+             console.log("Skipping saving selected project ID during initial loading.");
          }
      }, [selectedProjectId, isLoading, toast]);
 
@@ -468,7 +469,7 @@ export default function Home() {
          // Using setTimeout to ensure toast doesn't interfere with rendering updates
          setTimeout(() => {
               toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
-         }, 50); // Slightly increased timeout
+         }, 50); // Increased timeout
      }
 
   }, [selectedProjectId, toast]);
@@ -752,22 +753,26 @@ export default function Home() {
                         // Remove the task from the specified sprint's planning.newTasks
                         const updatedSprints = p.sprintData.sprints.map(s => {
                             if (s.sprintNumber === sprintNumber && s.planning) {
-                                const taskToRemove = s.planning.newTasks.find(t => t.id === taskId);
-                                if (taskToRemove) {
+                                const taskIndex = s.planning.newTasks.findIndex(t => t.id === taskId);
+                                if (taskIndex !== -1) {
+                                    const taskToRemove = s.planning.newTasks[taskIndex];
                                     taskToRemoveDetails = { ...taskToRemove }; // Capture details before removing
                                     revertedTaskDetails = `${taskToRemove.ticketNumber} (${taskToRemove.title || 'No Title'})`;
                                     foundAndRemoved = true;
+                                    const updatedNewTasks = [...s.planning.newTasks];
+                                    updatedNewTasks.splice(taskIndex, 1); // Remove the task
                                     return {
                                         ...s,
                                         planning: {
                                             ...s.planning,
-                                            newTasks: s.planning.newTasks.filter(task => task.id !== taskId),
+                                            newTasks: updatedNewTasks,
                                         }
                                     };
                                 }
                             }
                             return s;
                         });
+
 
                         // If the task wasn't found in the sprint, no need to update backlog
                         if (!foundAndRemoved) {
@@ -790,7 +795,7 @@ export default function Home() {
 
                         // If the backlog item was not found to be updated (e.g., it was manually deleted from backlog), show a warning
                         if (!updatePerformed) {
-                             console.warn(`Could not find corresponding backlog item for task ${revertedTaskDetails} (Backlog ID: ${taskBacklogId}) that was marked as moved to sprint ${sprintNumber}.`);
+                             console.warn(`Could not find corresponding backlog item for task ${revertedTaskDetails} (Backlog ID: ${taskBacklogId}) that was marked as moved to sprint ${sprintNumber}. Task removed from sprint only.`);
                              // Decide whether to proceed with sprint update or stop
                         }
 
@@ -820,7 +825,7 @@ export default function Home() {
                 return updatedProjects; // Return the potentially updated projects
             });
          }, 0); // End of setTimeout
-    }, [selectedProjectId, toast]);
+    }, [selectedProjectId, toast, setProjects]); // Added setProjects
 
 
     // Handler to split a backlog item
@@ -931,12 +936,14 @@ export default function Home() {
                 }).filter((item): item is Task => item !== null); // Remove the original items from active view
 
                 // Add the new merged task
-                const allItemsForIdGen = [...updatedBacklog, ...itemsToMarkHistorical]; // Include historical for ID gen context
+                 const allItemsForIdGen = [...updatedBacklog, ...itemsToMarkHistorical]; // Use full context for ID generation
+                 const newMergedBacklogId = generateNextBacklogId(allItemsForIdGen, undefined, 'm'); // Generate merged ID like BL-YYNNNN-m
+
                 const newMergedTaskWithId: Task = {
                    ...mergedTask,
                    id: `merged_${Date.now()}_${Math.random()}`, // Generate unique ID
-                   backlogId: generateNextBacklogId(allItemsForIdGen, undefined, 'm'), // Generate merged ID like BL-YYNNNN-m
-                   ticketNumber: generateNextBacklogId(allItemsForIdGen, undefined, 'm'), // Default ticket number
+                   backlogId: newMergedBacklogId,
+                   ticketNumber: newMergedBacklogId, // Default ticket number
                    needsGrooming: true,
                    readyForSprint: false,
                 };
@@ -994,44 +1001,52 @@ export default function Home() {
                     undoneItemDetails = `${historyItem.backlogId} (${historyItem.title || 'No Title'})`;
 
                     // Remove the items created by the action (Split/Merge)
-                    if (undoneActionType === 'Split') {
-                        // Find items created by this split (e.g., ending with -a, -b, etc.)
-                        const baseId = historyItem.backlogId;
-                        if (baseId) {
-                            updatedBacklog = updatedBacklog.filter(item => !(item.backlogId?.startsWith(baseId + '-') && item.backlogId?.length > baseId.length + 1));
-                        }
-                    } else if (undoneActionType === 'Merge') {
-                         // Find the single item created by this merge (e.g., ending with -m)
-                         const baseId = historyItem.backlogId; // The ID of one of the *original* merged items
-                         if (baseId) {
-                             // Find the *newly created* merged item (likely ends with '-m')
-                             // This assumes the merged item's ID structure follows the pattern from generateNextBacklogId
-                             // Merge ID format is BL-YYNNNN-m, so we look for that pattern based on original ID structure
-                             const basePrefixMatch = baseId.match(/^(BL-\d{6})/);
-                             const basePrefix = basePrefixMatch ? basePrefixMatch[1] : null;
-                             const mergeResultSuffix = '-m';
+                     const baseId = historyItem.backlogId;
+                     if (!baseId) {
+                         console.error(`Cannot undo action for item ID ${taskId} without a backlogId.`);
+                         toast({ variant: "destructive", title: "Error", description: "Original item has no Backlog ID." });
+                         return p;
+                     }
 
-                             if (basePrefix) {
-                                // Find the item that starts with the same prefix and ends with -m
-                                updatedBacklog = updatedBacklog.filter(item => !(item.backlogId?.startsWith(basePrefix) && item.backlogId.endsWith(mergeResultSuffix)));
-                             } else {
-                                console.warn(`Could not extract base prefix from ${baseId} to find merge result.`);
+                    if (undoneActionType === 'Split') {
+                        // Find and remove items created by this split (e.g., BL-XXXX-a, BL-XXXX-b)
+                        updatedBacklog = updatedBacklog.filter(item => !(item.backlogId?.startsWith(baseId + '-') && item.id !== taskId));
+                    } else if (undoneActionType === 'Merge') {
+                        // Find and remove the single item created by this merge (e.g., BL-YYYY-m)
+                         // Merge result ID is based on a new sequence number + '-m', not the original item's ID.
+                         // We need to find the items that were MERGED INTO this one (marked with Merge status)
+                         const originalMergedItems = updatedBacklog.filter(item => item.historyStatus === 'Merge' && item.id !== taskId); // Find others with Merge status
+                         // Find the result of the merge (ends with '-m' and created around the same time? This is hard without more info)
+                         // Let's assume we *know* the structure or can find the item that doesn't have a history status but was created from this merge event (difficult)
+                         // A simpler approach: Restore ALL items marked 'Merge' that were part of this event. This requires knowing which ones were merged together.
+                         // For now, we will only restore the clicked item and remove the assumed result (if we can find it).
+
+                         // Attempt to find the merged result item (ends in '-m', created by the merge action)
+                          const mergedResultItem = updatedBacklog.find(item => item.backlogId?.endsWith('-m') && !item.historyStatus);
+                          if (mergedResultItem) {
+                              updatedBacklog = updatedBacklog.filter(item => item.id !== mergedResultItem.id);
+                          } else {
+                               console.warn(`Could not definitively find the result of the merge associated with ${baseId}. Only restoring originals.`);
+                          }
+
+                         // Now restore all items originally part of this merge
+                         updatedBacklog = updatedBacklog.map(item => {
+                            if (item.historyStatus === 'Merge') { // Find all related 'Merge' items
+                                undoneActionType = 'Merge'; // Ensure correct message
+                                // Maybe check creation time or a hidden link if possible? For now, assume all 'Merge' are related.
+                                return { ...item, historyStatus: undefined }; // Restore them
                              }
-                         } else {
-                            console.warn(`Original item ID ${historyItem.id} for merge undo does not have a backlogId.`);
-                         }
+                             return item;
+                         });
+                         // The clicked item itself might already be handled below, ensure no double-handling
                     }
 
-                    // Restore the original item's status
-                    updatedBacklog = updatedBacklog.map((item, index) => {
-                        if (index === historyItemIndex) {
-                            return { ...item, historyStatus: undefined }; // Reset history status
+                    // Restore the original item(s) status
+                    updatedBacklog = updatedBacklog.map((item) => {
+                        if (item.id === taskId) { // Restore the clicked item
+                            return { ...item, historyStatus: undefined };
                         }
-                         // If it's a merge undo, also restore other items that were part of the merge
-                         if (undoneActionType === 'Merge' && item.historyStatus === 'Merge' && item.backlogId?.startsWith(historyItem.backlogId?.substring(0, 9) ?? 'XXX')) {
-                              // A bit fuzzy matching based on prefix, might need refinement if IDs are very similar
-                              return { ...item, historyStatus: undefined };
-                         }
+                        // If undoing Merge, ensure other related items are also restored (handled above)
                         return item;
                     });
 
@@ -1404,6 +1419,7 @@ export default function Home() {
       backlog: {
           label: "Backlog", icon: Layers, subTabs: {
               management: { label: "Management", icon: Package, component: BacklogTab },
+              prioritization: { label: "Prioritization", icon: ArrowUpDown, component: BacklogPrioritizationTab },
               grooming: { label: "Grooming", icon: Edit, component: BacklogGroomingTab },
               history: { label: "History", icon: History, component: HistoryTab }, // Added History Sub-Tab
           }
@@ -1491,6 +1507,14 @@ export default function Home() {
                     onMoveToSprint: handleMoveToSprint,
                  };
                 break;
+             case 'backlog/prioritization':
+                  componentProps = {
+                     ...componentProps,
+                      // Pass only backlog items that are NOT moved to a sprint or historical
+                      initialBacklog: selectedProject.backlog?.filter(task => !task.movedToSprint && !task.historyStatus) ?? [],
+                      onSaveBacklog: handleSaveBacklog, // Pass save function
+                  };
+                 break;
             case 'backlog/grooming':
                 componentProps = {
                      ...componentProps,
@@ -1561,7 +1585,7 @@ export default function Home() {
     <div className="flex flex-col min-h-screen bg-background">
       <header className="sticky top-0 z-10 flex items-center justify-between p-4 bg-card border-b shadow-sm">
         <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-semibold text-primary">Sprint Stats</h1>
+            <h1 className="text-2xl font-semibold text-primary">Project Prism</h1>
              <Select
                value={selectedProjectId ?? undefined}
                onValueChange={(value) => {
@@ -1756,7 +1780,7 @@ export default function Home() {
       </main>
 
       <footer className="text-center p-4 text-xs text-muted-foreground border-t">
-          Sprint Stats - Agile Reporting Made Easy
+          Project Prism - Agile Reporting Made Easy
       </footer>
     </div>
   );

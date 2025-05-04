@@ -7,7 +7,7 @@ import { Toaster } from '@/components/ui/toaster'; // Import Toaster
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Sprint Stats',
+  title: 'Project Prism',
   description: 'Agile sprint reports including velocity, burndown, and developer stats.',
 };
 
