@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -1311,16 +1312,17 @@ export default function Home() {
                             updatedBacklog = updatedBacklog.filter(item => !(item.backlogId?.startsWith(baseId + '-') && item.backlogId?.length > baseId.length + 1));
                         }
                     } else if (undoneActionType === 'Merge') {
-                        // Find the single item created by this merge (e.g., ending with -m)
-                        // This assumes the merged item's ID is predictable or stored somewhere, which is complex.
-                        // A simpler approach might be needed, perhaps storing the ID of the merged item in the original items' data.
-                        // For now, we'll assume we can identify it, e.g., by a convention like ID pattern `merged_${original_id_part}_...` or a specific backlogId pattern.
-                        // *Simplification:* We'll assume the merged item is the one created *around* the time the originals were marked. This is unreliable.
-                        // A robust solution needs better linking. Let's just remove the historical item for now.
-                        console.warn("Undo Merge: Finding the created merged item reliably is complex. Implement a linking mechanism if needed.");
-                         // For demonstration, let's assume we find and remove based on a pattern if needed.
-                         // Example: const mergedItemId = findMergedItemAssociatedWith(historyItem.id);
-                         // updatedBacklog = updatedBacklog.filter(item => item.id !== mergedItemId);
+                         // Find the single item created by this merge (e.g., ending with -m)
+                         const baseId = historyItem.backlogId; // The ID of one of the *original* merged items
+                         if (baseId) {
+                             // Find the *newly created* merged item (likely ends with '-m')
+                             // This assumes the merged item's ID structure follows the pattern from generateNextBacklogId
+                             const mergeResultIdPrefix = baseId.substring(0, baseId.indexOf('-') + 3); // e.g., BL-25
+                             const mergeResultSuffix = '-m';
+                             // Caution: This relies heavily on ID generation patterns and might need refinement
+                             updatedBacklog = updatedBacklog.filter(item => !(item.backlogId?.startsWith(mergeResultIdPrefix) && item.backlogId.endsWith(mergeResultSuffix)));
+                         }
+                         console.warn("Undo Merge: Finding the created merged item reliably based on ID patterns can be fragile.");
                     }
 
                     // Restore the original item's status
@@ -1345,7 +1347,7 @@ export default function Home() {
         if (undoneItemDetails && undoneActionType) {
             toast({
                 title: `${undoneActionType} Undone`,
-                description: `Action for item '${undoneItemDetails}' undone. Related items removed.`,
+                description: `Action for item '${undoneItemDetails}' undone. Related items removed/reverted.`,
                 duration: 5000,
             });
         }
@@ -1755,6 +1757,7 @@ export default function Home() {
                      onSaveBacklog: handleSaveBacklog,
                      onSplitBacklogItem: handleSplitBacklogItem, // Pass split handler
                      onMergeBacklogItems: handleMergeBacklogItems, // Pass merge handler
+                     onUndoBacklogAction: handleUndoBacklogAction, // Pass undo handler
                  };
                 break;
              case 'backlog/history': // Updated sub-tab path
@@ -1964,4 +1967,5 @@ export default function Home() {
     </div>
   );
 }
+
 

@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"; // Import Dialog components
-import { Info, Edit, Save, XCircle, HelpCircle, BookOpenCheck, Split, GitMerge } from 'lucide-react'; // Added Split, GitMerge icons
+import { Info, Edit, Save, XCircle, HelpCircle, BookOpenCheck, Split, GitMerge, Undo } from 'lucide-react'; // Added Undo icon
 import { useToast } from "@/hooks/use-toast";
 import { taskPriorities } from '@/types/sprint-data'; // Import priorities
 import { cn } from '@/lib/utils';
@@ -26,6 +26,7 @@ interface BacklogGroomingTabProps {
   onSaveBacklog: (backlog: Task[]) => void; // Callback to save changes (saves ALL items, not just groomed)
   onSplitBacklogItem: (originalTaskId: string, splitTasks: Task[]) => void; // Add split handler prop
   onMergeBacklogItems: (taskIdsToMerge: string[], mergedTask: Task) => void; // Add merge handler prop
+  onUndoBacklogAction: (taskId: string) => void; // Add undo handler prop
 }
 
 interface EditableBacklogItem extends Task {
@@ -33,7 +34,7 @@ interface EditableBacklogItem extends Task {
   isEditing?: boolean;
 }
 
-export default function BacklogGroomingTab({ projectId, projectName, initialBacklog, onSaveBacklog, onSplitBacklogItem, onMergeBacklogItems }: BacklogGroomingTabProps) {
+export default function BacklogGroomingTab({ projectId, projectName, initialBacklog, onSaveBacklog, onSplitBacklogItem, onMergeBacklogItems, onUndoBacklogAction }: BacklogGroomingTabProps) {
   const [allEditableBacklog, setAllEditableBacklog] = useState<EditableBacklogItem[]>([]); // Store ALL items
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSplitDialogOpen, setIsSplitDialogOpen] = useState(false); // State for Split dialog
@@ -157,6 +158,35 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
        console.log("Confirming merge:", taskIdsToMerge, mergedTask);
        onMergeBacklogItems(taskIdsToMerge, mergedTask);
        setIsMergeDialogOpen(false);
+   };
+
+   // Handler for the Undo button
+   const handleUndoClick = (item: EditableBacklogItem) => {
+      if (!item.backlogId) {
+          toast({ variant: "destructive", title: "Error", description: "Cannot undo action for item without Backlog ID." });
+          return;
+      }
+       // Extract the base ID (e.g., BL-250001 from BL-250001-a)
+       const baseIdMatch = item.backlogId.match(/^(BL-\d{6})/); // Adjust regex if ID format changes
+       const baseId = baseIdMatch ? baseIdMatch[1] : null;
+
+       if (!baseId) {
+           toast({ variant: "destructive", title: "Error", description: "Could not determine original item ID to undo." });
+           return;
+       }
+
+       // Find the original item in the full backlog (including history)
+       const originalItem = initialBacklog.find(
+           task => task.backlogId === baseId && (task.historyStatus === 'Split' || task.historyStatus === 'Merge')
+       );
+
+       if (!originalItem) {
+          toast({ variant: "destructive", title: "Error", description: `Original item for ${baseId} not found in history.` });
+          return;
+       }
+
+       // Call the main undo handler with the ID of the original historical item
+       onUndoBacklogAction(originalItem.id);
    };
 
 
@@ -375,7 +405,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                                    rows={4}
                                />
                            </div>
-                           {/* Flags and Split Button */}
+                           {/* Flags and Split/Undo Button */}
                             <div className="flex items-center justify-between space-x-4">
                                <div className="flex items-center space-x-4">
                                   <div className="flex items-center space-x-2">
@@ -409,8 +439,18 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                                       </TooltipProvider>
                                   </div>
                                </div>
-                                {/* Conditionally render Split button */}
-                               {!isSplitOrMergedItem(item.backlogId) && (
+                                {/* Conditionally render Split or Undo button */}
+                                {isSplitOrMergedItem(item.backlogId) ? (
+                                     <Button
+                                         variant="outline"
+                                         size="sm"
+                                         onClick={() => handleUndoClick(item)}
+                                         className="text-blue-600 hover:text-blue-700"
+                                         title="Undo Split/Merge"
+                                     >
+                                         <Undo className="mr-2 h-4 w-4" /> Undo
+                                     </Button>
+                                 ) : (
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -458,4 +498,5 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
     </>
   );
 }
+
 
