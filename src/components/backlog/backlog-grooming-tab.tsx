@@ -43,7 +43,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                ...task,
                _internalId: task.id || `groom_${index}_${Date.now()}`,
                storyPoints: task.storyPoints?.toString() ?? '', // Ensure story points are string for input
-               needsGrooming: task.needsGrooming ?? false, // Ensure boolean
+               needsGrooming: task.needsGrooming ?? false, // Ensure boolean, default is false
                readyForSprint: task.readyForSprint ?? false, // Ensure boolean
                isEditing: false,
            }))
@@ -304,3 +304,6 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
   );
 }
 
+
+
+    

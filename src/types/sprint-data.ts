@@ -1,4 +1,5 @@
 
+
 // Represents the status of a sprint
 export type SprintStatus = 'Planned' | 'Active' | 'Completed';
 
@@ -184,7 +185,7 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     createdDate: '', // Will be set on creation
     initiator: '', // Will be set (maybe manually for now)
     dependsOn: [],
-    needsGrooming: false, // Initialize new flags
+    needsGrooming: false, // Default new items to NOT need grooming
     readyForSprint: false,
     movedToSprint: undefined, // Initialize as not moved
     // Fields typically set during sprint planning:
@@ -197,3 +198,6 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
 };
 
 
+
+
+    

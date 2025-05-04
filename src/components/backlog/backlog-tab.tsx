@@ -68,7 +68,7 @@ const createEmptyBacklogRow = (existingIds: string[]): BacklogRow => {
         createdDate: format(new Date(), 'yyyy-MM-dd'),
         createdDateObj: new Date(),
         dependsOn: [], // Initialize dependsOn
-        needsGrooming: true, // Default new items to need grooming
+        needsGrooming: false, // Default new items to NOT need grooming
         readyForSprint: false,
     };
 };
@@ -836,3 +836,6 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 }
 
 
+
+
+    
