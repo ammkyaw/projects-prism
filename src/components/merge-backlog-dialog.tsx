@@ -14,7 +14,7 @@ import { GitMerge, ArrowLeft, Check } from 'lucide-react';
 import type { Task } from '@/types/sprint-data';
 import { taskPriorities, taskTypes, initialBacklogTask } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
-import { format } from 'date-fns';
+import { format, isValid, parseISO, getYear } from 'date-fns'; // Import isValid, parseISO, getYear
 import { cn } from '@/lib/utils';
 
 interface MergeBacklogDialogProps {
@@ -314,4 +314,3 @@ export default function MergeBacklogDialog({
     </Dialog>
   );
 }
-
