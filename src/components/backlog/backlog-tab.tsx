@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -18,6 +17,14 @@ import { cn } from "@/lib/utils";
 import { format, parseISO, isValid, getYear } from 'date-fns'; // Added getYear
 import SelectDependenciesDialog from '@/components/select-dependencies-dialog'; // Import the new dialog
 import { Separator } from '@/components/ui/separator'; // Import Separator
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface BacklogTabProps {
   projectId: string;
@@ -65,7 +72,7 @@ export default function BacklogTab({
   const { toast } = useToast();
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
-  const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
+  const [isMoveDialogOpen, setIsMoveDialogOpen] = useState<boolean>(false);
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
   const [selectedTargetSprint, setSelectedTargetSprint] = useState<number | null>(null);
   const [isDepsDialogOpen, setIsDepsDialogOpen] = useState(false); // State for dependencies dialog
@@ -73,7 +80,7 @@ export default function BacklogTab({
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection } | null>(null); // State for sorting saved items
   const [isFilteringReady, setIsFilteringReady] = useState(false); // State for filter on saved items
 
-   // Memoize only the backlog items that are NOT moved to a sprint or historical for display in the second table
+   // Filtered list for display (only items needing grooming and not already moved/split/merged)
    const displayableSavedItems = useMemo(() => {
        return initialBacklog.filter(task => !task.movedToSprint && !task.historyStatus);
    }, [initialBacklog]);
@@ -272,7 +279,7 @@ export default function BacklogTab({
    const handleNewCheckboxChange = (internalId: string, field: 'needsGrooming' | 'readyForSprint', checked: boolean | 'indeterminate') => {
      setNewBacklogRows(rows =>
        rows.map(row =>
-         row._internalId === internalId ? { ...row, [field]: !!checked } : row // Ensure boolean
+         row._internalId === internalId ? { ...row, [field]: !!checked } : row
        )
      );
       setHasUnsavedChanges(true);
@@ -429,7 +436,7 @@ export default function BacklogTab({
         return;
       }
 
-       if (backlogId) allKnownBacklogIds.add(backlogId.toLowerCase()); // Add validated ID to set for subsequent checks
+       if (backlogId) allKnownBacklogIds.add(backlogId.toLowerCase());
 
       itemsToSave.push({
         id: '', // ID will be assigned by the parent component/saving logic
@@ -460,7 +467,7 @@ export default function BacklogTab({
     });
 
     if (hasErrors) {
-      return;
+        return;
     }
 
     if (itemsToSave.length === 0) {
@@ -545,8 +552,10 @@ export default function BacklogTab({
                              <Input
                                  id={`new-backlog-id-${row._internalId}`}
                                  value={row.backlogId ?? ''}
-                                 readOnly // Generated ID is read-only
-                                 className="h-9 bg-muted/50 cursor-not-allowed"
+                                 onChange={e => handleNewInputChange(row._internalId, 'backlogId', e.target.value)}
+                                 placeholder="ID-123"
+                                 className="h-9"
+                                 required
                              />
                         </div>
                         {/* Title */}
