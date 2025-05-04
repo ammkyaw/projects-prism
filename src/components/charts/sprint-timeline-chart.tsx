@@ -10,8 +10,8 @@ import { format, parseISO, differenceInDays, addDays, isWithinInterval, getDay, 
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from "@/lib/utils";
 
-const weekendColor = 'hsl(0 0% 10% / 0.3)'; // Dark gray/black for weekend background
-const holidayColor = 'hsl(0 72% 51% / 0.2)'; // Darker Red for holiday background (adjust opacity/saturation as needed)
+const weekendColor = 'hsl(0 0% 10%)'; // Dark gray/black for weekend background
+const holidayColor = 'hsl(0 72% 51%)'; // Darker Red for holiday background (adjust opacity/saturation as needed)
 const devTaskBarColor = 'hsl(var(--primary))'; // Use primary color (blue) for dev task bars
 const qaTaskBarColor = 'hsl(var(--accent))'; // Use accent color (gold/pink) for QA task bars
 const bufferTaskBarColor = 'hsl(var(--muted))'; // Use muted color (gray) for buffer bars
@@ -198,11 +198,16 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                  lastPhaseEndDateObj = devEndDateObj; // Update the end date for the next phase dependency
                  devPhaseValid = true;
-                 // console.log(`Task ${index + 1} (${task.id}): Dev Phase - Start: ${format(devStartDateObj, 'yyyy-MM-dd')}, End: ${format(devEndDateObj, 'yyyy-MM-dd')}, Indices: [${devStartDayIndex}, ${devEndDayIndex}], Days: ${devWorkingDays}`);
              } else {
-                 // If dev days are 0 or null, the phase doesn't exist, lastPhaseEndDateObj remains devStartDateObj (the adjusted task start)
-                 // console.warn(`Task ${index + 1} (${task.id}): Dev estimate is zero or invalid. Skipping Dev phase.`);
-                 // No change to lastPhaseEndDateObj here
+                  // If dev days are 0 or null, the phase doesn't exist, use adjusted task start date
+                  devEndDateObj = devStartDateObj; // End date is same as start if 0 days
+                  devStartDayIndex = differenceInDays(devStartDateObj, sprintStartObj);
+                  devEndDayIndex = devStartDayIndex; // End index is same as start index
+                   // Clamp indices
+                  devStartDayIndex = Math.max(0, devStartDayIndex);
+                  devEndDayIndex = Math.min(sprintLengthDays, devEndDayIndex);
+                  // lastPhaseEndDateObj remains devStartDateObj
+                  devPhaseValid = (devWorkingDays === 0); // Valid only if explicitly 0
              }
 
 
@@ -226,10 +231,15 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                  lastPhaseEndDateObj = qaEndDateObj; // Update the end date for the next phase dependency
                  qaPhaseValid = true;
-                 // console.log(`Task ${index + 1} (${task.id}): QA Phase - Start: ${format(qaStartDateObj, 'yyyy-MM-dd')}, End: ${format(qaEndDateObj, 'yyyy-MM-dd')}, Indices: [${qaStartDayIndex}, ${qaEndDayIndex}], Days: ${qaWorkingDays}`);
              } else {
-                  // console.warn(`Task ${index + 1} (${task.id}): QA estimate is zero or invalid. Skipping QA phase.`);
-                 // No change to lastPhaseEndDateObj here
+                  qaEndDateObj = qaStartDateObj; // End date is same as start if 0 days
+                  qaStartDayIndex = differenceInDays(qaStartDateObj, sprintStartObj);
+                  qaEndDayIndex = qaStartDayIndex;
+                  // Clamp indices
+                  qaStartDayIndex = Math.max(0, qaStartDayIndex);
+                  qaEndDayIndex = Math.min(sprintLengthDays, qaEndDayIndex);
+                  // No change to lastPhaseEndDateObj here
+                  qaPhaseValid = (qaWorkingDays === 0); // Valid only if explicitly 0
              }
 
 
@@ -253,9 +263,14 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                  // No update to lastPhaseEndDateObj needed after buffer
                 bufferPhaseValid = true;
-                 // console.log(`Task ${index + 1} (${task.id}): Buffer Phase - Start: ${format(bufferStartDateObj, 'yyyy-MM-dd')}, End: ${format(bufferEndDateObj, 'yyyy-MM-dd')}, Indices: [${bufferStartDayIndex}, ${bufferEndDayIndex}], Days: ${bufferWorkingDays}`);
             } else {
-                 // console.warn(`Task ${index + 1} (${task.id}): Buffer estimate is zero or invalid. Skipping Buffer phase.`);
+                 bufferEndDateObj = bufferStartDateObj; // End date is same as start if 0 days
+                 bufferStartDayIndex = differenceInDays(bufferStartDateObj, sprintStartObj);
+                 bufferEndDayIndex = bufferStartDayIndex;
+                 // Clamp indices
+                 bufferStartDayIndex = Math.max(0, bufferStartDayIndex);
+                 bufferEndDayIndex = Math.min(sprintLengthDays, bufferEndDayIndex);
+                 bufferPhaseValid = (bufferWorkingDays === 0); // Valid only if explicitly 0
             }
 
 
@@ -281,12 +296,10 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 tooltip: tooltipContent,
                 assignee: task.assignee, // Pass assignee for potential holiday highlighting
             };
-             // console.log(`Task ${index + 1} (${task.id}): Final Chart Data`, result);
              // Include if *any* range is valid
              return result.devRange || result.qaRange || result.bufferRange ? result : null;
         }).filter(item => item !== null);
 
-      // console.log("Final Chart Data:", processedTasks);
       return processedTasks as any[]; // Cast to any[] because TS struggles with the filtering type inference
 
   }, [tasks, sprintStartDate, sprintEndDate, clientNow, memberHolidayMap]); // Add clientNow and memberHolidayMap dependency
@@ -382,8 +395,12 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     buffer: { label: 'Buffer', color: bufferTaskBarColor },
   } satisfies ChartConfig;
 
+  // Calculate dynamic height based on number of tasks
+  const rowHeight = 30; // Adjust as needed for spacing
+  const chartHeight = Math.max(250, chartData.length * rowHeight + 100); // Min height 250px, plus header/margins
+
   return (
-    <ChartContainer config={chartConfig} className="h-[250px] w-full">
+    <ChartContainer config={chartConfig} className="w-full" style={{ height: `${chartHeight}px` }}> {/* Dynamic height */}
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           layout="vertical"
@@ -395,7 +412,6 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
           <XAxis
              type="number"
-             // dataKey="taskIndex" // Not used for positioning, just reference
              scale="linear"
              domain={[0, sprintDays ]} // Domain is 0 to total calendar days
              ticks={sprintDayIndices} // Ticks for each day index

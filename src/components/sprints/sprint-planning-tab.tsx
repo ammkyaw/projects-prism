@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -11,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info, PackagePlus, CheckCircle } from 'lucide-react'; // Added CheckCircle
+import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info, PackagePlus, CheckCircle, Undo } from 'lucide-react'; // Added Undo
 import type { Sprint, SprintPlanning, Task, Member, SprintStatus, HolidayCalendar, Team } from '@/types/sprint-data'; // Added HolidayCalendar, Team
 import { initialSprintPlanning, taskStatuses, predefinedRoles, taskPriorities } from '@/types/sprint-data'; // Added taskPriorities
 import { useToast } from "@/hooks/use-toast";
@@ -156,7 +157,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
   const isSprintPlanned = selectedSprint?.status === 'Planned';
 
   // Determine if the current form should be disabled
-  const isFormDisabled = isSprintCompleted;
+  const isFormDisabled = isSprintCompleted; // Can edit active sprint
 
   const currentSprintStartDate = useMemo(() => {
      if (isCreatingNewSprint && newSprintForm.startDate) {
@@ -838,9 +839,10 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
                             onClick={() => removeTaskRow(type, row._internalId)}
                             className="h-9 w-9 text-muted-foreground hover:text-destructive"
                             aria-label={`Remove ${type} task row`}
-                             disabled={disabled}
+                             disabled={disabled || (type === 'new' && !!row.backlogId)} // Disable remove for backlog items
+                             title={type === 'new' && !!row.backlogId ? "Revert task to backlog instead" : `Remove ${type} task row`}
                         >
-                            <Trash2 className="h-4 w-4" />
+                            {type === 'new' && !!row.backlogId ? <Undo className="h-4 w-4 text-blue-500" /> : <Trash2 className="h-4 w-4" />}
                         </Button>
                     </div>
                 </div>
@@ -988,7 +990,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
                <CardTitle className="flex items-center gap-2"><GanttChartSquare className="h-5 w-5 text-muted-foreground" /> Sprint Timeline</CardTitle>
                <CardDescription>Visualization of planned tasks based on estimates. Add start dates and estimates to see tasks here.</CardDescription>
            </CardHeader>
-           <CardContent className="min-h-[200px]">
+           <CardContent className="overflow-x-auto"> {/* Added overflow for horizontal scroll if needed */}
                 {tasksForChart.length > 0 ? (
                     <SprintTimelineChart
                        tasks={tasksForChart}
@@ -998,7 +1000,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
                        holidayCalendars={holidayCalendars} // Pass holiday calendars
                     />
                 ) : (
-                    <div className="flex items-center justify-center text-muted-foreground h-full p-4 text-center">
+                    <div className="flex items-center justify-center text-muted-foreground h-full p-4 text-center min-h-[200px]"> {/* Ensure min height */}
                         <Info className="mr-2 h-5 w-5" />
                         Add tasks with Start Date and Estimates (Dev, QA, Buffer) to visualize the timeline.
                     </div>
