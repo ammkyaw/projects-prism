@@ -67,6 +67,32 @@ const parseDateString = (dateString: string | undefined): Date | undefined => {
     }
 };
 
+// Helper function to generate the next backlog ID based on *all* items (including historical and unsaved)
+const generateNextBacklogIdHelper = (allProjectBacklogItems: Task[]): string => {
+   const currentYear = getYear(new Date()).toString().slice(-2); // Get last two digits of the year
+   const prefix = `BL-${currentYear}`;
+   let maxNum = 0;
+
+   allProjectBacklogItems.forEach(item => {
+     const id = item.backlogId; // Use the actual backlogId
+     // Consider only base BL-YYxxxx IDs from the current year
+     // Use regex to extract the numeric part more reliably
+     const match = id?.match(/^BL-\d{2}(\d{4})(?:-.*)?$/); // Match BL-YYNNNN or BL-YYNNNN-suffix
+     if (id && id.startsWith(prefix) && match) {
+         const numPart = parseInt(match[1], 10); // Get the NNNN part
+         if (!isNaN(numPart) && numPart > maxNum) {
+             maxNum = numPart;
+         }
+     }
+   });
+
+   const nextNum = maxNum + 1;
+   const nextNumPadded = nextNum.toString().padStart(4, '0'); // Pad with leading zeros to 4 digits
+   const newBaseId = `${prefix}${nextNumPadded}`;
+   console.log("Generated next backlog ID:", newBaseId, "based on max:", maxNum); // Debug log
+   return newBaseId;
+ };
+
 export default function BacklogTab({
   projectId,
   projectName,
@@ -110,7 +136,9 @@ export default function BacklogTab({
   // Effect to populate savedBacklogItems from initialBacklog
   useEffect(() => {
       savedRowRefs.current.clear(); // Clear refs when initial backlog changes
+       // Filter out historical or moved items initially
       const initialDisplayableItems = initialBacklog.filter(task => !task.movedToSprint && !task.historyStatus);
+
       const mappedItems = initialDisplayableItems.map(item => {
           const internalId = item.id; // Use the actual ID
           if (!savedRowRefs.current.has(internalId)) {
@@ -232,7 +260,9 @@ export default function BacklogTab({
           ...initialBacklog, // Includes historical/moved items
           ...newBacklogRows // Include items currently being added
       ];
-      const nextId = generateNextBacklogId(allCurrentItems);
+       // Generate the next ID based on the combined list
+       const nextId = generateNextBacklogIdHelper(allCurrentItems);
+
       const newRow: EditingBacklogRow = {
           ...initialBacklogTask,
           _internalId: `new_backlog_${Date.now()}_${Math.random()}`, // Unique internal ID for new rows
@@ -256,7 +286,7 @@ export default function BacklogTab({
           return newRows;
       });
        // Update unsaved changes based on whether rows remain
-       setHasUnsavedChanges(newBacklogRows.length > 1);
+       setHasUnsavedChanges(newBacklogRows.length > 1 || newBacklogRows.length === 0 && initialBacklog.length === 0); // Adjust logic slightly
   };
 
 
@@ -359,7 +389,9 @@ export default function BacklogTab({
                )
            );
            // Mark changes as unsaved for the main save button
-           setHasUnsavedChanges(true);
+           // This requires a new state or logic to track if saved items have changes.
+           // For now, let's assume saving dependencies on a saved item requires the main Save button.
+           setHasUnsavedChanges(true); // Indicate unsaved changes overall
        }
 
        setIsDepsDialogOpen(false);
@@ -392,16 +424,20 @@ export default function BacklogTab({
      initialBacklog.forEach(task => {
          if (task.backlogId) allKnownBacklogIds.add(task.backlogId.toLowerCase());
      });
-     // Populate with IDs from the CURRENT new rows being added (to catch duplicates within the edit session)
-     newBacklogRows.forEach(row => {
-         if (row.backlogId) allKnownBacklogIds.add(row.backlogId.toLowerCase());
-     });
 
+     // Validate NEW items against all existing IDs and within the new batch
      newBacklogRows.forEach((row, index) => {
        const isEmptyRow = !row.backlogId?.trim() && !row.title?.trim() && !row.storyPoints?.toString().trim();
-       if (isEmptyRow) {
-           return; // Skip empty rows
+       if (isEmptyRow && newBacklogRows.length > 1) { // Allow single empty row if it's the only one
+           return; // Skip empty rows if more than one row exists
+       } else if (isEmptyRow && newBacklogRows.length === 1) {
+           // If it's the only row and empty, clear it and show success if needed
+           setNewBacklogRows([]);
+           setHasUnsavedChanges(false);
+           toast({ title: "No New Items", description: "No new items to save." });
+           return; // Exit save function
        }
+
 
        const backlogId = row.backlogId?.trim() || '';
        const title = row.title?.trim();
@@ -418,13 +454,16 @@ export default function BacklogTab({
 
        let rowErrors: string[] = [];
        if (!backlogId) rowErrors.push(`Row ${index + 1}: Backlog ID required`);
-       // Check against ALL known IDs (initial + current new rows)
+
+       // Check against ALL known IDs (initial + current new rows being added)
        const lowerCaseBacklogId = backlogId.toLowerCase();
-       if (backlogId && initialBacklog.some(t => t.backlogId?.toLowerCase() === lowerCaseBacklogId)) {
-            rowErrors.push(`Row ${index + 1}: Duplicate Backlog ID "${backlogId}" already exists in the saved backlog.`);
-       } else if (backlogId && newBacklogRows.filter(r => r._internalId !== row._internalId && r.backlogId?.toLowerCase() === lowerCaseBacklogId).length > 0) {
+       if (backlogId && allKnownBacklogIds.has(lowerCaseBacklogId)) { // Check against all existing
+            rowErrors.push(`Row ${index + 1}: Duplicate Backlog ID "${backlogId}" already exists.`);
+       }
+       if (backlogId && newBacklogRows.filter(r => r._internalId !== row._internalId && r.backlogId?.toLowerCase() === lowerCaseBacklogId).length > 0) {
             rowErrors.push(`Row ${index + 1}: Duplicate Backlog ID "${backlogId}" within new items.`);
        }
+
 
        if (!title) rowErrors.push("Title required");
        if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) rowErrors.push(`Row ${index + 1}: Invalid Story Points`);
@@ -451,7 +490,8 @@ export default function BacklogTab({
          return; // Stop processing this item
        }
 
-       // Don't add to allKnownBacklogIds here, it's already populated
+       // Add validated ID to set to prevent duplicates within the batch being saved
+       if (backlogId) allKnownBacklogIds.add(lowerCaseBacklogId);
 
        itemsToSave.push({
          id: '', // ID will be assigned by the parent component/saving logic
@@ -485,6 +525,16 @@ export default function BacklogTab({
          return;
      }
 
+     if (itemsToSave.length === 0) {
+        if (newBacklogRows.length > 0) { // If there were rows but they were all skipped/empty
+            toast({ title: "No New Items", description: "No valid new items to save." });
+        } // No toast if it was already empty
+         setNewBacklogRows([]); // Ensure the row area is cleared
+         setHasUnsavedChanges(false);
+         return;
+     }
+
+
      onSaveNewItems(itemsToSave); // Call the specific prop for saving NEW items
      setNewBacklogRows([]); // Clear the new items table after successful save
      setHasUnsavedChanges(false); // Reset unsaved changes for the top table
@@ -511,7 +561,8 @@ export default function BacklogTab({
                 item.id === itemId ? { ...item, [field]: value ?? '' } : item
             )
         );
-        // We don't set hasUnsavedChanges here, rely on a dedicated "Save All" or per-row save button
+        // Mark changes as unsaved for the main save button
+        setHasUnsavedChanges(true);
     };
 
     // Handle select changes for SAVED items
@@ -530,7 +581,8 @@ export default function BacklogTab({
           item.id === itemId ? { ...item, [field]: !!checked } : item
         )
       );
-      // We don't set hasUnsavedChanges here
+      // Mark changes as unsaved
+      setHasUnsavedChanges(true);
     };
 
 
@@ -549,6 +601,7 @@ export default function BacklogTab({
         let errors: string[] = [];
 
         if (!backlogId) errors.push(`Backlog ID required`);
+        // Check against all OTHER saved items
         if (initialBacklog.some(t => t.id !== itemId && t.backlogId?.toLowerCase() === backlogId.toLowerCase())) {
              errors.push(`Duplicate Backlog ID "${backlogId}" already exists.`);
         }
@@ -569,6 +622,10 @@ export default function BacklogTab({
             // Turn off editing mode for this item
             setSavedBacklogItems(prev => prev.map(item => item.id === itemId ? { ...item, isEditing: false } : item));
             toast({ title: "Success", description: `Backlog item '${finalTask.backlogId}' updated.` });
+             // Potentially reset overall unsaved changes if this was the only change
+             // This requires more complex tracking, maybe a separate state for saved item changes
+             // For simplicity, leave hasUnsavedChanges as is, or reset it here assuming Save All is the goal
+             // setHasUnsavedChanges(false); // Or track changes more granularly
         }
     };
 
@@ -603,7 +660,7 @@ export default function BacklogTab({
             <CardDescription>Add new tasks to the project backlog. Click 'Add Backlog Item' to create rows, then 'Save New Items'.</CardDescription>
           </div>
            {/* Save button specifically for NEW items */}
-          <Button onClick={handleSaveNewItems} disabled={!hasUnsavedChanges || newBacklogRows.length === 0}>
+          <Button onClick={handleSaveNewItems} disabled={newBacklogRows.length === 0}>
              <Save className="mr-2 h-4 w-4" /> Save New Items
           </Button>
         </div>
@@ -779,7 +836,7 @@ export default function BacklogTab({
          <CardFooter className="flex justify-between items-center border-t pt-4">
            <p className="text-xs text-muted-foreground">* Required field.</p>
            {/* Save button specific to the NEW items section */}
-           <Button onClick={handleSaveNewItems} disabled={!hasUnsavedChanges || newBacklogRows.length === 0}>
+           <Button onClick={handleSaveNewItems} disabled={newBacklogRows.length === 0}>
                <Save className="mr-2 h-4 w-4" /> Save New Items ({newBacklogRows.length})
            </Button>
          </CardFooter>
@@ -989,6 +1046,7 @@ export default function BacklogTab({
                                    {/* Needs Grooming */}
                                   <TableCell className="text-center">
                                       <Checkbox
+                                          id={`saved-grooming-${row.id}`}
                                           checked={row.needsGrooming}
                                           onCheckedChange={(checked) => handleSavedCheckboxChange(row.id, 'needsGrooming', checked)}
                                           disabled={!row.isEditing}
@@ -998,6 +1056,7 @@ export default function BacklogTab({
                                   {/* Ready for Sprint */}
                                   <TableCell className="text-center">
                                       <Checkbox
+                                          id={`saved-ready-${row.id}`}
                                           checked={row.readyForSprint}
                                           onCheckedChange={(checked) => handleSavedCheckboxChange(row.id, 'readyForSprint', checked)}
                                           disabled={!row.isEditing}
@@ -1052,6 +1111,10 @@ export default function BacklogTab({
              </div>
            )}
        </CardContent>
+       {/* Footer for Saved Items - maybe add bulk actions later? */}
+        {/* <CardFooter className="border-t pt-4 flex justify-end">
+            <Button disabled={!hasUnsavedChanges}>Save All Changes to Saved Items</Button>
+        </CardFooter> */}
      </Card>
 
      {/* --- Modals --- */}
@@ -1181,5 +1244,3 @@ export default function BacklogTab({
     </>
   );
 }
-
-    
