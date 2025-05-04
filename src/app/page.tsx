@@ -1,10 +1,10 @@
 "use client";
 
 import type { ChangeEvent } from 'react';
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Added useRef
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Added useRef, React
 import * as XLSX from 'xlsx';
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Added CardContent
 import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History, CheckCircle, Undo } from 'lucide-react'; // Added Undo icon
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -1062,23 +1062,24 @@ export default function Home() {
        if (!newlyCreatedProjectId) return;
        let newProjectName = 'the new project';
 
-       setProjects(prevProjects => {
-         const updatedProjects = prevProjects.map(p => {
-           if (p.id === newlyCreatedProjectId) {
-             newProjectName = p.name; // Capture name
-             return { ...p, members: [...(p.members || []), ...addedMembers] };
-           }
-           return p;
-         });
-         return updatedProjects;
-       });
-        // Using setTimeout to avoid potential nested updates
-       setTimeout(() => {
-          toast({ title: "Members Added", description: `Members added to project '${newProjectName}'.` });
-          setIsAddMembersDialogOpen(false); // Close the dialog
-          setNewlyCreatedProjectId(null); // Reset the tracked ID
-       }, 50); // Adjusted timeout
-   }, [newlyCreatedProjectId, toast]);
+        // Wrap state updates in setTimeout to defer execution
+        setTimeout(() => {
+            setProjects(prevProjects => {
+              const updatedProjects = prevProjects.map(p => {
+                if (p.id === newlyCreatedProjectId) {
+                  newProjectName = p.name; // Capture name
+                  return { ...p, members: [...(p.members || []), ...addedMembers] };
+                }
+                return p;
+              });
+              return updatedProjects;
+            });
+            toast({ title: "Members Added", description: `Members added to project '${newProjectName}'.` });
+            setIsAddMembersDialogOpen(false); // Close the dialog
+            setNewlyCreatedProjectId(null); // Reset the tracked ID
+        }, 0); // Use 0 timeout to push to the end of the event loop
+
+   }, [newlyCreatedProjectId, toast, setProjects, setIsAddMembersDialogOpen, setNewlyCreatedProjectId]); // Include state setters in dependency array if ESLint requires
 
   // Handler to delete a sprint
   const handleDeleteSprint = useCallback((sprintNumber: number) => {
@@ -1196,8 +1197,8 @@ export default function Home() {
                     });
 
 
-                   sprint.planning.newTasks.forEach(task => planningTasksData.push(mapTaskToRow(task, 'New')));
-                   sprint.planning.spilloverTasks.forEach(task => planningTasksData.push(mapTaskToRow(task, 'Spillover')));
+                   (sprint.planning.newTasks || []).forEach(task => planningTasksData.push(mapTaskToRow(task, 'New')));
+                    (sprint.planning.spilloverTasks || []).forEach(task => planningTasksData.push(mapTaskToRow(task, 'Spillover')));
                }
            });
             if (planningSummaryData.length > 0) {
@@ -1699,6 +1700,9 @@ export default function Home() {
                      <CardTitle>Loading Project Data...</CardTitle>
                      <CardDescription>Please wait while the application loads.</CardDescription>
                  </CardHeader>
+                  <CardContent>
+                     {/* Optional: Add a spinner or loading indicator here */}
+                 </CardContent>
              </Card>
          ) : (
              <Tabs value={activeMainTab} onValueChange={handleMainTabChange} className="w-full">
@@ -1742,6 +1746,9 @@ export default function Home() {
                            <CardTitle>No Project Selected</CardTitle>
                            <CardDescription>Please select a project from the dropdown above, or create a new one.</CardDescription>
                         </CardHeader>
+                         <CardContent>
+                             {/* Optional: Add a button or link to create a new project */}
+                         </CardContent>
                      </Card>
                  )}
              </Tabs>

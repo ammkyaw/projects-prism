@@ -1,8 +1,7 @@
-
 "use client";
 
 import type { ChangeEvent } from 'react';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'; // Import React
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,7 +34,7 @@ const createEmptyMemberRow = (): MemberRow => ({
   role: '',
 });
 
-export default function AddMembersDialog({ isOpen, onOpenChange, onSaveMembers, existingMembers, projectId }: AddMembersDialogProps) {
+function AddMembersDialog({ isOpen, onOpenChange, onSaveMembers, existingMembers, projectId }: AddMembersDialogProps) {
   const [memberRows, setMemberRows] = useState<MemberRow[]>([]);
   const { toast } = useToast();
 
@@ -52,7 +51,7 @@ export default function AddMembersDialog({ isOpen, onOpenChange, onSaveMembers, 
         setMemberRows(initialRows);
     } else {
         // Reset when dialog closes
-        setMemberRows([]);
+        // setMemberRows([]); // Keep state to avoid data loss if re-opened quickly after toast dismissal
     }
   }, [isOpen, existingMembers]);
 
@@ -91,7 +90,7 @@ export default function AddMembersDialog({ isOpen, onOpenChange, onSaveMembers, 
 
     memberRows.forEach((row, index) => {
       // Skip completely empty rows silently
-      if (!row.name && !row.role) {
+      if (!row.name?.trim() && !row.role?.trim()) {
         return;
       }
 
@@ -168,7 +167,7 @@ export default function AddMembersDialog({ isOpen, onOpenChange, onSaveMembers, 
                                <Label htmlFor={`dialog-name-${row._internalId}`} className="md:hidden text-xs font-medium">Name*</Label>
                                <Input
                                    id={`dialog-name-${row._internalId}`}
-                                   value={row.name}
+                                   value={row.name ?? ''} // Handle potential undefined value
                                    onChange={e => handleInputChange(row._internalId, 'name', e.target.value)}
                                    placeholder="Member Name"
                                    className="h-9"
@@ -177,7 +176,7 @@ export default function AddMembersDialog({ isOpen, onOpenChange, onSaveMembers, 
                            {/* Role */}
                            <div className="md:col-span-1 col-span-2">
                                 <Label htmlFor={`dialog-role-${row._internalId}`} className="md:hidden text-xs font-medium">Role*</Label>
-                                <Select value={row.role} onValueChange={(value) => handleRoleChange(row._internalId, value)}>
+                                <Select value={row.role ?? ''} onValueChange={(value) => handleRoleChange(row._internalId, value)}> {/* Handle potential undefined value */}
                                     <SelectTrigger id={`dialog-role-${row._internalId}`} className="h-9">
                                         <SelectValue placeholder="Select Role" />
                                     </SelectTrigger>
@@ -219,3 +218,6 @@ export default function AddMembersDialog({ isOpen, onOpenChange, onSaveMembers, 
     </Dialog>
   );
 }
+
+// Wrap component with React.memo
+export default React.memo(AddMembersDialog);
