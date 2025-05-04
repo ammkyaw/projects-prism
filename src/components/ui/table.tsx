@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -12,9 +13,8 @@ const Table = React.forwardRef<
     <table
       ref={ref}
       className={cn("w-full caption-bottom text-sm", className)}
-      {...props}
-    >
-    {children}</table>
+      {...props} // Ensure props are spread directly onto the table tag
+    >{children}</table>
   </div>
 ))
 Table.displayName = "Table"
@@ -64,7 +64,7 @@ const TableRow = React.forwardRef<
       "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
       className
     )}
-    {...props}
+    {...props} // Remove extra space here
   />
 ))
 TableRow.displayName = "TableRow"
