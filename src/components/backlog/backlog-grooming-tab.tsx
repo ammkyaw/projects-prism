@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'; // Added useMemo
@@ -26,6 +27,7 @@ interface BacklogGroomingTabProps {
   onSplitBacklogItem: (originalTaskId: string, splitTasks: Task[]) => void; // Add split handler prop
   onMergeBacklogItems: (taskIdsToMerge: string[], mergedTask: Task) => void; // Add merge handler prop
   onUndoBacklogAction: (taskId: string) => void; // Add undo handler prop
+  generateNextBacklogId: (allProjectBacklogItems: Task[]) => string; // Add helper prop for merging
 }
 
 interface EditableBacklogItem extends Task {
@@ -33,7 +35,7 @@ interface EditableBacklogItem extends Task {
   isEditing?: boolean;
 }
 
-export default function BacklogGroomingTab({ projectId, projectName, initialBacklog, onSaveBacklog, onSplitBacklogItem, onMergeBacklogItems, onUndoBacklogAction }: BacklogGroomingTabProps) {
+export default function BacklogGroomingTab({ projectId, projectName, initialBacklog, onSaveBacklog, onSplitBacklogItem, onMergeBacklogItems, onUndoBacklogAction, generateNextBacklogId }: BacklogGroomingTabProps) {
   const [allEditableBacklog, setAllEditableBacklog] = useState<EditableBacklogItem[]>([]); // Store ALL items
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSplitDialogOpen, setIsSplitDialogOpen] = useState(false); // State for Split dialog
@@ -166,8 +168,9 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
           return;
       }
        // Extract the base ID (e.g., BL-250001 from BL-250001-a or BL-250001-m)
-       const baseIdMatch = item.backlogId.match(/^(BL-\d{6})/); // Adjust regex if ID format changes
-       const baseId = baseIdMatch ? baseIdMatch[1] : null;
+        const baseIdMatch = item.backlogId.match(/^(BL-\d{6})/); // Adjust regex if ID format changes
+        const baseId = baseIdMatch ? baseIdMatch[1] : null;
+
 
        if (!baseId) {
            toast({ variant: "destructive", title: "Error", description: "Could not determine original item ID to undo." });
@@ -179,7 +182,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
        // For Merge: Find *all* items with 'Merge' status that might relate (this needs better tracking ideally)
        // We need to find the *historical* record of the original item(s)
        const originalItems = initialBacklog.filter(
-           task => (task.backlogId === baseId && (task.historyStatus === 'Split' || task.historyStatus === 'Merge'))
+            task => task.backlogId === baseId && (task.historyStatus === 'Split' || task.historyStatus === 'Merge')
        );
 
        if (originalItems.length === 0) {
@@ -203,6 +206,12 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
     const finalBacklogPortion: Task[] = [];
     const backlogIds = new Set<string>();
 
+    // Pre-populate set with existing IDs from non-historical initial backlog
+    initialBacklog.filter(t => !t.historyStatus).forEach(task => {
+        if (task.backlogId) backlogIds.add(task.backlogId.toLowerCase());
+    });
+
+
     itemsToSave.forEach((item, index) => { // Iterate over items needing potential save
         const backlogId = item.backlogId?.trim() || '';
         const title = item.title?.trim();
@@ -216,7 +225,12 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
 
         let itemErrors: string[] = [];
         if (!backlogId) itemErrors.push(`Row ${index + 1}: Backlog ID required`);
-        if (backlogId && backlogIds.has(backlogId.toLowerCase())) itemErrors.push(`Row ${index + 1}: Duplicate Backlog ID "${backlogId}"`);
+        // Check for duplicates only if the ID has changed from its initial state OR if it's a new item (no initial ID)
+         if (backlogId && item.id && initialBacklog.find(i => i.id === item.id)?.backlogId !== backlogId && backlogIds.has(backlogId.toLowerCase())) {
+             itemErrors.push(`Row ${index + 1}: Duplicate Backlog ID "${backlogId}"`);
+         } else if (backlogId && !item.id && backlogIds.has(backlogId.toLowerCase())) {
+             itemErrors.push(`Row ${index + 1}: Duplicate Backlog ID "${backlogId}"`);
+         }
         if (!title) itemErrors.push(`Row ${index + 1}: Title required`);
          if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) itemErrors.push(`Row ${index + 1}: Invalid Story Points`);
 
@@ -226,7 +240,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
             return; // Stop processing this item
         }
 
-        if (backlogId) backlogIds.add(backlogId.toLowerCase());
+        if (backlogId && !item.id) backlogIds.add(backlogId.toLowerCase()); // Add to set only if it's a new item being validated
 
         finalBacklogPortion.push({
             ...item, // Keep other original fields like taskType, createdDate etc.
@@ -263,11 +277,13 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
     toast({ title: "Success", description: "Backlog grooming changes saved." });
   };
 
-  // Check if a backlog ID indicates a split or merged item
+  // Check if a backlog ID indicates a split or merged item based on the format (e.g., ends with -suffix)
   const isSplitOrMergedItem = (backlogId: string | undefined): boolean => {
-    if (!backlogId) return false;
-    // Checks if the ID ends with '-[letter]' or '-m'
-    return /-[a-z]$/i.test(backlogId) || /-[mM]$/.test(backlogId);
+     if (!backlogId) return false;
+     // Checks if the ID ends with '-[number]' (split) or was potentially created by merge (harder to tell without better linking)
+     return /-\d+$/.test(backlogId);
+     // Note: Checking for merge results is complex without a direct link.
+     // Relying on the historical record might be better if needed.
   };
 
   return (
@@ -500,6 +516,8 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
              onOpenChange={setIsMergeDialogOpen}
              availableBacklogItems={mergeCandidates} // Pass only non-historical items
              onConfirmMerge={handleConfirmMerge}
+             generateNextBacklogId={generateNextBacklogId} // Pass helper
+             allProjectBacklogItems={initialBacklog} // Pass all items for ID check
          />
     </>
   );
