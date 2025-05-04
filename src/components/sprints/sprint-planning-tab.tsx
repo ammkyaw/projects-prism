@@ -101,6 +101,7 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
 
 
 interface SprintPlanningTabProps {
+  projectId: string; // Added projectId
   sprints: Sprint[];
   onSavePlanning: (sprintNumber: number, data: SprintPlanning, newStatus?: SprintStatus) => void;
   onCreateAndPlanSprint: (sprintDetails: Omit<Sprint, 'details' | 'planning' | 'status' | 'committedPoints' | 'completedPoints'>, planningData: SprintPlanning) => void;
@@ -140,7 +141,7 @@ const createEmptyTaskRow = (): TaskRow => ({
 });
 
 
-export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars, teams, backlog, onRevertTask, onCompleteSprint }: SprintPlanningTabProps) {
+export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars, teams, backlog, onRevertTask, onCompleteSprint }: SprintPlanningTabProps) {
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | null>(null);
   const [planningData, setPlanningData] = useState<SprintPlanning>(initialSprintPlanning);
   const [newTasks, setNewTasks] = useState<TaskRow[]>([]);
@@ -214,44 +215,46 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
       }
   };
 
+  // Effect to load planning data when the selected sprint changes
   useEffect(() => {
-    if (selectedSprint && !isCreatingNewSprint) {
-      const loadedPlanning = selectedSprint.planning ?? initialSprintPlanning;
-      setPlanningData(loadedPlanning);
+      if (selectedSprint && !isCreatingNewSprint) {
+        const loadedPlanning = selectedSprint.planning ?? initialSprintPlanning;
+        setPlanningData(loadedPlanning);
 
-       const mapTaskToRow = (task: Task, index: number, type: 'new' | 'spill'): TaskRow => ({
-          ...task,
-          ticketNumber: task.ticketNumber ?? '', // Use ticketNumber
-          storyPoints: task.storyPoints?.toString() ?? '',
-          devEstimatedTime: task.devEstimatedTime ?? '', // Use new field
-          qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
-          bufferTime: task.bufferTime ?? '1d', // Default buffer time
-          assignee: task.assignee ?? '',
-          reviewer: task.reviewer ?? '', // Add reviewer
-          status: task.status ?? 'To Do',
-          startDate: task.startDate,
-          startDateObj: parseDateString(task.startDate),
-          _internalId: task.id || `initial_${type}_${index}_${Date.now()}`,
-       });
+         const mapTaskToRow = (task: Task, index: number, type: 'new' | 'spill'): TaskRow => ({
+            ...task,
+            ticketNumber: task.ticketNumber ?? '', // Use ticketNumber
+            storyPoints: task.storyPoints?.toString() ?? '',
+            devEstimatedTime: task.devEstimatedTime ?? '', // Use new field
+            qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
+            bufferTime: task.bufferTime ?? '1d', // Default buffer time
+            assignee: task.assignee ?? '',
+            reviewer: task.reviewer ?? '', // Add reviewer
+            status: task.status ?? 'To Do',
+            startDate: task.startDate,
+            startDateObj: parseDateString(task.startDate),
+            _internalId: task.id || `initial_${type}_${index}_${Date.now()}`,
+         });
 
-      setNewTasks((loadedPlanning.newTasks || []).map((task, index) => mapTaskToRow(task, index, 'new')));
-      setSpilloverTasks((loadedPlanning.spilloverTasks || []).map((task, index) => mapTaskToRow(task, index, 'spill')));
+        setNewTasks((loadedPlanning.newTasks || []).map((task, index) => mapTaskToRow(task, index, 'new')));
+        setSpilloverTasks((loadedPlanning.spilloverTasks || []).map((task, index) => mapTaskToRow(task, index, 'spill')));
 
-      // Ensure newTasks is empty if no tasks were loaded (no initial empty row needed)
-      if ((loadedPlanning.newTasks || []).length === 0) {
-          setNewTasks([]);
+        // Ensure newTasks is empty if no tasks were loaded (no initial empty row needed)
+        if ((loadedPlanning.newTasks || []).length === 0) {
+            setNewTasks([]);
+        }
+
+        // Ensure spilloverTasks is empty if none loaded
+         if ((loadedPlanning.spilloverTasks || []).length === 0) {
+            setSpilloverTasks([]);
+         }
+
+      } else if (!isCreatingNewSprint) {
+          resetForms();
       }
-
-      // Ensure spilloverTasks is empty if none loaded
-       if ((loadedPlanning.spilloverTasks || []).length === 0) {
-          setSpilloverTasks([]);
-       }
-
-
-    } else if (!isCreatingNewSprint) {
-        resetForms();
-    }
-  }, [selectedSprint, isCreatingNewSprint, resetForms]);
+      // Only depends on the selected sprint *number*, not the whole sprint object
+      // to avoid resetting when the parent state updates after a save.
+  }, [selectedSprintNumber, isCreatingNewSprint, resetForms]);
 
 
   useEffect(() => {
@@ -301,24 +304,33 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
   };
 
   const removeTaskRow = (type: 'new' | 'spillover', internalId: string) => {
-     if (isFormDisabled && !isCreatingNewSprint) return; // Use unified disable check
+    if (isFormDisabled && !isCreatingNewSprint) return; // Use unified disable check
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
-    updater(prevRows => {
-        const taskToRemove = prevRows.find(row => row._internalId === internalId);
 
-        // Check if it's a 'new' task and has a backlogId, meaning it came from the backlog
-        if (type === 'new' && taskToRemove && taskToRemove.backlogId && selectedSprintNumber) {
-             // Call the revert function passed from parent
-             // Defer the state update to avoid potential render-during-render issues with toast
-             setTimeout(() => {
-                onRevertTask(selectedSprintNumber, taskToRemove.id, taskToRemove.backlogId);
-            }, 0);
-        }
-         // Always remove the task from the current sprint planning state
-        const newRows = prevRows.filter(row => row._internalId !== internalId);
-        return newRows;
-    });
-  };
+    // Use a callback function for state update to ensure it happens after the timeout
+    const updateState = () => {
+        updater(prevRows => {
+             const newRows = prevRows.filter(row => row._internalId !== internalId);
+             return newRows;
+         });
+    }
+
+
+    const taskToRemove = (type === 'new' ? newTasks : spilloverTasks).find(row => row._internalId === internalId);
+
+    // Check if it's a 'new' task and has a backlogId, meaning it came from the backlog
+    if (type === 'new' && taskToRemove && taskToRemove.backlogId && selectedSprintNumber) {
+         // Call the revert function passed from parent (wrapped in setTimeout if necessary)
+          setTimeout(() => {
+             onRevertTask(selectedSprintNumber, taskToRemove.id, taskToRemove.backlogId);
+             // Now update the local state AFTER the parent state update is likely processed
+             updateState();
+         }, 0);
+    } else {
+        // If not reverting, just update the local state immediately
+        updateState();
+    }
+};
 
  // Function to find the team lead for a given member
  const findTeamLead = useCallback((memberName: string | undefined): string | undefined => {
@@ -1247,5 +1259,3 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
   );
 }
 
-
-    
