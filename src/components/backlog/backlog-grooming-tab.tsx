@@ -10,7 +10,8 @@ import { Textarea } from '@/components/ui/textarea'; // Added Textarea
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
-import { Info, Edit, Save, XCircle, HelpCircle } from 'lucide-react'; // Added HelpCircle
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"; // Import Dialog components
+import { Info, Edit, Save, XCircle, HelpCircle, BookOpenCheck } from 'lucide-react'; // Added HelpCircle, BookOpenCheck
 import { useToast } from "@/hooks/use-toast";
 import { taskPriorities } from '@/types/sprint-data'; // Import priorities
 import { cn } from '@/lib/utils';
@@ -54,8 +55,8 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
 
    // Track unsaved changes by comparing current state with initial props
    useEffect(() => {
-        const cleanBacklog = (tasks: Task[]): Omit<Task, 'id' | 'status'>[] =>
-           (tasks || []).map(({ id, status, ...rest }: any) => ({ // Add null check
+        const cleanBacklog = (tasks: Task[]): Omit<Task, 'id' | 'status' | 'movedToSprint'>[] =>
+           (tasks || []).map(({ id, status, movedToSprint, ...rest }: any) => ({ // Add null check
                backlogId: rest.backlogId?.trim() || '',
                title: rest.title?.trim() || '',
                description: rest.description?.trim() || '',
@@ -174,143 +175,173 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex justify-between items-center">
-            <div>
-               <CardTitle className="flex items-center gap-2"><Edit className="h-5 w-5 text-primary" /> Backlog Grooming</CardTitle> {/* Updated Icon */}
-               <CardDescription>Refine backlog items marked as 'Needs Grooming' for project '{projectName}'. Add details, estimate effort, mark as ready for sprint.</CardDescription>
-            </div>
-            <Button onClick={handleSaveAll} disabled={!hasUnsavedChanges}>
-                <Save className="mr-2 h-4 w-4" /> Save All Changes
-            </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {groomingItems.length === 0 ? ( // Check filtered list for display
-             <div className="flex flex-col items-center justify-center min-h-[200px] border-dashed border-2 rounded-md p-6">
-                <Info className="h-8 w-8 text-muted-foreground mb-2" />
-                <p className="text-muted-foreground">No backlog items currently marked as needing grooming.</p>
-                <p className="text-sm text-muted-foreground">Check items in the 'Management' tab.</p>
-             </div>
-         ) : (
-            <div className="space-y-4">
-              {groomingItems.map(item => ( // Map over filtered list for display
-                <Card key={item._internalId} className={cn("transition-all", item.isEditing ? "shadow-lg border-primary" : "")}>
-                  <CardHeader className="flex flex-row justify-between items-center py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">{item.backlogId}</span> - <span>{item.title}</span>
-                      <span className="text-xs text-muted-foreground">({item.priority})</span>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={() => handleEditToggle(item._internalId)} className="h-8 w-8">
-                       {item.isEditing ? <XCircle className="h-4 w-4 text-destructive" /> : <Edit className="h-4 w-4" />}
-                    </Button>
-                  </CardHeader>
-                  {item.isEditing && (
-                    <CardContent className="px-4 pb-4 space-y-4 border-t pt-4">
-                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="space-y-1">
-                             <Label htmlFor={`groom-title-${item._internalId}`}>Title</Label>
-                             <Input
-                                id={`groom-title-${item._internalId}`}
-                                value={item.title ?? ''}
-                                onChange={e => handleInputChange(item._internalId, 'title', e.target.value)}
-                                placeholder="Task Title"
-                             />
-                          </div>
-                           <div className="space-y-1">
-                                <Label htmlFor={`groom-priority-${item._internalId}`}>Priority</Label>
-                                <Select value={item.priority ?? 'Medium'} onValueChange={(value) => handlePriorityChange(item._internalId, value)}>
-                                    <SelectTrigger id={`groom-priority-${item._internalId}`}>
-                                        <SelectValue placeholder="Priority" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {taskPriorities.map(option => (
-                                            <SelectItem key={option} value={option}>{option}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                           </div>
-                           <div className="space-y-1">
-                                <Label htmlFor={`groom-sp-${item._internalId}`}>Story Points</Label>
-                                <Input
-                                    id={`groom-sp-${item._internalId}`}
-                                    type="number"
-                                    value={item.storyPoints}
-                                    onChange={e => handleInputChange(item._internalId, 'storyPoints', e.target.value)}
-                                    placeholder="SP (e.g., 3)"
-                                    min="0"
-                                />
-                           </div>
-                       </div>
-                        <div className="space-y-1">
-                            <Label htmlFor={`groom-desc-${item._internalId}`}>Description</Label>
-                            <Textarea
-                                id={`groom-desc-${item._internalId}`}
-                                value={item.description ?? ''}
-                                onChange={e => handleInputChange(item._internalId, 'description', e.target.value)}
-                                placeholder="Detailed description of the task..."
-                                rows={3}
-                            />
-                        </div>
-                         <div className="space-y-1">
-                             <Label htmlFor={`groom-ac-${item._internalId}`}>Acceptance Criteria</Label>
-                             <Textarea
-                                 id={`groom-ac-${item._internalId}`}
-                                 value={item.acceptanceCriteria ?? ''}
-                                 onChange={e => handleInputChange(item._internalId, 'acceptanceCriteria', e.target.value)}
-                                 placeholder="List the criteria for accepting this task as done..."
-                                 rows={4}
-                             />
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+              <div>
+                 <CardTitle className="flex items-center gap-2"><Edit className="h-5 w-5 text-primary" /> Backlog Grooming</CardTitle> {/* Updated Icon */}
+                 <CardDescription>Refine backlog items marked as 'Needs Grooming' for project '{projectName}'. Add details, estimate effort, mark as ready for sprint.</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                 {/* Definition of Ready Dialog */}
+                 <Dialog>
+                     <DialogTrigger asChild>
+                         <Button variant="outline" size="sm">
+                             <BookOpenCheck className="mr-2 h-4 w-4" /> View DoR
+                         </Button>
+                     </DialogTrigger>
+                     <DialogContent className="sm:max-w-md">
+                         <DialogHeader>
+                             <DialogTitle>Definition of Ready (DoR)</DialogTitle>
+                         </DialogHeader>
+                         <DialogDescription asChild>
+                            <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground py-4">
+                                <li>Well-defined and clear acceptance criteria</li>
+                                <li>Small enough to be completed within one sprint</li>
+                                <li>No blockers or unresolved dependencies</li>
+                                <li>Prioritized by the Project Manager/ Product Owner</li>
+                             </ul>
+                         </DialogDescription>
+                         <DialogFooter>
+                             <DialogClose asChild>
+                                 <Button type="button" variant="secondary">Close</Button>
+                             </DialogClose>
+                         </DialogFooter>
+                     </DialogContent>
+                 </Dialog>
+                 <Button onClick={handleSaveAll} disabled={!hasUnsavedChanges}>
+                     <Save className="mr-2 h-4 w-4" /> Save All Changes
+                 </Button>
+              </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {groomingItems.length === 0 ? ( // Check filtered list for display
+               <div className="flex flex-col items-center justify-center min-h-[200px] border-dashed border-2 rounded-md p-6">
+                  <Info className="h-8 w-8 text-muted-foreground mb-2" />
+                  <p className="text-muted-foreground">No backlog items currently marked as needing grooming.</p>
+                  <p className="text-sm text-muted-foreground">Check items in the 'Management' tab.</p>
+               </div>
+           ) : (
+              <div className="space-y-4">
+                {groomingItems.map(item => ( // Map over filtered list for display
+                  <Card key={item._internalId} className={cn("transition-all", item.isEditing ? "shadow-lg border-primary" : "")}>
+                    <CardHeader className="flex flex-row justify-between items-center py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{item.backlogId}</span> - <span>{item.title}</span>
+                        <span className="text-xs text-muted-foreground">({item.priority})</span>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => handleEditToggle(item._internalId)} className="h-8 w-8">
+                         {item.isEditing ? <XCircle className="h-4 w-4 text-destructive" /> : <Edit className="h-4 w-4" />}
+                      </Button>
+                    </CardHeader>
+                    {item.isEditing && (
+                      <CardContent className="px-4 pb-4 space-y-4 border-t pt-4">
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-1">
+                               <Label htmlFor={`groom-title-${item._internalId}`}>Title</Label>
+                               <Input
+                                  id={`groom-title-${item._internalId}`}
+                                  value={item.title ?? ''}
+                                  onChange={e => handleInputChange(item._internalId, 'title', e.target.value)}
+                                  placeholder="Task Title"
+                               />
+                            </div>
+                             <div className="space-y-1">
+                                  <Label htmlFor={`groom-priority-${item._internalId}`}>Priority</Label>
+                                  <Select value={item.priority ?? 'Medium'} onValueChange={(value) => handlePriorityChange(item._internalId, value)}>
+                                      <SelectTrigger id={`groom-priority-${item._internalId}`}>
+                                          <SelectValue placeholder="Priority" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                          {taskPriorities.map(option => (
+                                              <SelectItem key={option} value={option}>{option}</SelectItem>
+                                          ))}
+                                      </SelectContent>
+                                  </Select>
+                             </div>
+                             <div className="space-y-1">
+                                  <Label htmlFor={`groom-sp-${item._internalId}`}>Story Points</Label>
+                                  <Input
+                                      id={`groom-sp-${item._internalId}`}
+                                      type="number"
+                                      value={item.storyPoints}
+                                      onChange={e => handleInputChange(item._internalId, 'storyPoints', e.target.value)}
+                                      placeholder="SP (e.g., 3)"
+                                      min="0"
+                                  />
+                             </div>
                          </div>
-                         {/* Flags for Grooming/Ready */}
-                          <div className="flex items-center space-x-4">
-                            <div className="flex items-center space-x-2">
-                                <Checkbox
-                                    id={`groom-needs-${item._internalId}`}
-                                    checked={item.needsGrooming}
-                                    onCheckedChange={(checked) => handleCheckboxChange(item._internalId, 'needsGrooming', checked)}
-                                />
-                                <Label htmlFor={`groom-needs-${item._internalId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                    Needs Grooming
-                                </Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <Checkbox
-                                    id={`groom-ready-${item._internalId}`}
-                                    checked={item.readyForSprint}
-                                    onCheckedChange={(checked) => handleCheckboxChange(item._internalId, 'readyForSprint', checked)}
-                                />
-                                <Label htmlFor={`groom-ready-${item._internalId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                    Ready for Sprint
-                                </Label>
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p className="text-xs max-w-xs">DoR: Story must be small, clear, prioritized, and have no blockers.</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                            </div>
+                          <div className="space-y-1">
+                              <Label htmlFor={`groom-desc-${item._internalId}`}>Description</Label>
+                              <Textarea
+                                  id={`groom-desc-${item._internalId}`}
+                                  value={item.description ?? ''}
+                                  onChange={e => handleInputChange(item._internalId, 'description', e.target.value)}
+                                  placeholder="Detailed description of the task..."
+                                  rows={3}
+                              />
                           </div>
-                          {/* Add fields for Estimation, Splitting later */}
-                    </CardContent>
-                  )}
-                </Card>
-              ))}
-            </div>
-         )}
-      </CardContent>
-        {groomingItems.length > 0 && ( // Only show footer if items are displayed
-           <CardFooter className="border-t pt-4 flex justify-end">
-               <Button onClick={handleSaveAll} disabled={!hasUnsavedChanges}>
-                   <Save className="mr-2 h-4 w-4" /> Save All Changes
-               </Button>
-           </CardFooter>
-        )}
-    </Card>
+                           <div className="space-y-1">
+                               <Label htmlFor={`groom-ac-${item._internalId}`}>Acceptance Criteria</Label>
+                               <Textarea
+                                   id={`groom-ac-${item._internalId}`}
+                                   value={item.acceptanceCriteria ?? ''}
+                                   onChange={e => handleInputChange(item._internalId, 'acceptanceCriteria', e.target.value)}
+                                   placeholder="List the criteria for accepting this task as done..."
+                                   rows={4}
+                               />
+                           </div>
+                           {/* Flags for Grooming/Ready */}
+                            <div className="flex items-center space-x-4">
+                              <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                      id={`groom-needs-${item._internalId}`}
+                                      checked={item.needsGrooming}
+                                      onCheckedChange={(checked) => handleCheckboxChange(item._internalId, 'needsGrooming', checked)}
+                                  />
+                                  <Label htmlFor={`groom-needs-${item._internalId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                      Needs Grooming
+                                  </Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                      id={`groom-ready-${item._internalId}`}
+                                      checked={item.readyForSprint}
+                                      onCheckedChange={(checked) => handleCheckboxChange(item._internalId, 'readyForSprint', checked)}
+                                  />
+                                  <Label htmlFor={`groom-ready-${item._internalId}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                      Ready for Sprint
+                                  </Label>
+                                  <TooltipProvider>
+                                      <Tooltip>
+                                          <TooltipTrigger asChild>
+                                              <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                              <p className="text-xs max-w-xs">DoR: Story must be small, clear, prioritized, and have no blockers.</p>
+                                          </TooltipContent>
+                                      </Tooltip>
+                                  </TooltipProvider>
+                              </div>
+                            </div>
+                            {/* Add fields for Estimation, Splitting later */}
+                      </CardContent>
+                    )}
+                  </Card>
+                ))}
+              </div>
+           )}
+        </CardContent>
+          {groomingItems.length > 0 && ( // Only show footer if items are displayed
+             <CardFooter className="border-t pt-4 flex justify-end">
+                 <Button onClick={handleSaveAll} disabled={!hasUnsavedChanges}>
+                     <Save className="mr-2 h-4 w-4" /> Save All Changes
+                 </Button>
+             </CardFooter>
+          )}
+      </Card>
+    </>
   );
 }
