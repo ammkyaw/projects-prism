@@ -14,7 +14,7 @@ import { GitMerge, ArrowLeft, Check } from 'lucide-react';
 import type { Task } from '@/types/sprint-data';
 import { taskPriorities, taskTypes, initialBacklogTask } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
-import { format, isValid, parseISO, getYear } from 'date-fns'; // Import isValid, parseISO, getYear
+import { format, isValid, parseISO } from 'date-fns'; // Removed getYear
 import { cn } from '@/lib/utils';
 
 interface MergeBacklogDialogProps {
@@ -22,8 +22,9 @@ interface MergeBacklogDialogProps {
   onOpenChange: (open: boolean) => void;
   availableBacklogItems: Task[]; // All items available for merging
   onConfirmMerge: (taskIdsToMerge: string[], mergedTask: Task) => void;
-  generateNextBacklogId: (allProjectBacklogItems: Task[]) => string; // ID generation helper
-  allProjectBacklogItems: Task[]; // All items for uniqueness check
+  // Remove generateNextBacklogId prop as ID generation is now based on selected items
+  // generateNextBacklogId: (allProjectBacklogItems: Task[]) => string;
+  allProjectBacklogItems: Task[]; // Still needed for context if validation is complex
 }
 
  // Helper function to get the highest priority among selected tasks
@@ -44,8 +45,8 @@ export default function MergeBacklogDialog({
   onOpenChange,
   availableBacklogItems,
   onConfirmMerge,
-  generateNextBacklogId, // Receive helper
-  allProjectBacklogItems, // Receive all items
+  // generateNextBacklogId, // Removed prop
+  allProjectBacklogItems, // Kept for potential context/validation
 }: MergeBacklogDialogProps) {
   const [step, setStep] = useState<'select' | 'confirm'>('select');
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
@@ -80,20 +81,24 @@ export default function MergeBacklogDialog({
     }
     // Pre-populate the merged task details
     const selectedTasks = availableBacklogItems.filter(task => selectedTaskIds.has(task.id));
+    const firstSelectedItem = selectedTasks[0]; // Use the first selected item for base ID and some defaults
+
     const titles = selectedTasks.map(t => t.title || `Item ${t.backlogId}`).join(' + ');
     const descriptions = selectedTasks.map(t => t.description || '').filter(Boolean).join('\n\n---\n\n');
     const acceptanceCriteria = selectedTasks.map(t => t.acceptanceCriteria || '').filter(Boolean).join('\n\n---\n\n');
-    const newBacklogId = generateNextBacklogId(allProjectBacklogItems); // Generate ID using helper
+
+    // Generate ID based on the first selected item + '-m' suffix
+    const newMergedBacklogId = firstSelectedItem.backlogId ? `${firstSelectedItem.backlogId}-m` : `merged-${Date.now()}`;
 
 
     setMergedTaskDetails({
-      backlogId: newBacklogId, // Use auto-generated ID
+      backlogId: newMergedBacklogId, // Use auto-generated ID
       title: `Merged: ${titles}`,
       priority: getHighestPriority(selectedTasks), // Default to highest priority among selected
       description: descriptions,
       acceptanceCriteria: acceptanceCriteria,
-      taskType: selectedTasks[0]?.taskType || 'New Feature', // Take type from first item or default
-      initiator: selectedTasks[0]?.initiator, // Optional: Maybe take initiator from first? Or leave blank?
+      taskType: firstSelectedItem?.taskType || 'New Feature', // Take type from first item or default
+      initiator: firstSelectedItem?.initiator, // Optional: Maybe take initiator from first? Or leave blank?
       dependsOn: [...new Set(selectedTasks.flatMap(t => t.dependsOn || []))], // Combine unique dependencies
       createdDate: format(new Date(), 'yyyy-MM-dd'), // Set created date to now
       storyPoints: undefined, // Requires re-estimation
@@ -112,7 +117,12 @@ export default function MergeBacklogDialog({
         toast({ variant: "destructive", title: "Validation Error", description: "Merged task Backlog ID is missing." });
         return;
     }
-     // No need to check uniqueness here as it was generated based on all items
+     // Basic check for potential collisions with the '-m' suffix, though unlikely
+     if (allProjectBacklogItems.some(t => t.backlogId === backlogId)) {
+         toast({ variant: "destructive", title: "Validation Error", description: `Generated Backlog ID "${backlogId}" might conflict. Please adjust manually if needed (though this is rare).` });
+         // Consider allowing manual override or regeneration if collisions are a concern
+         // For now, we proceed.
+     }
     if (!title?.trim()) {
         toast({ variant: "destructive", title: "Validation Error", description: "Merged task Title is required." });
         return;
@@ -171,7 +181,7 @@ export default function MergeBacklogDialog({
            )}
            {step === 'confirm' && (
              <DialogDescription>
-                 Review and edit the details for the new merged backlog item. A unique Backlog ID has been generated. Original items will be marked as 'Merged' in History.
+                 Review and edit the details for the new merged backlog item. A unique Backlog ID ({mergedTaskDetails.backlogId}) has been generated based on the first selected item. Original items will be marked as 'Merged' in History.
              </DialogDescription>
            )}
         </DialogHeader>
@@ -223,12 +233,12 @@ export default function MergeBacklogDialog({
                 <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                          <div className="space-y-1">
-                            <Label htmlFor="merged-backlog-id">Backlog ID*</Label>
+                            <Label htmlFor="merged-backlog-id">Backlog ID</Label>
                             <Input
                                id="merged-backlog-id"
                                value={mergedTaskDetails.backlogId ?? ''}
                                readOnly // ID is auto-generated
-                               className="bg-muted cursor-not-allowed"
+                               className="bg-muted cursor-default"
                             />
                          </div>
                         <div className="space-y-1 md:col-span-2">

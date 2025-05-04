@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -12,7 +13,7 @@ import { PlusCircle, Trash2, Split, Copy } from 'lucide-react';
 import type { Task } from '@/types/sprint-data';
 import { taskPriorities, initialBacklogTask } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
-import { format, getYear } from 'date-fns';
+import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 interface SplitBacklogItemDialogProps {
@@ -20,21 +21,25 @@ interface SplitBacklogItemDialogProps {
   onOpenChange: (open: boolean) => void;
   originalTask: Task; // The task being split
   onConfirmSplit: (originalTaskId: string, splitTasks: Task[]) => void;
-  allProjectBacklogItems: Task[]; // Needed for checking ID uniqueness
+  allProjectBacklogItems: Task[]; // Needed for checking ID uniqueness (though less critical with suffixes)
 }
 
 interface SplitTaskRow extends Partial<Task> {
   _internalId: string;
 }
 
-// Removed generateNextBacklogId function specific to split
+// Helper to generate the next alphabetical suffix
+const getNextSuffix = (currentCount: number): string => {
+  return String.fromCharCode(97 + currentCount); // 97 is 'a'
+};
 
-const createEmptySplitTaskRow = (baseTask: Task, partNumber: number): SplitTaskRow => {
+const createEmptySplitTaskRow = (baseTask: Task, suffix: string): SplitTaskRow => {
+    const newBacklogId = `${baseTask.backlogId}-${suffix}`;
     return {
-        _internalId: `split_${baseTask.id}_part${partNumber}_${Date.now()}`,
+        _internalId: `split_${baseTask.id}_${newBacklogId}_${Date.now()}`,
         id: '', // New ID needed on save
-        backlogId: '', // User will enter ID manually
-        title: `${baseTask.title} (Part ${partNumber})` ?? `Split Task ${partNumber}`,
+        backlogId: newBacklogId, // Auto-generated ID
+        title: `${baseTask.title} (${suffix.toUpperCase()})` ?? `Split Task ${suffix.toUpperCase()}`,
         description: baseTask.description ?? '',
         acceptanceCriteria: '', // Start AC fresh
         storyPoints: '', // Reset story points, needs re-estimation
@@ -53,7 +58,7 @@ export default function SplitBacklogItemDialog({
   onOpenChange,
   originalTask,
   onConfirmSplit,
-  allProjectBacklogItems,
+  allProjectBacklogItems, // Keep for potential future validation, though suffixes reduce collision risk
 }: SplitBacklogItemDialogProps) {
   const [splitTaskRows, setSplitTaskRows] = useState<SplitTaskRow[]>([]);
   const { toast } = useToast();
@@ -62,17 +67,17 @@ export default function SplitBacklogItemDialog({
     if (isOpen && originalTask) {
       // Initialize with two split tasks by default when dialog opens
       setSplitTaskRows([
-        createEmptySplitTaskRow(originalTask, 1),
-        createEmptySplitTaskRow(originalTask, 2),
+        createEmptySplitTaskRow(originalTask, getNextSuffix(0)), // Suffix 'a'
+        createEmptySplitTaskRow(originalTask, getNextSuffix(1)), // Suffix 'b'
       ]);
     } else {
       setSplitTaskRows([]); // Reset when closed
     }
-  }, [isOpen, originalTask]); // Removed allProjectBacklogItems dependency
+  }, [isOpen, originalTask]);
 
   const handleAddSplitTaskRow = () => {
-    const nextPartNumber = splitTaskRows.length + 1;
-    setSplitTaskRows(prev => [...prev, createEmptySplitTaskRow(originalTask, nextPartNumber)]);
+    const nextSuffix = getNextSuffix(splitTaskRows.length);
+    setSplitTaskRows(prev => [...prev, createEmptySplitTaskRow(originalTask, nextSuffix)]);
   };
 
   const handleRemoveSplitTaskRow = (internalId: string) => {
@@ -83,7 +88,12 @@ export default function SplitBacklogItemDialog({
         toast({ variant: "destructive", title: "Error", description: "Cannot remove the last split item." });
         return prevRows;
       }
-      return newRows;
+       // Re-assign suffixes after removal to maintain sequence (a, b, c...)
+       return newRows.map((row, index) => ({
+           ...row,
+           backlogId: `${originalTask.backlogId}-${getNextSuffix(index)}`,
+           title: `${originalTask.title} (${getNextSuffix(index).toUpperCase()})`
+       }));
     });
   };
 
@@ -112,7 +122,6 @@ export default function SplitBacklogItemDialog({
   const handleConfirm = () => {
     let hasErrors = false;
     const finalSplitTasks: Task[] = [];
-    const newBacklogIds = new Set<string>(); // Track new IDs within this split operation
 
      // Validate at least one split task exists
      if (splitTaskRows.length === 0) {
@@ -121,17 +130,14 @@ export default function SplitBacklogItemDialog({
      }
 
     splitTaskRows.forEach((row, index) => {
-      const backlogId = row.backlogId?.trim(); // Now manually entered
+      const backlogId = row.backlogId?.trim(); // Now auto-generated
       const title = row.title?.trim();
       const storyPointsRaw = row.storyPoints?.toString().trim();
       const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
       const priority = row.priority ?? 'Medium';
 
       let rowErrors: string[] = [];
-      if (!backlogId) rowErrors.push(`Split Task ${index + 1}: Backlog ID is required.`); // ID is now mandatory
-      if (backlogId && (newBacklogIds.has(backlogId.toLowerCase()) || allProjectBacklogItems.some(t => t.backlogId?.toLowerCase() === backlogId.toLowerCase() && t.id !== originalTask.id))) {
-           rowErrors.push(`Split Task ${index + 1}: Duplicate Backlog ID "${backlogId}".`);
-      }
+      if (!backlogId) rowErrors.push(`Split Task ${index + 1}: Backlog ID generation failed.`); // Should not happen
       if (!title) rowErrors.push(`Split Task ${index + 1}: Title required.`);
       if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
         rowErrors.push(`Split Task ${index + 1}: Invalid Story Points.`);
@@ -150,8 +156,6 @@ export default function SplitBacklogItemDialog({
         hasErrors = true;
         return; // Stop processing this row
       }
-
-      if (backlogId) newBacklogIds.add(backlogId.toLowerCase());
 
       // Convert SplitTaskRow back to Task structure for saving
       finalSplitTasks.push({
@@ -202,7 +206,7 @@ export default function SplitBacklogItemDialog({
             <Split className="h-5 w-5 text-primary" /> Split Backlog Item: {originalTask.backlogId}
           </DialogTitle>
           <DialogDescription>
-            Divide '{originalTask.title}' into smaller, manageable tasks. Enter a unique Backlog ID for each new item. New items inherit some details but need re-estimation and grooming.
+            Divide '{originalTask.title}' into smaller tasks. IDs will be auto-generated ({originalTask.backlogId}-a, {originalTask.backlogId}-b, etc.). New items need re-estimation and grooming.
           </DialogDescription>
         </DialogHeader>
 
@@ -223,12 +227,12 @@ export default function SplitBacklogItemDialog({
                  </Button>
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                      <div className="space-y-1">
-                        <Label htmlFor={`split-id-${row._internalId}`}>Backlog ID*</Label>
+                        <Label htmlFor={`split-id-${row._internalId}`}>Backlog ID</Label>
                         <Input
                            id={`split-id-${row._internalId}`}
                            value={row.backlogId ?? ''}
-                           onChange={e => handleInputChange(row._internalId, 'backlogId', e.target.value)}
-                           placeholder="Enter unique Backlog ID"
+                           readOnly // Auto-generated
+                           className="bg-muted cursor-default"
                         />
                      </div>
                     <div className="space-y-1 md:col-span-2">
