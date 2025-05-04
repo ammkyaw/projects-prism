@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -29,7 +28,6 @@ import HistoryTab from '@/components/backlog/history-tab'; // Import HistoryTab 
 import SprintSummaryTab from '@/components/sprints/sprint-summary-tab'; // Updated path
 import SprintPlanningTab from '@/components/sprints/sprint-planning-tab'; // New component for planning
 import SprintRetrospectiveTab from '@/components/sprints/sprint-retrospective-tab'; // Updated path
-import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Updated path
 import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
 import AnalyticsChartsTab from '@/components/analytics-charts-tab';
 import AnalyticsReportsTab from '@/components/analytics-reports-tab'; // Updated path
@@ -122,9 +120,11 @@ export default function Home() {
   const [isAddMembersDialogOpen, setIsAddMembersDialogOpen] = useState<boolean>(false);
   const [newlyCreatedProjectId, setNewlyCreatedProjectId] = useState<string | null>(null); // Track ID for Add Members dialog
   const { toast } = useToast();
-  // const [resetManualFormKey, setResetManualFormKey] = useState(0); // State to trigger form reset (No longer needed as Entry tab removed)
   const [clientNow, setClientNow] = useState<Date | null>(null); // For client-side date comparison
   const [isLoading, setIsLoading] = useState(true); // Add loading state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false); // State for delete project dialog
+  const [projectToDeleteId, setProjectToDeleteId] = useState<string | null>(null); // Track ID for deletion
+  const [confirmProjectName, setConfirmProjectName] = useState<string>(''); // Input for delete confirmation
 
   // Get current date on client mount to avoid hydration issues
   useEffect(() => {
@@ -154,83 +154,131 @@ export default function Home() {
   const activeMainTab = useMemo(() => activeTab.split('/')[0], [activeTab]);
 
 
-  // Effect to CLEAR data from localStorage on mount
-  useEffect(() => {
-    console.log("Attempting to clear data from localStorage...");
-    setIsLoading(true); // Start loading indication (even though we are clearing)
-    try {
-       localStorage.removeItem('appData');
-       localStorage.removeItem('selectedProjectId');
-       console.log("Successfully cleared project data ('appData' and 'selectedProjectId') from localStorage.");
-       setProjects([]); // Reset projects state
-       setSelectedProjectId(null); // Reset selected project ID state
-       toast({
-         title: "Data Cleared",
-         description: "Application data has been cleared from local storage.",
-       });
-    } catch (err) {
-       console.error("Error accessing localStorage to clear data:", err);
-       toast({
-         variant: "destructive",
-         title: "Storage Error",
-         description: "Could not access local storage to clear data.",
-       });
-       // Even if clearing fails, reset state
-       setProjects([]);
-       setSelectedProjectId(null);
-    } finally {
-      console.log("Finished clearing data attempt.");
-      setIsLoading(false); // End loading indication
-    }
-  }, [toast]); // Dependency on toast for notifications
+ // Effect to load data from localStorage on mount
+ useEffect(() => {
+     console.log("Attempting to load data from localStorage...");
+     setIsLoading(true);
+     try {
+         const savedData = localStorage.getItem('appData');
+         const savedProjectId = localStorage.getItem('selectedProjectId');
+         console.log("Retrieved 'appData' from localStorage:", savedData?.substring(0, 100) + '...'); // Log truncated data
+         console.log("Retrieved 'selectedProjectId' from localStorage:", savedProjectId);
 
-    // Effect to save data to localStorage whenever projects change (now empty on first load)
-    useEffect(() => {
-        // Only run save logic after initial clearing/load is complete
-        if (!isLoading) {
-            console.log("Projects state changed, attempting to save to localStorage...");
-            try {
-                const dataToSave = JSON.stringify(projects);
-                console.log("Stringified data to save:", dataToSave.substring(0, 500) + '...'); // Log truncated data
-                localStorage.setItem('appData', dataToSave);
-                console.log("Successfully saved project data to localStorage.");
-            } catch (error: any) {
-                console.error("CRITICAL: Failed to save project data to localStorage. Error:", error.message, error.stack);
-                toast({
-                    variant: "destructive",
-                    title: "Save Error",
-                    description: "Could not save project data locally. Data might be too large or storage is unavailable.",
-                });
-            }
-        } else {
-            console.log("Skipping save to localStorage during initial clearing/loading.");
-        }
-    }, [projects, isLoading, toast]); // Add isLoading dependency
+         if (savedData) {
+             const parsedData: AppData = JSON.parse(savedData);
+              if (Array.isArray(parsedData)) { // Basic validation
+                 // Validate and potentially migrate data here if needed
+                 const validatedProjects = parsedData.map(project => ({
+                     ...project,
+                     sprintData: project.sprintData ?? initialSprintData,
+                     members: project.members ?? [],
+                     holidayCalendars: project.holidayCalendars ?? [],
+                     teams: project.teams ?? [],
+                     backlog: (project.backlog ?? []).map(task => ({
+                          ...task,
+                          priority: taskPriorities.includes(task.priority as any) ? task.priority : 'Medium',
+                     })).sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
+                     sprintData: {
+                         ...project.sprintData,
+                         sprints: (project.sprintData?.sprints ?? []).sort((a, b) => a.sprintNumber - b.sprintNumber)
+                     }
+                 }));
 
-    // Effect to save the selected project ID
-    useEffect(() => {
-        if (!isLoading) { // Only save after initial clearing/load
-            try {
-                if (selectedProjectId) {
-                    console.log(`Saving selected project ID to localStorage: ${selectedProjectId}`);
-                    localStorage.setItem('selectedProjectId', selectedProjectId);
-                } else {
-                    console.log("No project selected, removing selectedProjectId from localStorage.");
-                    // Remove if no project is selected to avoid stale references
-                    localStorage.removeItem('selectedProjectId');
-                }
-            } catch (err) {
-                console.error("Error accessing localStorage for selectedProjectId:", err);
+                 setProjects(validatedProjects);
+                 console.log("Successfully loaded and validated project data from localStorage.");
+
+                 // Restore selected project ID if it exists and is valid
+                 if (savedProjectId && validatedProjects.some(p => p.id === savedProjectId)) {
+                     setSelectedProjectId(savedProjectId);
+                     console.log(`Restored selected project ID: ${savedProjectId}`);
+                 } else {
+                     // If saved ID is invalid or no projects, select the first project or null
+                     setSelectedProjectId(validatedProjects.length > 0 ? validatedProjects[0].id : null);
+                     console.log("Selected project ID not found or invalid, selecting first project or null.");
+                     // Clean up invalid saved ID
+                     if (savedProjectId) {
+                          localStorage.removeItem('selectedProjectId');
+                     }
+                 }
+             } else {
+                 throw new Error("Stored 'appData' is not an array.");
+             }
+         } else {
+             console.log("No 'appData' found in localStorage. Initializing with empty state.");
+             setProjects([]); // Initialize with empty array if no data found
+             setSelectedProjectId(null);
+         }
+     } catch (error: any) {
+         console.error("CRITICAL: Failed to parse or validate project data from localStorage. Error:", error.message, error.stack);
+         toast({
+             variant: "destructive",
+             title: "Data Load Error",
+             description: "Could not load project data. Resetting to empty state. Please report this issue if it persists.",
+         });
+         // Reset to a known good state
+         setProjects([]);
+         setSelectedProjectId(null);
+         // Attempt to clear potentially corrupted data
+         try {
+              localStorage.removeItem('appData');
+              localStorage.removeItem('selectedProjectId');
+         } catch (clearError) {
+             console.error("Failed to clear corrupted data from localStorage:", clearError);
+         }
+     } finally {
+         setIsLoading(false);
+         console.log("Finished loading data attempt.");
+     }
+ }, [toast]); // Rerun this effect only on mount (and if toast changes, which is unlikely)
+
+
+     // Effect to save data to localStorage whenever projects change (now empty on first load)
+     useEffect(() => {
+         // Only run save logic after initial clearing/load is complete
+         if (!isLoading) {
+             console.log("Projects state changed, attempting to save to localStorage...");
+             try {
+                 const dataToSave = JSON.stringify(projects);
+                 console.log("Stringified data to save:", dataToSave.substring(0, 500) + '...'); // Log truncated data
+                 localStorage.setItem('appData', dataToSave);
+                 console.log("Successfully saved project data to localStorage.");
+             } catch (error: any) {
+                 console.error("CRITICAL: Failed to save project data to localStorage. Error:", error.message, error.stack);
                  toast({
-                   variant: "destructive",
-                   title: "Storage Error",
-                   description: "Could not save selected project.",
+                     variant: "destructive",
+                     title: "Save Error",
+                     description: "Could not save project data locally. Data might be too large or storage is unavailable.",
                  });
-            }
-        } else {
-            console.log("Skipping saving selected project ID during initial clearing/loading.");
-        }
-    }, [selectedProjectId, isLoading, toast]);
+             }
+         } else {
+             console.log("Skipping save to localStorage during initial clearing/loading.");
+         }
+     }, [projects, isLoading, toast]); // Add isLoading dependency
+
+     // Effect to save the selected project ID
+     useEffect(() => {
+         if (!isLoading) { // Only save after initial clearing/load
+             try {
+                 if (selectedProjectId) {
+                     console.log(`Saving selected project ID to localStorage: ${selectedProjectId}`);
+                     localStorage.setItem('selectedProjectId', selectedProjectId);
+                 } else {
+                     console.log("No project selected, removing selectedProjectId from localStorage.");
+                     // Remove if no project is selected to avoid stale references
+                     localStorage.removeItem('selectedProjectId');
+                 }
+             } catch (err) {
+                 console.error("Error accessing localStorage for selectedProjectId:", err);
+                  toast({
+                    variant: "destructive",
+                    title: "Storage Error",
+                    description: "Could not save selected project.",
+                  });
+             }
+         } else {
+             console.log("Skipping saving selected project ID during initial clearing/loading.");
+         }
+     }, [selectedProjectId, isLoading, toast]);
 
 
   // Find the currently selected project object
@@ -958,12 +1006,20 @@ export default function Home() {
                          if (baseId) {
                              // Find the *newly created* merged item (likely ends with '-m')
                              // This assumes the merged item's ID structure follows the pattern from generateNextBacklogId
-                             const mergeResultIdPrefix = baseId.substring(0, baseId.indexOf('-') + 3); // e.g., BL-25
+                             // Merge ID format is BL-YYNNNN-m, so we look for that pattern based on original ID structure
+                             const basePrefixMatch = baseId.match(/^(BL-\d{6})/);
+                             const basePrefix = basePrefixMatch ? basePrefixMatch[1] : null;
                              const mergeResultSuffix = '-m';
-                             // Caution: This relies heavily on ID generation patterns and might need refinement
-                             updatedBacklog = updatedBacklog.filter(item => !(item.backlogId?.startsWith(mergeResultIdPrefix) && item.backlogId.endsWith(mergeResultSuffix)));
+
+                             if (basePrefix) {
+                                // Find the item that starts with the same prefix and ends with -m
+                                updatedBacklog = updatedBacklog.filter(item => !(item.backlogId?.startsWith(basePrefix) && item.backlogId.endsWith(mergeResultSuffix)));
+                             } else {
+                                console.warn(`Could not extract base prefix from ${baseId} to find merge result.`);
+                             }
+                         } else {
+                            console.warn(`Original item ID ${historyItem.id} for merge undo does not have a backlogId.`);
                          }
-                         console.warn("Undo Merge: Finding the created merged item reliably based on ID patterns can be fragile.");
                     }
 
                     // Restore the original item's status
@@ -971,6 +1027,11 @@ export default function Home() {
                         if (index === historyItemIndex) {
                             return { ...item, historyStatus: undefined }; // Reset history status
                         }
+                         // If it's a merge undo, also restore other items that were part of the merge
+                         if (undoneActionType === 'Merge' && item.historyStatus === 'Merge' && item.backlogId?.startsWith(historyItem.backlogId?.substring(0, 9) ?? 'XXX')) {
+                              // A bit fuzzy matching based on prefix, might need refinement if IDs are very similar
+                              return { ...item, historyStatus: undefined };
+                         }
                         return item;
                     });
 
@@ -1291,6 +1352,44 @@ export default function Home() {
     }, 50); // Increased timeout slightly
   };
 
+   // Handler to open the delete project confirmation dialog
+   const handleOpenDeleteDialog = (projectId: string | null) => {
+       if (!projectId) return;
+       setProjectToDeleteId(projectId);
+       setConfirmProjectName(''); // Reset confirmation input
+       setIsDeleteDialogOpen(true);
+   };
+
+   // Handler to confirm and delete a project
+   const handleConfirmDeleteProject = () => {
+       if (!projectToDeleteId) return;
+
+       const project = projects.find(p => p.id === projectToDeleteId);
+       if (!project) {
+           toast({ variant: "destructive", title: "Error", description: "Project not found." });
+           setIsDeleteDialogOpen(false);
+           setProjectToDeleteId(null);
+           return;
+       }
+
+       if (confirmProjectName.trim().toLowerCase() !== project.name.toLowerCase()) {
+           toast({ variant: "destructive", title: "Confirmation Failed", description: "Project name does not match." });
+           return;
+       }
+
+       setProjects(prevProjects => prevProjects.filter(p => p.id !== projectToDeleteId));
+
+       // If the deleted project was the selected one, select the first available project or null
+       if (selectedProjectId === projectToDeleteId) {
+           setSelectedProjectId(projects.length > 1 ? projects.find(p => p.id !== projectToDeleteId)?.id ?? null : null);
+       }
+
+       toast({ title: "Project Deleted", description: `Project "${project.name}" has been deleted.` });
+       setIsDeleteDialogOpen(false);
+       setProjectToDeleteId(null);
+   };
+
+
   // Define the tab structure
   const tabsConfig: Record<string, { label: string; icon: React.ElementType; component?: React.ElementType; subTabs?: Record<string, { label: string; icon: React.ElementType; component: React.ElementType }> }> = {
       dashboard: { label: "Dashboard", icon: LayoutDashboard, component: DashboardTab },
@@ -1469,28 +1568,41 @@ export default function Home() {
                    console.log(`Project selected: ${value}`);
                    setSelectedProjectId(value);
                    setActiveTab("dashboard"); // Reset to dashboard tab on project change
-                   // setResetManualFormKey(prevKey => prevKey + 1); // No longer needed
                }}
                disabled={isLoading || projects.length === 0} // Disable while loading or if no projects
              >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[200px]"> {/* Increased width */}
                   <SelectValue placeholder={isLoading ? "Loading..." : "Select a project"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Projects</SelectLabel>
-                     {isLoading ? (
-                       <SelectItem value="loading" disabled>Loading projects...</SelectItem>
-                     ) : projects.length > 0 ? (
-                        projects.map(project => (
-                          <SelectItem key={project.id} value={project.id}>
-                            {project.name}
-                          </SelectItem>
-                        ))
-                     ) : (
-                       <SelectItem value="no-projects" disabled>No projects yet</SelectItem>
-                     )}
-                  </SelectGroup>
+                    <SelectGroup>
+                        <SelectLabel>Projects</SelectLabel>
+                        {isLoading ? (
+                            <SelectItem value="loading" disabled>Loading projects...</SelectItem>
+                        ) : projects.length > 0 ? (
+                            projects.map(project => (
+                                <div key={project.id} className="flex items-center justify-between pr-2">
+                                    <SelectItem value={project.id} className="flex-1"> {/* Allow text to take space */}
+                                        {project.name}
+                                    </SelectItem>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 ml-2 text-muted-foreground hover:text-destructive"
+                                        onClick={(e) => {
+                                            e.stopPropagation(); // Prevent Select from closing
+                                            handleOpenDeleteDialog(project.id);
+                                        }}
+                                        aria-label={`Delete project ${project.name}`}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            ))
+                        ) : (
+                            <SelectItem value="no-projects" disabled>No projects yet</SelectItem>
+                        )}
+                    </SelectGroup>
                 </SelectContent>
              </Select>
              <Dialog open={isNewProjectDialogOpen} onOpenChange={setIsNewProjectDialogOpen}>
@@ -1535,6 +1647,40 @@ export default function Home() {
           )}
         </div>
       </header>
+
+       {/* Delete Project Confirmation Dialog */}
+       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+           <AlertDialogContent>
+               <AlertDialogHeader>
+                   <AlertDialogTitle>Delete Project "{projects.find(p => p.id === projectToDeleteId)?.name}"?</AlertDialogTitle>
+                   <AlertDialogDescription>
+                       This action cannot be undone. This will permanently delete the project and all its associated data (sprints, backlog, members, etc.).
+                       <br />
+                       To confirm, please type the project name below:
+                       <strong className="block mt-1">{projects.find(p => p.id === projectToDeleteId)?.name}</strong>
+                   </AlertDialogDescription>
+               </AlertDialogHeader>
+               <div className="py-2">
+                    <Input
+                        id="confirm-project-name"
+                        value={confirmProjectName}
+                        onChange={(e) => setConfirmProjectName(e.target.value)}
+                        placeholder="Type project name to confirm"
+                        className="mt-2"
+                    />
+               </div>
+               <AlertDialogFooter>
+                   <AlertDialogCancel onClick={() => setProjectToDeleteId(null)}>Cancel</AlertDialogCancel>
+                   <AlertDialogAction
+                       onClick={handleConfirmDeleteProject}
+                       disabled={confirmProjectName.trim().toLowerCase() !== projects.find(p => p.id === projectToDeleteId)?.name.toLowerCase()}
+                       className={cn(buttonVariants({ variant: "destructive" }))}
+                   >
+                       Delete Project
+                   </AlertDialogAction>
+               </AlertDialogFooter>
+           </AlertDialogContent>
+       </AlertDialog>
 
       {/* Add Members Dialog */}
       <AddMembersDialog
@@ -1608,7 +1754,3 @@ export default function Home() {
     </div>
   );
 }
-
-
-
-      
