@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Sprint } from '@/types/sprint-data';
@@ -12,11 +13,11 @@ interface VelocityChartProps {
 const chartConfig = {
   committed: {
     label: "Committed",
-    color: "hsl(var(--secondary))", // Use secondary color (light gray)
+    color: "hsl(var(--chart-3))", // Use muted color
   },
   completed: {
     label: "Completed",
-    color: "hsl(var(--primary))", // Use primary color (blue)
+    color: "hsl(var(--chart-1))", // Use primary color
   },
 } satisfies ChartConfig
 
@@ -44,14 +45,14 @@ export default function VelocityChart({ data }: VelocityChartProps) {
              tickMargin={8}
              fontSize={12}
            />
-          <YAxis tickLine={false} axisLine={false} tickMargin={8} fontSize={12} />
+          <YAxis tickLine={false} axisLine={false} tickMargin={8} fontSize={12} allowDecimals={false}/> {/* Ensure integer ticks */}
            <Tooltip
              cursor={false}
              content={<ChartTooltipContent hideLabel />}
             />
           <Bar dataKey="committed" fill="var(--color-committed)" radius={4} />
           <Bar dataKey="completed" fill="var(--color-completed)" radius={4} />
-          {/* <Legend /> */} {/* Optional: Add legend if needed */}
+           <Legend verticalAlign="top" height={36}/> {/* Show legend */}
         </BarChart>
       </ResponsiveContainer>
     </ChartContainer>

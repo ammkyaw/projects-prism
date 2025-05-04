@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -141,7 +142,7 @@ const ChartTooltipContent = React.forwardRef<
       const [item] = payload
       const key = `${labelKey || item.dataKey || item.name || "value"}`
       const itemConfig = getPayloadConfigFromPayload(config, item, key)
-      const value =
+      let value =
         !labelKey && typeof label === "string"
           ? config[label as keyof typeof config]?.label || label
           : itemConfig?.label
@@ -355,6 +356,10 @@ function getPayloadConfigFromPayload(
     : config[key as keyof typeof config]
 }
 
+const ChartPie = RechartsPrimitive.Pie;
+const ChartPieChart = RechartsPrimitive.PieChart;
+const ChartCell = RechartsPrimitive.Cell;
+
 export {
   ChartContainer,
   ChartTooltip,
@@ -362,4 +367,7 @@ export {
   ChartLegend,
   ChartLegendContent,
   ChartStyle,
+  ChartPie, // Export Pie
+  ChartPieChart, // Export PieChart
+  ChartCell // Export Cell
 }
