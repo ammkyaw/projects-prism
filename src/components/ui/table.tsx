@@ -61,7 +61,7 @@ const TableRow = React.forwardRef<
       "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
       className
     )}
-    {...props}
+    {...props} // Ensure no whitespace is introduced here
   />
 ))
 TableRow.displayName = "TableRow"
