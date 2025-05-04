@@ -5,9 +5,10 @@ import type { SprintData, Sprint, Task } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
-import { Info, LineChart, BarChart, Activity, CheckCircle, ListChecks, TrendingDown, CalendarCheck } from 'lucide-react';
+import { Info, LineChart, BarChart, Activity, CheckCircle, ListChecks, TrendingDown, CalendarCheck, CalendarRange } from 'lucide-react'; // Added CalendarRange
 import VelocityChart from '@/components/charts/velocity-chart';
 import { useMemo } from 'react';
+import { format, parseISO, isValid } from 'date-fns'; // Import date-fns helpers
 
 interface DashboardTabProps {
   sprintData: SprintData | null;
@@ -64,6 +65,14 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
     ];
   }, [activeSprint]);
 
+   // Format dates safely
+   const formattedStartDate = activeSprint?.startDate && isValid(parseISO(activeSprint.startDate))
+     ? format(parseISO(activeSprint.startDate), 'MMM d, yyyy')
+     : 'N/A';
+   const formattedEndDate = activeSprint?.endDate && isValid(parseISO(activeSprint.endDate))
+     ? format(parseISO(activeSprint.endDate), 'MMM d, yyyy')
+     : 'N/A';
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
@@ -74,6 +83,12 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
              <Activity className="h-5 w-5 text-primary" />
              Active Sprint: {activeSprint ? `Sprint ${activeSprint.sprintNumber}` : 'None'}
            </CardTitle>
+            {activeSprint && (
+               <CardDescription className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <CalendarRange className="h-4 w-4" />
+                  {formattedStartDate} - {formattedEndDate}
+               </CardDescription>
+            )}
            <CardDescription>Status and key metrics for the current sprint in '{projectName}'.</CardDescription>
          </CardHeader>
          {!activeSprint && (
@@ -256,3 +271,4 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
     </div>
   );
 }
+
