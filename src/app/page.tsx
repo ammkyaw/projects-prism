@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -17,7 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 // Main Content Components (Tabs) - Renamed and New Placeholders
 import DashboardTab from '@/components/dashboard-tab'; // Renamed from HomeTab
 import BacklogTab from '@/components/backlog/backlog-tab'; // Updated path
-// import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Updated path - Removed Prioritization
+import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Updated path
 import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
 import HistoryTab from '@/components/backlog/history-tab'; // Import HistoryTab component
 
@@ -142,6 +143,8 @@ export default function Home() {
                            backlogId: task.backlogId ?? `BL-LEGACY-${task.id}`, // Provide a fallback if missing
                            needsGrooming: task.needsGrooming ?? false, // Default to false if missing
                            readyForSprint: task.readyForSprint ?? false, // Default to false if missing
+                           splitFromId: task.splitFromId, // Preserve if exists
+                           mergeEventId: task.mergeEventId, // Preserve if exists
                      })).sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
                      sprintData: {
                          ...project.sprintData,
@@ -728,98 +731,90 @@ export default function Home() {
 
 
    // Handler to revert a task from sprint planning back to the backlog
-    const handleRevertTaskToBacklog = useCallback((sprintNumber: number, taskId: string, taskBacklogId: string | undefined) => {
-        if (!selectedProjectId) {
-            toast({ variant: "destructive", title: "Error", description: "No project selected." });
-            return;
-        }
+   const handleRevertTaskToBacklog = useCallback((sprintNumber: number, taskId: string, taskBacklogId: string | undefined) => {
+       if (!selectedProjectId) {
+           toast({ variant: "destructive", title: "Error", description: "No project selected." });
+           return;
+       }
 
-        let revertedTaskDetails: string | null = null;
-        let updatePerformed = false; // Track if an update actually happened
+       let revertedTaskDetails: string | null = null;
+       let updatePerformed = false; // Track if an update actually happened
 
-        // Defer state update to avoid potential render-during-render issues with toast
-        setTimeout(() => {
-            setProjects(prevProjects => {
-                const updatedProjects = prevProjects.map(p => {
-                    if (p.id === selectedProjectId) {
-                        let foundAndRemoved = false;
-                        let taskToRemoveDetails: Partial<Task> = {};
-                        // Remove the task from the specified sprint's planning.newTasks
-                        const updatedSprints = p.sprintData.sprints.map(s => {
-                            if (s.sprintNumber === sprintNumber && s.planning) {
-                                const taskIndex = s.planning.newTasks.findIndex(t => t.id === taskId);
-                                if (taskIndex !== -1) {
-                                    const taskToRemove = s.planning.newTasks[taskIndex];
-                                    taskToRemoveDetails = { ...taskToRemove }; // Capture details before removing
-                                    revertedTaskDetails = `${taskToRemove.ticketNumber} (${taskToRemove.title || 'No Title'})`;
-                                    foundAndRemoved = true;
-                                    const updatedNewTasks = [...s.planning.newTasks];
-                                    updatedNewTasks.splice(taskIndex, 1); // Remove the task
-                                    return {
-                                        ...s,
-                                        planning: {
-                                            ...s.planning,
-                                            newTasks: updatedNewTasks,
-                                        }
-                                    };
-                                }
-                            }
-                            return s;
-                        });
+       // Use setTimeout to ensure toast is shown after state update attempt
+       const showToast = (options: any) => setTimeout(() => toast(options), 0);
+
+       setProjects(prevProjects => {
+           const updatedProjects = prevProjects.map(p => {
+               if (p.id === selectedProjectId) {
+                   let foundAndRemoved = false;
+                   let taskToRemoveDetails: Partial<Task> = {};
+                   let originalProject = p; // Keep reference to original project state for toast
+
+                   // Remove the task from the specified sprint's planning.newTasks
+                   const updatedSprints = p.sprintData.sprints.map(s => {
+                       if (s.sprintNumber === sprintNumber && s.planning) {
+                           const taskIndex = s.planning.newTasks.findIndex(t => t.id === taskId);
+                           if (taskIndex !== -1) {
+                               const taskToRemove = s.planning.newTasks[taskIndex];
+                               taskToRemoveDetails = { ...taskToRemove }; // Capture details before removing
+                               revertedTaskDetails = `${taskToRemove.ticketNumber} (${taskToRemove.title || 'No Title'})`;
+                               foundAndRemoved = true;
+                               const updatedNewTasks = [...s.planning.newTasks];
+                               updatedNewTasks.splice(taskIndex, 1); // Remove the task
+                               return {
+                                   ...s,
+                                   planning: {
+                                       ...s.planning,
+                                       newTasks: updatedNewTasks,
+                                   }
+                               };
+                           }
+                       }
+                       return s;
+                   });
 
 
-                        // If the task wasn't found in the sprint, no need to update backlog
-                        if (!foundAndRemoved) {
-                             console.warn(`Task ID ${taskId} not found in Sprint ${sprintNumber} planning.`);
-                             // No toast here, just return unchanged state
-                             return p; // Return original project state
+                   // If the task wasn't found in the sprint, no need to update backlog
+                   if (!foundAndRemoved) {
+                        console.warn(`Task ID ${taskId} not found in Sprint ${sprintNumber} planning.`);
+                        showToast({ variant: "warning", title: "Task Not Found", description: `Could not find task ID ${taskId} in Sprint ${sprintNumber} planning.` });
+                        return originalProject; // Return original project state
+                   }
+
+                   // Find the corresponding item in the backlog and reset its 'movedToSprint' status
+                   const updatedBacklog = (p.backlog || []).map(item => {
+                        // Match primarily using taskBacklogId if available, otherwise try matching by ticketNumber if backlogId is missing
+                        const isMatch = taskBacklogId ? item.backlogId === taskBacklogId : item.ticketNumber === taskToRemoveDetails.ticketNumber;
+
+                        if (isMatch && item.movedToSprint === sprintNumber) {
+                           updatePerformed = true; // Mark that we found and updated the backlog item
+                           return { ...item, movedToSprint: undefined, historyStatus: undefined }; // Reset movedToSprint and historyStatus
                         }
+                        return item;
+                   });
 
-                        // Find the corresponding item in the backlog and reset its 'movedToSprint' status
-                        const updatedBacklog = (p.backlog || []).map(item => {
-                             // Match primarily using taskBacklogId if available, otherwise try matching by ticketNumber if backlogId is missing
-                             const isMatch = taskBacklogId ? item.backlogId === taskBacklogId : item.ticketNumber === taskToRemoveDetails.ticketNumber;
+                   // If the backlog item was not found to be updated (e.g., it was manually deleted from backlog), show a warning
+                   if (!updatePerformed) {
+                        console.warn(`Could not find corresponding backlog item for task ${revertedTaskDetails} (Backlog ID: ${taskBacklogId}) that was marked as moved to sprint ${sprintNumber}. Task removed from sprint only.`);
+                         showToast({ variant: "warning", title: "Task Removed from Sprint", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber}, but its corresponding backlog item couldn't be updated (may have been deleted or modified).` });
+                   } else {
+                        showToast({ title: "Task Reverted", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber} and returned to backlog.` });
+                   }
 
-                             if (isMatch && item.movedToSprint === sprintNumber) {
-                                updatePerformed = true; // Mark that we found and updated the backlog item
-                                return { ...item, movedToSprint: undefined, historyStatus: undefined }; // Reset movedToSprint and historyStatus
-                             }
-                             return item;
-                        });
-
-                        // If the backlog item was not found to be updated (e.g., it was manually deleted from backlog), show a warning
-                        if (!updatePerformed) {
-                             console.warn(`Could not find corresponding backlog item for task ${revertedTaskDetails} (Backlog ID: ${taskBacklogId}) that was marked as moved to sprint ${sprintNumber}. Task removed from sprint only.`);
-                             // Decide whether to proceed with sprint update or stop
-                        }
-
-                        return {
-                            ...p,
-                            backlog: updatedBacklog,
-                            sprintData: {
-                                ...p.sprintData,
-                                sprints: updatedSprints,
-                            }
-                        };
-                    }
-                    return p;
-                });
-
-                 // Show toasts after potential state update
-                 if (revertedTaskDetails && updatePerformed) {
-                     toast({ title: "Task Reverted", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber} and returned to backlog.` });
-                 } else if (revertedTaskDetails && !updatePerformed) {
-                      // Task removed from sprint, but corresponding backlog item not found/updated
-                      toast({ variant: "warning", title: "Task Removed from Sprint", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber}, but its corresponding backlog item couldn't be updated (may have been deleted or modified).` });
-                 } else if (!revertedTaskDetails) {
-                       // This case should be rare due to the check above, but handles if task wasn't found in sprint
-                      toast({ variant: "warning", title: "Task Not Found", description: `Could not find task ID ${taskId} in Sprint ${sprintNumber} planning.` });
-                 }
-
-                return updatedProjects; // Return the potentially updated projects
-            });
-         }, 0); // End of setTimeout
-    }, [selectedProjectId, toast, setProjects]); // Added setProjects
+                   return {
+                       ...p,
+                       backlog: updatedBacklog,
+                       sprintData: {
+                           ...p.sprintData,
+                           sprints: updatedSprints,
+                       }
+                   };
+               }
+               return p;
+           });
+           return updatedProjects;
+       });
+   }, [selectedProjectId, toast, setProjects]);
 
 
     // Handler to split a backlog item
@@ -850,6 +845,7 @@ export default function Home() {
                         ...originalItem,
                         historyStatus: 'Split' as HistoryStatus,
                         movedToSprint: undefined, // Ensure it's not marked as moved to a sprint
+                        splitFromId: undefined, // Original items don't have this
                     };
 
                      // 2. Prepare new split tasks with unique IDs and backlog IDs
@@ -857,16 +853,17 @@ export default function Home() {
 
                      const newSplitTasksWithIds = splitTasks.map((task, index) => {
                          // Split results now get their own unique, standard IDs
-                         const backlogId = task.backlogId || generateNextBacklogId(allItemsForIdGen); // Use provided ID or generate
-                         allItemsForIdGen.push({ ...task, backlogId }); // Simulate adding the new item for next ID gen
+                         const suffix = String.fromCharCode(97 + index); // 'a', 'b', 'c'...
+                         const newSplitBacklogId = `${originalItem.backlogId}-${suffix}`;
 
                          return {
                            ...task,
-                           id: `split_${originalTaskId}_${backlogId}_${Date.now()}`, // Use new backlog ID in unique ID
-                           backlogId: backlogId, // Assign generated standard ID
-                           ticketNumber: backlogId, // Default ticket number
+                           id: `split_${originalTaskId}_${newSplitBacklogId}_${Date.now()}`, // Use new backlog ID in unique ID
+                           backlogId: newSplitBacklogId, // Assign generated suffixed ID
+                           ticketNumber: newSplitBacklogId, // Default ticket number
                            needsGrooming: true, // Mark as needing grooming
                            readyForSprint: false, // Mark as not ready
+                           splitFromId: originalItem.id, // Link back to the original task ID
                          };
                      });
 
@@ -898,7 +895,7 @@ export default function Home() {
                 duration: 5000,
             });
         }
-    }, [selectedProjectId, toast, generateNextBacklogId]); // Pass helper
+    }, [selectedProjectId, toast]); // Removed generateNextBacklogId dependency
 
 
     // Handler to merge backlog items
@@ -912,6 +909,7 @@ export default function Home() {
           return;
        }
 
+       const mergeEventId = `merge_${Date.now()}`; // Generate a unique ID for this merge event
        let mergedItemDetails: string[] = [];
 
        setProjects(prevProjects => {
@@ -919,33 +917,37 @@ export default function Home() {
              if (p.id === selectedProjectId) {
                 let updatedBacklog = [...(p.backlog ?? [])];
                 const itemsToMarkHistorical: Task[] = [];
+                let firstOriginalBacklogId: string | undefined = undefined;
 
                 // Mark original items as merged
                 updatedBacklog = updatedBacklog.map(item => {
                    if (taskIdsToMerge.includes(item.id)) {
+                        if (!firstOriginalBacklogId) {
+                           firstOriginalBacklogId = item.backlogId; // Capture the first original ID for naming convention
+                        }
                        mergedItemDetails.push(`${item.backlogId} (${item.title || 'No Title'})`);
                        itemsToMarkHistorical.push({
                            ...item,
                            historyStatus: 'Merge' as HistoryStatus,
                            movedToSprint: undefined, // Ensure not marked as moved
+                           mergeEventId: mergeEventId, // Link to the merge event
                        });
                        return null; // Mark for removal from active backlog later
                    }
                    return item;
                 }).filter((item): item is Task => item !== null); // Remove the original items from active view
 
-                // Add the new merged task
-                 const allItemsForIdGen = [...updatedBacklog, ...itemsToMarkHistorical]; // Use full context for ID generation
-                 // Merged items now get a standard new ID, not one ending in '-m'
-                 const newMergedBacklogId = mergedTask.backlogId || generateNextBacklogId(allItemsForIdGen); // Use provided or generate
+                // Generate the new merged backlog ID
+                const newMergedBacklogId = `${firstOriginalBacklogId || 'merged'}-m`; // Use first original ID + '-m'
 
                 const newMergedTaskWithId: Task = {
                    ...mergedTask,
                    id: `merged_${Date.now()}_${Math.random()}`, // Generate unique ID
-                   backlogId: newMergedBacklogId, // Assign standard new ID
+                   backlogId: newMergedBacklogId, // Assign merged ID
                    ticketNumber: newMergedBacklogId, // Default ticket number
                    needsGrooming: true,
                    readyForSprint: false,
+                   mergeEventId: mergeEventId, // Link the resulting merged item to the event
                 };
 
                 // Combine active backlog, new merged task, and historical items
@@ -971,7 +973,7 @@ export default function Home() {
             duration: 5000,
         });
 
-    }, [selectedProjectId, toast, generateNextBacklogId]); // Pass helper
+    }, [selectedProjectId, toast]); // Removed generateNextBacklogId dependency
 
     // Handler to undo a backlog action (Split/Merge)
     const handleUndoBacklogAction = useCallback((taskId: string) => {
@@ -984,115 +986,139 @@ export default function Home() {
         let undoneItemDetails: string | null = null;
         let restoredItemIds: string[] = [];
         let removedItemIds: string[] = [];
+        let actionSuccess = false; // Track if the undo logic successfully modified state
 
-        // Wrap state update in setTimeout to prevent toast interfering with render
-        setTimeout(() => {
-            setProjects(prevProjects => {
-                let updatedBacklog: Task[] = [];
-                let projectUpdated = false;
+         // Defer toast to avoid render interference
+        const showToast = (options: any) => setTimeout(() => toast(options), 50);
 
-                const updatedProjects = prevProjects.map(p => {
-                    if (p.id === selectedProjectId) {
-                        updatedBacklog = [...(p.backlog || [])];
-                        const historyItemIndex = updatedBacklog.findIndex(item => item.id === taskId && (item.historyStatus === 'Split' || item.historyStatus === 'Merge'));
+        setProjects(prevProjects => {
+            let projectUpdated = false;
+            const updatedProjects = prevProjects.map(p => {
+                if (p.id === selectedProjectId) {
+                    let updatedBacklog = [...(p.backlog || [])];
+                    const triggerItem = updatedBacklog.find(item => item.id === taskId);
 
-                        if (historyItemIndex === -1) {
-                            console.error("History item not found or not eligible for undo:", taskId);
-                            toast({ variant: "destructive", title: "Error", description: "Cannot undo this action (item not found or ineligible)." });
-                            return p; // Return unchanged project
-                        }
+                    if (!triggerItem) {
+                        console.error("Undo Trigger item not found:", taskId);
+                        showToast({ variant: "destructive", title: "Error", description: "Cannot perform undo: Item not found." });
+                        return p;
+                    }
 
-                        const historyItem = updatedBacklog[historyItemIndex];
-                        undoneActionType = historyItem.historyStatus;
-                        undoneItemDetails = `${historyItem.backlogId} (${historyItem.title || 'No Title'})`;
-                         projectUpdated = true; // Assume update will happen
+                    let originalItemToRestore: Task | undefined;
+                    let itemsToRemove: Task[] = [];
+                    let itemsToRestore: Task[] = [];
 
-                        if (undoneActionType === 'Split') {
-                             // 1. Restore the original item (remove historyStatus)
-                              historyItem.historyStatus = undefined;
-                              restoredItemIds.push(historyItem.id);
-
-                             // 2. Find and remove items created by this split
-                              // Assume split items have IDs starting with `split_${originalTaskId}_`
-                              updatedBacklog = updatedBacklog.filter(item => {
-                                  if (item.id.startsWith(`split_${taskId}_`)) {
-                                       removedItemIds.push(item.backlogId || item.id);
-                                       return false; // Remove this item
-                                  }
-                                  return true;
-                              });
-                              // Update the restored original item in the filtered list
-                               const restoredIndex = updatedBacklog.findIndex(item => item.id === taskId);
-                               if (restoredIndex !== -1) {
-                                   updatedBacklog[restoredIndex] = historyItem;
-                               } else {
-                                   // Should not happen if historyItemIndex was valid, but handle defensively
-                                   updatedBacklog.push(historyItem);
-                               }
-
-                        } else if (undoneActionType === 'Merge') {
-                             // 1. Restore *all* original items involved in this merge (those marked 'Merge' with the same original base ID or context)
-                              // This requires better linking, for now, we only restore the clicked one and others potentially identifiable
-                              const originalItemsToRestore = updatedBacklog.filter(
-                                  item => item.historyStatus === 'Merge' && item.id === taskId // Simplistic: restore only the clicked history item
-                                  // TODO: Need a way to link all items from the same merge event (e.g., mergeEventId)
-                              );
-
-                              originalItemsToRestore.forEach(item => {
-                                  item.historyStatus = undefined;
-                                  restoredItemIds.push(item.id);
-                              });
-
-                              // Update the restored items in the main list
-                               updatedBacklog = updatedBacklog.map(item => {
-                                   const restored = originalItemsToRestore.find(r => r.id === item.id);
-                                   return restored || item;
-                               });
-
-                              // 2. Find and remove the single item created by the merge action
-                              // Requires linking (e.g., mergedFromIds field on the result item)
-                               const mergedResult = updatedBacklog.find(item => item.id.startsWith(`merged_`)); // Placeholder: This is unreliable
-                               if (mergedResult) {
-                                   removedItemIds.push(mergedResult.backlogId || mergedResult.id);
-                                   updatedBacklog = updatedBacklog.filter(item => item.id !== mergedResult.id);
-                               } else {
-                                   console.warn(`Could not reliably find and remove the merged result item for undoing merge related to ${undoneItemDetails}. Manual cleanup might be needed.`);
-                                   toast({ variant: "warning", title: "Undo Incomplete", description: "Could not remove the merged result item automatically." });
-                               }
-                        } else {
-                            // Should not happen, but handle unknown status
-                            console.error("Unknown history status for undo:", undoneActionType);
-                            projectUpdated = false; // Do not proceed
+                    // Determine action based on trigger item
+                    if (triggerItem.historyStatus === 'Split') { // Undoing original historical Split item
+                        undoneActionType = 'Split';
+                        originalItemToRestore = triggerItem;
+                        undoneItemDetails = `${originalItemToRestore.backlogId} (${originalItemToRestore.title || 'No Title'})`;
+                        itemsToRemove = updatedBacklog.filter(item => item.splitFromId === originalItemToRestore!.id);
+                        itemsToRestore = [originalItemToRestore];
+                        removedItemIds = itemsToRemove.map(t => t.backlogId || t.id);
+                    } else if (triggerItem.historyStatus === 'Merge') { // Undoing original historical Merge item
+                        undoneActionType = 'Merge';
+                        const mergeEventId = triggerItem.mergeEventId;
+                        if (!mergeEventId) {
+                            console.error("Cannot undo merge: Missing mergeEventId on historical item", taskId);
+                            showToast({ variant: "destructive", title: "Error", description: "Cannot undo merge action (missing link)." });
                             return p;
                         }
-
-                        return {
-                            ...p,
-                            backlog: updatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
-                        };
+                        itemsToRestore = updatedBacklog.filter(item => item.mergeEventId === mergeEventId && item.historyStatus === 'Merge');
+                        itemsToRemove = updatedBacklog.filter(item => item.mergeEventId === mergeEventId && !item.historyStatus);
+                        undoneItemDetails = `Merged Items (Event: ${mergeEventId})`;
+                        removedItemIds = itemsToRemove.map(t => t.backlogId || t.id);
+                        restoredItemIds = itemsToRestore.map(t=>t.backlogId || t.id);
+                    } else if (triggerItem.splitFromId) { // Undoing a resulting Split item
+                        undoneActionType = 'Split';
+                        originalItemToRestore = updatedBacklog.find(item => item.id === triggerItem.splitFromId && item.historyStatus === 'Split');
+                        if (!originalItemToRestore) {
+                            console.error("Cannot undo split: Original item not found for split item", taskId);
+                            showToast({ variant: "destructive", title: "Error", description: "Cannot undo split action (original missing)." });
+                            return p;
+                        }
+                        undoneItemDetails = `${originalItemToRestore.backlogId} (${originalItemToRestore.title || 'No Title'})`;
+                        itemsToRemove = updatedBacklog.filter(item => item.splitFromId === originalItemToRestore!.id);
+                        itemsToRestore = [originalItemToRestore];
+                        removedItemIds = itemsToRemove.map(t => t.backlogId || t.id);
+                    } else if (triggerItem.mergeEventId && !triggerItem.historyStatus) { // Undoing a resulting Merge item
+                        undoneActionType = 'Merge';
+                        const mergeEventId = triggerItem.mergeEventId;
+                        itemsToRemove = [triggerItem];
+                        itemsToRestore = updatedBacklog.filter(item => item.mergeEventId === mergeEventId && item.historyStatus === 'Merge');
+                        undoneItemDetails = `Merged Item '${triggerItem.title}' (Event: ${mergeEventId})`;
+                        removedItemIds = itemsToRemove.map(t => t.backlogId || t.id);
+                        restoredItemIds = itemsToRestore.map(t=>t.backlogId || t.id);
+                    } else {
+                        console.error("Item not eligible for undo:", taskId, triggerItem);
+                        showToast({ variant: "destructive", title: "Error", description: "Cannot undo this action (item not eligible)." });
+                        return p;
                     }
-                    return p;
-                });
 
-                // Only proceed if an update was actually performed
-                if (!projectUpdated) {
-                   return prevProjects; // Return original state if no update occurred
+                    // Perform the updates
+                    if (itemsToRestore.length > 0 || itemsToRemove.length > 0) {
+                         projectUpdated = true;
+                         actionSuccess = true; // Assume success unless checks fail
+
+                        // 1. Restore original items: Remove historyStatus and related IDs
+                        const restoredIds = new Set(itemsToRestore.map(t => t.id));
+                         updatedBacklog = updatedBacklog.map(item => {
+                            if (restoredIds.has(item.id)) {
+                                restoredItemIds.push(item.id); // Track successfully restored IDs
+                                return { ...item, historyStatus: undefined, splitFromId: undefined, mergeEventId: undefined, movedToSprint: undefined };
+                            }
+                            return item;
+                         });
+
+
+                         // 2. Filter out the items created by the action
+                         const removedIdsSet = new Set(itemsToRemove.map(t => t.id));
+                         updatedBacklog = updatedBacklog.filter(item => !removedIdsSet.has(item.id));
+
+                         // Validation checks
+                         if (undoneActionType === 'Merge' && itemsToRestore.length === 0) {
+                             console.error(`Undo Merge: Could not find original items for mergeEventId ${triggerItem.mergeEventId}`);
+                             showToast({ variant: "warning", title: "Undo Incomplete", description: "Could not restore original merged items." });
+                              actionSuccess = false; // Mark as failed
+                              return p; // Revert state change by returning original project
+                         }
+                         if (itemsToRemove.length === 0 && (undoneActionType === 'Split' || undoneActionType === 'Merge')) {
+                              console.warn(`Undo ${undoneActionType}: Could not find the resulting item(s) to remove. Originals restored.`);
+                              showToast({ variant: "warning", title: "Undo Warning", description: `Resulting ${undoneActionType === 'Split' ? 'split' : 'merged'} item(s) not found, originals restored.` });
+                              // Proceed with restoring originals
+                         }
+
+                         return {
+                             ...p,
+                             backlog: updatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
+                         };
+                    } else {
+                        // No items found to restore or remove, likely an issue
+                        console.error("Undo Error: No items identified for restoration or removal for action related to", taskId);
+                         showToast({ variant: "destructive", title: "Undo Failed", description: "Could not process the undo request." });
+                        return p;
+                    }
                 }
-
-                // Show toast *after* state update completes
-                if (undoneItemDetails && undoneActionType) {
-                    const restoredCount = restoredItemIds.length;
-                    const removedCount = removedItemIds.length;
-                    toast({
-                        title: `${undoneActionType} Undone`,
-                        description: `Action for original item(s) related to '${undoneItemDetails}' undone. ${restoredCount} item(s) restored, ${removedCount} item(s) removed.`,
-                        duration: 5000,
-                    });
-                }
-
-                return updatedProjects;
+                return p;
             });
-        }, 0); // End setTimeout
+
+             // Show appropriate toast after the state update attempt
+            if (actionSuccess && undoneItemDetails && undoneActionType) {
+                const restoredCount = restoredItemIds.length;
+                const removedCount = removedItemIds.length;
+                showToast({
+                    title: `${undoneActionType} Undone`,
+                    description: `Action related to '${undoneItemDetails}' undone. ${restoredCount} item(s) restored, ${removedCount} item(s) removed.`,
+                    duration: 5000,
+                });
+             } else if (!actionSuccess && undoneActionType) {
+                 // Toast for failure might have already been shown, but add a generic one if needed
+                 // showToast({ variant: "destructive", title: "Undo Failed", description: "The undo operation could not be completed." });
+             }
+
+
+            return projectUpdated ? updatedProjects : prevProjects; // Return original state if no update occurred
+        });
 
     }, [selectedProjectId, toast, setProjects]); // Added setProjects dependency
 
@@ -1245,6 +1271,8 @@ export default function Home() {
                 'HistoryStatus': task.historyStatus ?? '', // Add history status
                  'NeedsGrooming': task.needsGrooming ? 'Yes' : 'No', // Add flag
                  'ReadyForSprint': task.readyForSprint ? 'Yes' : 'No', // Add flag
+                  'SplitFromID': task.splitFromId ?? '', // Export split info
+                  'MergeEventID': task.mergeEventId ?? '', // Export merge info
                  // Other backlog specific fields if needed
             }));
             const wsBacklog = XLSX.utils.json_to_sheet(backlogData);
@@ -1526,7 +1554,7 @@ export default function Home() {
                      onSplitBacklogItem: handleSplitBacklogItem, // Pass split handler
                      onMergeBacklogItems: handleMergeBacklogItems, // Pass merge handler
                      onUndoBacklogAction: handleUndoBacklogAction, // Pass undo handler
-                     generateNextBacklogId: generateNextBacklogId, // Pass helper for merge ID
+                     // generateNextBacklogId: generateNextBacklogId, // Pass helper for merge ID - Removed, ID logic changed
                      allProjectBacklogItems: selectedProject.backlog ?? [], // Pass all items for uniqueness check
                  };
                 break;
@@ -1788,6 +1816,7 @@ export default function Home() {
       </footer>
     </div>
   );
+
 }
 
     

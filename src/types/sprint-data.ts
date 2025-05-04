@@ -74,6 +74,8 @@ export interface Task {
   // --- History Tracking ---
   movedToSprint?: number; // Optional: The sprint number this backlog item was moved to.
   historyStatus?: HistoryStatus; // Optional: Status indicating how the item moved to history (Move, Split, Merge).
+  splitFromId?: string; // Optional: ID of the original task this was split from.
+  mergeEventId?: string; // Optional: An ID linking items involved in the same merge event.
   // Legacy fields - keep if needed for migration or detail view, but planning uses new fields
   devTime?: string; // Legacy, replaced by devEstimatedTime
 }
@@ -191,6 +193,8 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     readyForSprint: false,
     movedToSprint: undefined, // Initialize as not moved
     historyStatus: undefined, // Initialize history status
+    splitFromId: undefined, // Initialize split tracking
+    mergeEventId: undefined, // Initialize merge tracking
     // Fields typically set during sprint planning:
     devEstimatedTime: undefined,
     qaEstimatedTime: undefined, // Don't default these in backlog
