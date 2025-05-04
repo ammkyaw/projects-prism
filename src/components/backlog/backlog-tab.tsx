@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -49,7 +48,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
   const [selectedTargetSprint, setSelectedTargetSprint] = useState<number | null>(null);
   const [isDepsDialogOpen, setIsDepsDialogOpen] = useState(false); // State for dependencies dialog
   const [editingDepsTaskId, setEditingDepsTaskId] = useState<string | null>(null); // ID of the task whose dependencies are being edited
-  const backlogContainerRef = useRef<HTMLDivElement>(null); // Ref for the container of backlog rows
+  const backlogContainerRef = useRef < HTMLDivElement > (null); // Ref for the container of backlog rows
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection } | null>(null); // State for sorting
   const [isFilteringReady, setIsFilteringReady] = useState(false); // State for filter
 
@@ -60,7 +59,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
 
   // Map internal IDs to refs for scrolling
-  const rowRefs = useRef<Map<string, React.RefObject<HTMLDivElement>>>(new Map());
+  const rowRefs = useRef < Map < string, React.RefObject < HTMLDivElement >> > (new Map());
 
 
   const parseDateString = (dateString: string | undefined): Date | undefined => {
@@ -110,10 +109,10 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
   // Track unsaved changes
    useEffect(() => {
-        const cleanBacklog = (tasks: (Task | BacklogRow)[]): Omit<Task, 'id' | 'status' | 'createdDateObj' | '_internalId'>[] =>
-           tasks.map(({ id, status, createdDateObj, _internalId, ref, movedToSprint, historyStatus, ...rest }: any) => ({ // Exclude ref and movedToSprint/historyStatus
+        const cleanBacklog = (tasks: (Task | BacklogRow)[]): Omit<Task, 'id' | 'status' | 'createdDateObj' | '_internalId' | 'ref' | 'movedToSprint' | 'historyStatus' | 'ticketNumber'>[] => // Removed fields not relevant to backlog item state
+           tasks.map(({ id, status, createdDateObj, _internalId, ref, movedToSprint, historyStatus, ticketNumber, ...rest }: any) => ({ // Exclude ref and movedToSprint/historyStatus
                ...rest,
-               backlogId: (rest.backlogId || rest.ticketNumber)?.trim() || '', // Use backlogId or ticketNumber, fallback empty
+               backlogId: (rest.backlogId)?.trim() || '', // Use backlogId or ticketNumber, fallback empty
                title: rest.title?.trim() || '',
                description: rest.description?.trim() || '',
                storyPoints: rest.storyPoints?.toString().trim() || '',
@@ -130,7 +129,6 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                assignee: undefined,
                reviewer: undefined,
                startDate: undefined,
-               ticketNumber: undefined, // Don't compare ticketNumber directly here if using backlogId
            })).sort((a, b) => (a.backlogId || '').localeCompare(b.backlogId || ''));
 
        const originalBacklogString = JSON.stringify(cleanBacklog(initialBacklog.filter(t => !t.movedToSprint && !t.historyStatus))); // Compare against initial non-moved/non-historical items
@@ -185,8 +183,9 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                          bValue = b.readyForSprint ? 1 : 0;
                          break;
                     default:
-                        aValue = (a[sortConfig.key] as any)?.toString().toLowerCase() || '';
-                        bValue = (b[sortConfig.key] as any)?.toString().toLowerCase() || '';
+                        // Fallback for other potential string keys, but use explicit cases above
+                        aValue = (a[sortConfig.key as keyof BacklogRow] as any)?.toString().toLowerCase() || '';
+                        bValue = (b[sortConfig.key as keyof BacklogRow] as any)?.toString().toLowerCase() || '';
                 }
 
                 if (aValue < bValue) {
@@ -228,10 +227,10 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
 
   const handleAddRow = () => {
-      // Combine existing saved backlog (initialBacklog) and current unsaved rows (backlogRows)
+      // Combine existing initial backlog (all items) and current unsaved rows
       const allCurrentItems = [
-          ...initialBacklog, // Include saved items (active and historical)
-          ...backlogRows.filter(r => !initialBacklog.some(init => init.id === r.id)) // Add only new, unsaved rows
+          ...initialBacklog, // Includes historical/moved items
+          ...backlogRows.filter(r => !initialBacklog.some(init => init.id === r.id)) // Add only truly new, unsaved rows from current state
       ];
       const nextId = generateNextBacklogId(allCurrentItems);
       const newRow: BacklogRow = {
@@ -245,9 +244,16 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
           needsGrooming: false,
           readyForSprint: false,
       };
-      rowRefs.current.set(newRow._internalId, React.createRef<HTMLDivElement>());
-      setBacklogRows(prev => [...prev, { ...newRow, ref: rowRefs.current.get(newRow._internalId) }]);
+      const newRowRef = React.createRef<HTMLDivElement>(); // Create ref for the new row
+      rowRefs.current.set(newRow._internalId, newRowRef); // Store the ref
+
+       setBacklogRows(prev => [...prev, { ...newRow, ref: newRowRef }]); // Add the new row with its ref
       setHasUnsavedChanges(true); // Adding a row is an unsaved change
+
+       // Scroll the new row into view slightly after state update
+       setTimeout(() => {
+         newRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+       }, 100);
   };
 
 
@@ -360,12 +366,17 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
   const handleSave = () => {
     let hasErrors = false;
     const finalBacklogPortion: Task[] = []; // Only includes the items displayed/edited in this tab
-    const backlogIds = new Set<string>();
+    const allKnownBacklogIds = new Set<string>();
 
-    // Add existing IDs from the *initial* backlog to the set for duplication checks
+    // Populate with ALL IDs from initial backlog (including historical)
     initialBacklog.forEach(task => {
-        if (task.backlogId) backlogIds.add(task.backlogId.toLowerCase());
+        if (task.backlogId) allKnownBacklogIds.add(task.backlogId.toLowerCase());
     });
+    // Populate with IDs from the CURRENT rows being edited (to catch duplicates within the edit session)
+    backlogRows.forEach(row => {
+        if (row.backlogId) allKnownBacklogIds.add(row.backlogId.toLowerCase());
+    });
+
 
     backlogRows.forEach((row, index) => {
       // Skip effectively empty rows
@@ -389,10 +400,12 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
       let rowErrors: string[] = [];
       if (!backlogId) rowErrors.push("Backlog ID required");
-      // Check against ALL IDs (initial saved + newly added in this session)
-      if (backlogId && backlogIds.has(backlogId.toLowerCase()) && row.id === '') { // Only check for duplicates if it's a NEW row (id is empty)
+      // Check against ALL known IDs (initial + current), BUT allow the row to keep its *own* ID if it already exists (i.e., it was loaded, not new)
+      if (backlogId && allKnownBacklogIds.has(backlogId.toLowerCase()) && row.id === '') {
+           // This is a new row (no persistent ID yet) trying to use an existing ID
            rowErrors.push(`Duplicate Backlog ID "${backlogId}"`);
-      }
+       }
+
       if (!title) rowErrors.push("Title required");
       if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) rowErrors.push("Invalid Story Points");
       if (!createdDate || !isValid(parseISO(createdDate))) rowErrors.push("Invalid Created Date (use YYYY-MM-DD)");
@@ -400,7 +413,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       if (!priority || !taskPriorities.includes(priority as any)) rowErrors.push("Invalid Priority");
        // Validate dependencies exist in the current combined backlog (displayed + initial)
        const combinedBacklogIds = new Set([
-         ...initialBacklog.filter(t => t.id !== row.id).map(t => t.backlogId!), // Exclude self from initial list
+         ...initialBacklog.filter(t => t.id !== row.id).map(t => t.backlogId!).filter(Boolean), // Exclude self from initial list, filter out undefined/empty
          ...backlogRows.filter(r => r._internalId !== row._internalId && r.backlogId).map(r => r.backlogId!), // Exclude self from current rows
        ]);
        const invalidDeps = dependsOn.filter(depId => !combinedBacklogIds.has(depId));
@@ -419,8 +432,8 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
         return;
       }
 
-       // Add valid ID to set only if it's a new row being added
-       if (backlogId && row.id === '') backlogIds.add(backlogId.toLowerCase());
+       // Add to set only if it's a new row being added and validated
+       if (backlogId && row.id === '') allKnownBacklogIds.add(backlogId.toLowerCase());
 
       finalBacklogPortion.push({
         id: row.id || `backlog_${projectId}_${Date.now()}_${index}`, // Keep existing ID or generate new if truly new
@@ -446,6 +459,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
         reviewer: undefined,
         status: undefined,
         startDate: undefined,
+        acceptanceCriteria: row.acceptanceCriteria, // Persist acceptance criteria
       });
     });
 
@@ -485,8 +499,10 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
    // Memoized list of potential dependencies (other backlog items)
    const potentialDependencies = useMemo(() => {
         if (!editingDepsTaskId) return [];
+        // Get the backlogId of the task being edited
+         const currentBacklogId = backlogRows.find(row => row._internalId === editingDepsTaskId)?.backlogId;
         return backlogRows
-            .filter(row => row._internalId !== editingDepsTaskId && row.backlogId?.trim()) // Exclude self and rows without ID
+            .filter(row => row._internalId !== editingDepsTaskId && row.backlogId?.trim() && row.backlogId !== currentBacklogId) // Exclude self, rows without ID, and self ID
             .map(row => ({ id: row.backlogId!, title: row.title || `Item ${row.backlogId}` })); // Use backlogId as the ID
    }, [backlogRows, editingDepsTaskId]);
 
@@ -562,7 +578,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                                  value={row.backlogId ?? ''}
                                  onChange={e => handleInputChange(row._internalId, 'backlogId', e.target.value)}
                                  placeholder="BL-YYNNNN"
-                                 className={cn("h-9")}
+                                 className={cn("h-9", row.id && row.backlogId?.trim() && "text-transparent")} // Hide text if ID exists and link is shown
                                  required
                                  disabled={!!row.id} // Disable editing ID once saved (has a persistent ID)
                                  readOnly={!!row.id} // Make it read-only visually as well
@@ -572,10 +588,10 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                                 <button
                                     type="button"
                                     onClick={() => handleViewDetails(row)}
-                                    className="absolute top-1/2 right-2 z-10 -translate-y-1/2 text-primary hover:text-primary/80 cursor-pointer"
+                                    className="absolute inset-0 z-10 flex items-center pl-3 text-sm font-medium text-primary underline cursor-pointer bg-transparent border-none hover:text-primary/80"
                                     aria-label={`View details for ${row.backlogId}`}
                                 >
-                                    <View className="h-4 w-4" />
+                                    {row.backlogId}
                                 </button>
                              )}
                         </div>

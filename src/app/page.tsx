@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -24,7 +23,7 @@ import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
 import TeamsTab from '@/components/teams/teams-tab'; // Updated path
 import AddMembersDialog from '@/components/add-members-dialog';
 import HistoryTab from '@/components/backlog/history-tab'; // Import HistoryTab component
-import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Updated path
+// import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Removed import
 import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
 
 // Placeholder Sub-Tab Components
@@ -74,6 +73,7 @@ const calculateSprintMetricsHelper = (startDateStr: string | undefined, duration
 // Helper to create an empty task row for validation/defaults
 const createEmptyTaskRow = (): Task => ({
   id: '',
+  backlogId: '', // Ensure backlogId exists
   ticketNumber: '',
   description: '',
   status: 'To Do',
@@ -91,18 +91,20 @@ const generateNextBacklogId = (allProjectBacklogItems: Task[]): string => {
    allProjectBacklogItems.forEach(item => {
      const id = item.backlogId; // Use the actual backlogId
      // Consider only base BL-YYxxxx IDs from the current year
-     if (id && id.startsWith(prefix) && !id.includes('-') && !id.includes('m')) {
-       const numPart = parseInt(id.substring(prefix.length), 10);
-       if (!isNaN(numPart) && numPart > maxNum) {
-         maxNum = numPart;
-       }
+     // Use regex to extract the numeric part more reliably
+     const match = id?.match(/^BL-\d{2}(\d{4})(?:-.*)?$/); // Match BL-YYNNNN or BL-YYNNNN-suffix
+     if (id && id.startsWith(prefix) && match) {
+         const numPart = parseInt(match[1], 10); // Get the NNNN part
+         if (!isNaN(numPart) && numPart > maxNum) {
+             maxNum = numPart;
+         }
      }
    });
 
    const nextNum = maxNum + 1;
    const nextNumPadded = nextNum.toString().padStart(4, '0'); // Pad with leading zeros to 4 digits
    const newBaseId = `${prefix}${nextNumPadded}`;
-   console.log("Generated next backlog ID:", newBaseId); // Debug log
+   console.log("Generated next backlog ID:", newBaseId, "based on max:", maxNum); // Debug log
    return newBaseId;
  };
 
@@ -173,7 +175,9 @@ export default function Home() {
                      teams: project.teams ?? [],
                      backlog: (project.backlog ?? []).map(task => ({
                           ...task,
-                          priority: taskPriorities.includes(task.priority as any) ? task.priority : 'Medium',
+                           priority: taskPriorities.includes(task.priority as any) ? task.priority : 'Medium',
+                           // Ensure backlogId exists during validation
+                           backlogId: task.backlogId ?? `BL-LEGACY-${task.id}`, // Provide a fallback if missing
                      })).sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
                      sprintData: {
                          ...project.sprintData,
@@ -340,6 +344,7 @@ export default function Home() {
                               devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime, // Preserve or default
                               qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
                               bufferTime: task.bufferTime ?? emptyTask.bufferTime,
+                              backlogId: task.backlogId ?? '', // Ensure backlogId
                            })),
                            spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
                               ...task,
@@ -347,6 +352,7 @@ export default function Home() {
                               devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime, // Preserve or default
                               qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
                               bufferTime: task.bufferTime ?? emptyTask.bufferTime,
+                              backlogId: task.backlogId ?? '', // Ensure backlogId
                            })),
                       };
                        // Calculate committed points based on saved tasks
@@ -408,6 +414,7 @@ export default function Home() {
                     devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime,
                     qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
                     bufferTime: task.bufferTime ?? emptyTask.bufferTime,
+                    backlogId: task.backlogId ?? '', // Ensure backlogId
                  })),
                  spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
                     ...task,
@@ -415,6 +422,7 @@ export default function Home() {
                     devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime,
                     qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
                     bufferTime: task.bufferTime ?? emptyTask.bufferTime,
+                    backlogId: task.backlogId ?? '', // Ensure backlogId
                  })),
              };
 
@@ -629,6 +637,7 @@ export default function Home() {
                        historyStatus: task.historyStatus, // Preserve history status
                        needsGrooming: task.needsGrooming ?? false, // Preserve flag
                        readyForSprint: task.readyForSprint ?? false, // Preserve flag
+                       backlogId: task.backlogId ?? '', // Ensure backlogId
                    }));
                    return { ...p, backlog: validatedBacklog };
                }
@@ -690,12 +699,13 @@ export default function Home() {
                        historyStatus: undefined, // Clear history status for sprint task
                         needsGrooming: undefined, // Clear flag
                         readyForSprint: undefined, // Clear flag
+                        backlogId: backlogItem.backlogId ?? '', // Ensure backlogId
                    };
 
                    // Instead of removing, update the item in backlog to mark it as moved
                    const updatedBacklog = p.backlog!.map((item, index) => {
                        if (index === backlogItemIndex) {
-                           return { ...item, movedToSprint: targetSprintNumber, historyStatus: 'Move' }; // Set history status to 'Move'
+                           return { ...item, movedToSprint: targetSprintNumber, historyStatus: 'Move' as HistoryStatus }; // Set history status to 'Move'
                        }
                        return item;
                    });
@@ -856,34 +866,23 @@ export default function Home() {
 
                      // 2. Prepare new split tasks with unique IDs and backlog IDs
                      const allItemsForIdGen = [...(p.backlog || []), ...splitTasks]; // Include potential new tasks for ID uniqueness check
-                     let currentMaxSuffix = 0; // Track the highest numeric suffix for this base ID
 
                      const newSplitTasksWithIds = splitTasks.map((task, index) => {
-                         // Instead of -a, -b, use BL-YYNNNN-1, BL-YYNNNN-2 for splits
-                         // Find the highest existing numeric suffix for this specific originalItem.backlogId
-                         let maxExistingSuffix = 0;
-                         p.backlog?.forEach(existingItem => {
-                             if (existingItem.backlogId?.startsWith(originalItem.backlogId + '-')) {
-                                 const suffixPart = existingItem.backlogId.substring(originalItem.backlogId!.length + 1);
-                                 const numSuffix = parseInt(suffixPart, 10);
-                                 if (!isNaN(numSuffix) && numSuffix > maxExistingSuffix) {
-                                     maxExistingSuffix = numSuffix;
-                                 }
-                             }
-                         });
-
-                         currentMaxSuffix = maxExistingSuffix + index + 1; // Increment based on existing max and current index
-                         const backlogId = `${originalItem.backlogId}-${currentMaxSuffix}`;
+                         // Generate the new ID using the helper function, considering all items
+                         const backlogId = generateNextBacklogId(allItemsForIdGen);
+                         // Need to immediately add this generated ID to the context for the next potential call
+                         allItemsForIdGen.push({ ...task, backlogId }); // Simulate adding the new item
 
                          return {
                            ...task,
-                           id: `split_${originalTaskId}_${currentMaxSuffix}_${Date.now()}`, // Generate unique ID
-                           backlogId: backlogId, // Assign generated split ID (e.g., BL-YYNNNN-1)
+                           id: `split_${originalTaskId}_${backlogId}_${Date.now()}`, // Generate unique ID using new backlogId
+                           backlogId: backlogId, // Assign generated split ID (e.g., BL-YYNNNN)
                            ticketNumber: backlogId, // Default ticket number
                            needsGrooming: true, // Mark as needing grooming
                            readyForSprint: false, // Mark as not ready
                          };
                      });
+
 
                      newIds = newSplitTasksWithIds.map(t => t.backlogId || t.id); // Store new IDs for toast
 
@@ -912,7 +911,7 @@ export default function Home() {
                 duration: 5000,
             });
         }
-    }, [selectedProjectId, toast]);
+    }, [selectedProjectId, toast, generateNextBacklogId]); // Pass helper
 
 
     // Handler to merge backlog items
@@ -985,7 +984,7 @@ export default function Home() {
             duration: 5000,
         });
 
-    }, [selectedProjectId, toast]);
+    }, [selectedProjectId, toast, generateNextBacklogId]); // Pass helper
 
     // Handler to undo a backlog action (Split/Merge)
     const handleUndoBacklogAction = useCallback((taskId: string) => {
@@ -1024,52 +1023,29 @@ export default function Home() {
 
                     if (undoneActionType === 'Split') {
                         // Find and remove items created by this split (e.g., BL-XXXX-1, BL-XXXX-2)
-                        updatedBacklog = updatedBacklog.filter(item => !(item.backlogId?.startsWith(baseId + '-') && /\d+$/.test(item.backlogId.substring(baseId.length + 1)) && item.id !== taskId));
+                        // This logic needs refinement - how to find the *exact* split results?
+                         // Assumption: Split results have backlog IDs starting with the original ID + "-".
+                         console.log(`Undoing Split for base ID: ${baseId}`);
+                         updatedBacklog = updatedBacklog.filter(item => !(item.backlogId?.startsWith(baseId + '-') && !item.historyStatus));
+                         // Example: Keep BL-240001 (marked Split), remove BL-240001-1, BL-240001-2 etc.
                     } else if (undoneActionType === 'Merge') {
                          // Find and remove the single item created by the merge action
-                         // This requires knowing which item was the result. Since merged items now get standard IDs,
-                         // we'll assume the 'Undo' is clicked on one of the *original* items marked 'Merge'.
-                         // We need to restore *all* original items associated with this merge event and remove the *result*.
-                         // Finding the result is tricky. We might need a hidden link or rely on timestamps.
-                         // For now, let's restore the original item(s) and *try* to remove a potential result.
-
-                         // Attempt to find the merged result item (the one without historyStatus created around the same time - difficult)
-                         // Let's assume the *most recently created* standard ID item *might* be the result. This is heuristic.
-                         let potentialResultId: string | undefined;
-                         let latestCreationTime = 0;
-
-                         updatedBacklog.forEach(item => {
-                           if (!item.historyStatus && item.createdDate) {
-                             const creationTime = parseISO(item.createdDate).getTime();
-                             if (creationTime > latestCreationTime) { // Simplistic guess: newest item is the result
-                               latestCreationTime = creationTime;
-                               potentialResultId = item.id;
-                             }
-                           }
-                         });
-
-                         if (potentialResultId) {
-                              console.log(`Attempting to remove potential merge result: ${potentialResultId}`);
-                              updatedBacklog = updatedBacklog.filter(item => item.id !== potentialResultId);
-                         } else {
-                               console.warn(`Could not definitively find the result of the merge associated with ${baseId}. Only restoring originals.`);
-                         }
-
-                         // Now restore all items originally part of this merge
+                         // This requires knowing which item was the result. This is tricky as merged items get standard IDs.
+                         // For now, we focus on restoring the originals marked as 'Merge'. Removing the result needs better linking.
+                         console.warn(`Undoing Merge for base ID: ${baseId}. Restoring originals, but cannot reliably remove the merged result without better linking.`);
+                         // Restore all items originally part of this merge (the ones marked 'Merge')
                          updatedBacklog = updatedBacklog.map(item => {
-                            // Restore all items marked 'Merge' that were part of the original set (identified by taskIdsToMerge in handleMergeBacklogItems - how to retrieve that here?)
-                            // Simplification: Assume all items marked 'Merge' with the *same original title structure* might be related. Risky.
-                            // Better approach: Restore the clicked item only for now. True multi-item undo needs better linking.
-                             if (item.id === taskId && item.historyStatus === 'Merge') {
-                                return { ...item, historyStatus: undefined }; // Restore the clicked item
+                             if (item.id === taskId && item.historyStatus === 'Merge') { // Restore the clicked one
+                                return { ...item, historyStatus: undefined };
                              }
+                             // How to find others part of the same merge event? Needs a link (e.g., mergeEventId)
                              return item;
                          });
                     }
 
                     // Restore the original item(s) status (specifically the one clicked for Undo)
                     updatedBacklog = updatedBacklog.map((item) => {
-                        if (item.id === taskId) { // Restore the clicked item
+                        if (item.id === taskId) { // Restore the clicked item's history status
                             return { ...item, historyStatus: undefined };
                         }
                         return item;
@@ -1444,7 +1420,6 @@ export default function Home() {
       backlog: {
           label: "Backlog", icon: Layers, subTabs: {
               management: { label: "Management", icon: Package, component: BacklogTab },
-              // prioritization: { label: "Prioritization", icon: ArrowUpDown, component: BacklogPrioritizationTab },
               grooming: { label: "Grooming", icon: Edit, component: BacklogGroomingTab },
               history: { label: "History", icon: History, component: HistoryTab }, // Added History Sub-Tab
           }
@@ -1533,14 +1508,7 @@ export default function Home() {
                     generateNextBacklogId: generateNextBacklogId, // Pass the helper
                  };
                 break;
-             // case 'backlog/prioritization': // Removed
-             //      componentProps = {
-             //         ...componentProps,
-             //          // Pass only backlog items that are NOT moved to a sprint or historical
-             //          initialBacklog: selectedProject.backlog?.filter(task => !task.movedToSprint && !task.historyStatus) ?? [],
-             //          onSaveBacklog: handleSaveBacklog, // Pass save function
-             //      };
-             //     break;
+             // Removed prioritization tab
             case 'backlog/grooming':
                 componentProps = {
                      ...componentProps,
@@ -1550,6 +1518,7 @@ export default function Home() {
                      onMergeBacklogItems: handleMergeBacklogItems, // Pass merge handler
                      onUndoBacklogAction: handleUndoBacklogAction, // Pass undo handler
                      generateNextBacklogId: generateNextBacklogId, // Pass helper for merge ID
+                     allProjectBacklogItems: selectedProject.backlog ?? [], // Pass all items for split/merge uniqueness check
                  };
                 break;
              case 'backlog/history': // Updated sub-tab path
@@ -1725,7 +1694,7 @@ export default function Home() {
                    <AlertDialogCancel onClick={() => setProjectToDeleteId(null)}>Cancel</AlertDialogCancel>
                    <AlertDialogAction
                        onClick={handleConfirmDeleteProject}
-                       disabled={confirmProjectName.trim().toLowerCase() !== projects.find(p => p.id === projectToDeleteId)?.name.toLowerCase()}
+                       disabled={confirmProjectName.trim().toLowerCase() !== (projects.find(p => p.id === projectToDeleteId)?.name.toLowerCase() ?? ' ')}
                        className={cn(buttonVariants({ variant: "destructive" }))}
                    >
                        Delete Project
