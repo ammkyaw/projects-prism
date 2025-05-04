@@ -308,7 +308,10 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
         // Check if it's a 'new' task and has a backlogId, meaning it came from the backlog
         if (type === 'new' && taskToRemove && taskToRemove.backlogId && selectedSprintNumber) {
              // Call the revert function passed from parent
-             onRevertTask(selectedSprintNumber, taskToRemove.id, taskToRemove.backlogId);
+             // Defer the state update to avoid potential render-during-render issues with toast
+             setTimeout(() => {
+                onRevertTask(selectedSprintNumber, taskToRemove.id, taskToRemove.backlogId);
+            }, 0);
         }
          // Always remove the task from the current sprint planning state
         const newRows = prevRows.filter(row => row._internalId !== internalId);

@@ -147,7 +147,7 @@ export default function HistoryTab({ projectId, projectName, historyItems }: His
             ) : (
               <div className="overflow-x-auto">
                  {/* Adjust min-width if necessary to accommodate new columns */}
-                <Table className="min-w-[1500px]"> {/* Increased min-width */}
+                <Table className="min-w-[1500px]"> {/* Ensure Table component wraps direct children */}
                   <TableHeader>
                     {/* Mirror headers from BacklogTab Management, add Sprint #, remove actions */}
                     <TableRow>
