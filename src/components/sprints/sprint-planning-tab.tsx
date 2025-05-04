@@ -98,44 +98,6 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
   return totalDays >= 0 ? totalDays : null; // Allow 0 days
 };
 
-// Helper function to calculate end date skipping weekends
-const calculateEndDateSkippingWeekends = (startDate: Date, workingDays: number): Date => {
-   let currentDate = startDate;
-   let workingDaysCounted = 0;
-
-   // If 0 working days, the end date is the start date itself (or the next working day if start is weekend)
-   if (workingDays <= 0) {
-       while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
-           currentDate = addDays(currentDate, 1);
-       }
-       return currentDate;
-   }
-
-   // Adjust start date if it falls on a weekend BEFORE starting the count
-   while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
-     currentDate = addDays(currentDate, 1);
-   }
-
-   // Loop until the required number of working days are counted
-   // Need to count the start day itself if it's a working day
-   while (workingDaysCounted < workingDays) {
-        if (getDay(currentDate) !== 0 && getDay(currentDate) !== 6) {
-            workingDaysCounted++;
-        }
-
-        // Only advance the date if we haven't reached the target number of working days yet
-        if (workingDaysCounted < workingDays) {
-             currentDate = addDays(currentDate, 1);
-             // Skip subsequent weekends while advancing
-             while (getDay(currentDate) === 0 || getDay(currentDate) === 6) {
-                 currentDate = addDays(currentDate, 1);
-             }
-        }
-   }
-
-  return currentDate;
-};
-
 
 interface SprintPlanningTabProps {
   sprints: Sprint[];
@@ -192,6 +154,9 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
   const isSprintCompleted = selectedSprint?.status === 'Completed';
   const isSprintActive = selectedSprint?.status === 'Active';
   const isSprintPlanned = selectedSprint?.status === 'Planned';
+
+  // Determine if the current form should be disabled
+  const isFormDisabled = isSprintCompleted; // Only disable if completed
 
   const currentSprintStartDate = useMemo(() => {
      if (isCreatingNewSprint && newSprintForm.startDate) {
@@ -285,7 +250,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
     } else if (!isCreatingNewSprint) {
         resetForms();
     }
-  }, [selectedSprint, isCreatingNewSprint, resetForms]); // Removed isSprintCompleted as dependency, handled inside if
+  }, [selectedSprint, isCreatingNewSprint, resetForms]);
 
 
   useEffect(() => {
@@ -314,7 +279,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
   };
 
   const handleInputChange = (field: keyof Omit<SprintPlanning, 'newTasks' | 'spilloverTasks'>, value: string) => {
-      if (isSprintCompleted && !isCreatingNewSprint) return;
+      if (isFormDisabled && !isCreatingNewSprint) return; // Use unified disable check
       setPlanningData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -323,7 +288,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
   };
 
   const addTaskRow = (type: 'new' | 'spillover') => {
-     if (isSprintCompleted && !isCreatingNewSprint) return;
+     if (isFormDisabled && !isCreatingNewSprint) return; // Use unified disable check
     // Only allow adding spillover tasks manually
     if (type === 'spillover') {
         setSpilloverTasks(prev => [...prev, createEmptyTaskRow()]);
@@ -335,7 +300,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
   };
 
   const removeTaskRow = (type: 'new' | 'spillover', internalId: string) => {
-     if (isSprintCompleted && !isCreatingNewSprint) return;
+     if (isFormDisabled && !isCreatingNewSprint) return; // Use unified disable check
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     updater(prevRows => {
         const taskToRemove = prevRows.find(row => row._internalId === internalId);
@@ -372,7 +337,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
     field: keyof Omit<Task, 'id'>,
     value: string | number | undefined
   ) => {
-     if (isSprintCompleted && !isCreatingNewSprint) return;
+     if (isFormDisabled && !isCreatingNewSprint) return; // Use unified disable check
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     updater(rows =>
       rows.map(row => {
@@ -404,7 +369,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
     field: 'startDate',
     date: Date | undefined
   ) => {
-      if (isSprintCompleted && !isCreatingNewSprint) return;
+      if (isFormDisabled && !isCreatingNewSprint) return; // Use unified disable check
       const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
       updater(rows =>
           rows.map(row => {
@@ -419,7 +384,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
 
    // Handler for opening the backlog selection dialog
    const handleOpenBacklogDialog = () => {
-     if (isSprintCompleted && !isCreatingNewSprint) return;
+     if (isFormDisabled && !isCreatingNewSprint) return; // Use unified disable check
      setSelectedBacklogIds(new Set()); // Reset selection
      setIsBacklogDialogOpen(true);
    };
@@ -567,7 +532,10 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
          testingStrategy: planningData.testingStrategy.trim(),
      };
 
-     onSavePlanning(selectedSprintNumber, finalPlanningData);
+     // Pass the current status if saving an active sprint, otherwise undefined (or planned)
+     const currentStatus = selectedSprint?.status === 'Active' ? 'Active' : undefined;
+
+     onSavePlanning(selectedSprintNumber, finalPlanningData, currentStatus);
  };
 
   const handleCreateAndSaveNewSprint = () => {
@@ -1230,7 +1198,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
                 <>
                     <CardContent className="space-y-6 border-t pt-6 mt-6">
                        <h3 className="text-xl font-semibold">Planning Details for Sprint {selectedSprintNumber}</h3>
-                       {renderPlanningForm(isSprintCompleted || isSprintActive)} {/* Disable form if active or completed */}
+                       {renderPlanningForm(isFormDisabled)}
                     </CardContent>
                     <CardFooter className="border-t pt-4 flex justify-end gap-2">
                          {isSprintPlanned && (
@@ -1261,7 +1229,7 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
                                    </AlertDialogContent>
                               </AlertDialog>
                          )}
-                         <Button onClick={handleSaveExistingSprintPlanning} disabled={isSprintCompleted || isSprintActive}>
+                         <Button onClick={handleSaveExistingSprintPlanning} disabled={isFormDisabled}>
                              Save Planning
                          </Button>
                      </CardFooter>
@@ -1273,5 +1241,3 @@ export default function SprintPlanningTab({ sprints, onSavePlanning, onCreateAnd
     </div>
   );
 }
-
-    
