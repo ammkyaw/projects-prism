@@ -13,7 +13,7 @@ const Table = React.forwardRef<
     <table
       ref={ref}
       className={cn("w-full caption-bottom text-sm", className)}
-      {...props} // Ensure props are spread directly onto the table tag
+      {...props}
     >{children}</table>
   </div>
 ))
@@ -64,7 +64,7 @@ const TableRow = React.forwardRef<
       "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
       className
     )}
-    {...props} // Remove extra space here
+    {...props}
   />
 ))
 TableRow.displayName = "TableRow"
