@@ -13,7 +13,7 @@ const Table = React.forwardRef<
     <table
       ref={ref}
       className={cn("w-full caption-bottom text-sm", className)}
-      {...props}
+      {...props} // Ensure props are spread directly onto the table tag
     >{children}</table>
   </div>
 ))
@@ -118,3 +118,5 @@ export {
   TableCell,
   TableCaption,
 }
+
+    
