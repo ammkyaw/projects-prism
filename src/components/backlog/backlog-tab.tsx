@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { PlusCircle, Trash2, Package, Save, ArrowUpDown, View, ArrowRightSquare, LinkIcon } from 'lucide-react'; // Added ArrowUpDown
+import { PlusCircle, Trash2, Package, Save, ArrowUpDown, View, ArrowRightSquare, LinkIcon, Filter } from 'lucide-react'; // Added Filter icon
 import type { Task, Member, Sprint, SprintStatus, TaskType } from '@/types/sprint-data'; // Added TaskType
 import { taskTypes, taskPriorities, initialBacklogTask } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
@@ -87,6 +87,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
   const [editingDepsTaskId, setEditingDepsTaskId] = useState<string | null>(null); // ID of the task whose dependencies are being edited
   const backlogContainerRef = useRef<HTMLDivElement>(null); // Ref for the container of backlog rows
   const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection } | null>(null); // State for sorting
+  const [isFilteringReady, setIsFilteringReady] = useState(false); // State for filter
 
 
   // Map internal IDs to refs for scrolling
@@ -177,11 +178,18 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
        setHasUnsavedChanges(originalBacklogString !== currentBacklogString);
    }, [backlogRows, initialBacklog]);
 
-    // Apply sorting to backlog rows
-    const sortedBacklogRows = useMemo(() => {
-        let sortableItems = [...backlogRows];
+    // Apply filtering and sorting to backlog rows
+    const filteredAndSortedRows = useMemo(() => {
+        let items = [...backlogRows];
+
+        // Apply filter if active
+        if (isFilteringReady) {
+            items = items.filter(row => row.readyForSprint);
+        }
+
+        // Apply sorting
         if (sortConfig !== null) {
-            sortableItems.sort((a, b) => {
+            items.sort((a, b) => {
                 let aValue: any;
                 let bValue: any;
 
@@ -227,10 +235,10 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
             });
         } else {
              // Default sort by priority if no specific sort is selected
-            sortableItems.sort((a, b) => taskPriorities.indexOf(a.priority || 'Medium') - taskPriorities.indexOf(b.priority || 'Medium'));
+            items.sort((a, b) => taskPriorities.indexOf(a.priority || 'Medium') - taskPriorities.indexOf(b.priority || 'Medium'));
         }
-        return sortableItems;
-    }, [backlogRows, sortConfig]);
+        return items;
+    }, [backlogRows, sortConfig, isFilteringReady]); // Add isFilteringReady dependency
 
 
     // Sorting handlers
@@ -247,6 +255,11 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
             return <ArrowUpDown className="ml-2 h-3 w-3 opacity-30 inline" />; // Added inline
         }
         return sortConfig.direction === 'asc' ? ' ▲' : ' ▼';
+    };
+
+    // Filter toggle handler
+    const toggleFilterReady = () => {
+        setIsFilteringReady(prev => !prev);
     };
 
 
@@ -369,9 +382,16 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
     const backlogIds = new Set<string>();
 
     backlogRows.forEach((row, index) => {
-      if (!row.backlogId?.trim() && !row.title?.trim() && !row.storyPoints?.toString().trim()) {
-        return;
+      // Skip effectively empty rows (unless it's the only row)
+      const isEmptyRow = !row.backlogId?.trim() && !row.title?.trim() && !row.storyPoints?.toString().trim();
+      if (isEmptyRow && backlogRows.length > 1) {
+          return;
       }
+       // If it's the only row and it's empty, don't save it.
+       if (isEmptyRow && backlogRows.length === 1) {
+           return;
+       }
+
 
       const backlogId = row.backlogId?.trim() || '';
       const title = row.title?.trim();
@@ -491,9 +511,19 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
             <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5 text-primary" /> Project Backlog: {projectName}</CardTitle>
             <CardDescription>Manage tasks that are not yet planned for a specific sprint. Add, edit, prioritize, and detail backlog items.</CardDescription>
           </div>
-          <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
-             <Save className="mr-2 h-4 w-4" /> Save Backlog
-          </Button>
+          <div className="flex items-center gap-2">
+             <Button
+                 variant={isFilteringReady ? "secondary" : "outline"}
+                 size="sm"
+                 onClick={toggleFilterReady}
+             >
+                 <Filter className="mr-2 h-4 w-4" />
+                 {isFilteringReady ? "Show All" : "Show Ready Only"}
+             </Button>
+             <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
+                 <Save className="mr-2 h-4 w-4" /> Save Backlog
+             </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -530,7 +560,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
                 {/* Backlog Rows - Add inputs for new flags */}
                 <div className="space-y-4 md:space-y-2">
-                {sortedBacklogRows.map((row) => ( // Use sortedBacklogRows here
+                {filteredAndSortedRows.map((row) => ( // Use filteredAndSortedRows here
                     <div
                         key={row._internalId}
                         ref={row.ref} // Assign ref to the row container
@@ -837,5 +867,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
 
 
+
+    
 
     
