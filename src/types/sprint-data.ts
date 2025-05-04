@@ -182,7 +182,7 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     ticketNumber: '',
     title: '',
     description: '',
-    acceptanceCriteria: undefined, // Added acceptance criteria
+    acceptanceCriteria: '', // Initialize acceptance criteria
     storyPoints: undefined,
     priority: 'Medium',
     taskType: 'New Feature', // Default task type
@@ -201,3 +201,4 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     reviewer: undefined,
     startDate: undefined,
 };
+

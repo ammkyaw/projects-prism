@@ -11,12 +11,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"; // Import Dialog components
-import { Info, Edit, Save, XCircle, HelpCircle, BookOpenCheck, Split } from 'lucide-react'; // Added Split icon
+import { Info, Edit, Save, XCircle, HelpCircle, BookOpenCheck, Split, GitMerge } from 'lucide-react'; // Added Split, GitMerge icons
 import { useToast } from "@/hooks/use-toast";
 import { taskPriorities } from '@/types/sprint-data'; // Import priorities
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Import Tooltip components
 import SplitBacklogItemDialog from '@/components/split-backlog-item-dialog'; // Import Split Dialog
+import MergeBacklogDialog from '@/components/merge-backlog-dialog'; // Import Merge Dialog
 
 interface BacklogGroomingTabProps {
   projectId: string;
@@ -24,6 +25,7 @@ interface BacklogGroomingTabProps {
   initialBacklog: Task[]; // Receive initial backlog (all items)
   onSaveBacklog: (backlog: Task[]) => void; // Callback to save changes (saves ALL items, not just groomed)
   onSplitBacklogItem: (originalTaskId: string, splitTasks: Task[]) => void; // Add split handler prop
+  onMergeBacklogItems: (taskIdsToMerge: string[], mergedTask: Task) => void; // Add merge handler prop
 }
 
 interface EditableBacklogItem extends Task {
@@ -31,11 +33,12 @@ interface EditableBacklogItem extends Task {
   isEditing?: boolean;
 }
 
-export default function BacklogGroomingTab({ projectId, projectName, initialBacklog, onSaveBacklog, onSplitBacklogItem }: BacklogGroomingTabProps) {
+export default function BacklogGroomingTab({ projectId, projectName, initialBacklog, onSaveBacklog, onSplitBacklogItem, onMergeBacklogItems }: BacklogGroomingTabProps) {
   const [allEditableBacklog, setAllEditableBacklog] = useState<EditableBacklogItem[]>([]); // Store ALL items
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSplitDialogOpen, setIsSplitDialogOpen] = useState(false); // State for Split dialog
   const [splittingTask, setSplittingTask] = useState<Task | null>(null); // Task being split
+  const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false); // State for Merge dialog
   const { toast } = useToast();
 
    // Filtered list for display (only items needing grooming and not already moved/split/merged)
@@ -43,6 +46,12 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
        allEditableBacklog.filter(item => item.needsGrooming && !item.historyStatus),
        [allEditableBacklog]
    );
+
+   // Filtered list for Merge dialog (all non-historical items)
+    const mergeCandidates = useMemo(() =>
+       allEditableBacklog.filter(item => !item.historyStatus),
+       [allEditableBacklog]
+    );
 
 
    // Initialize state when initialBacklog changes
@@ -138,6 +147,19 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
         setSplittingTask(null);
    };
 
+   // Handler for opening the merge dialog
+   const handleOpenMergeDialog = () => {
+      setIsMergeDialogOpen(true);
+   };
+
+   // Handler for confirming the merge operation
+   const handleConfirmMerge = (taskIdsToMerge: string[], mergedTask: Task) => {
+       console.log("Confirming merge:", taskIdsToMerge, mergedTask);
+       onMergeBacklogItems(taskIdsToMerge, mergedTask);
+       setIsMergeDialogOpen(false);
+   };
+
+
   const handleSaveAll = () => {
     let hasErrors = false;
     // We only save changes for items that are NOT historical
@@ -212,7 +234,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
           <div className="flex justify-between items-center">
               <div>
                  <CardTitle className="flex items-center gap-2"><Edit className="h-5 w-5 text-primary" /> Backlog Grooming</CardTitle> {/* Updated Icon */}
-                 <CardDescription>Refine backlog items marked as 'Needs Grooming' for project '{projectName}'. Add details, estimate effort, mark as ready for sprint, or split stories.</CardDescription>
+                 <CardDescription>Refine items marked 'Needs Grooming'. Add details, estimate, mark as ready, split, or merge stories.</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                  {/* Definition of Ready Dialog */}
@@ -241,6 +263,10 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                          </DialogFooter>
                      </DialogContent>
                  </Dialog>
+                  {/* Merge Button */}
+                   <Button variant="outline" size="sm" onClick={handleOpenMergeDialog} disabled={mergeCandidates.length < 2}>
+                       <GitMerge className="mr-2 h-4 w-4" /> Merge Items
+                   </Button>
                  <Button onClick={handleSaveAll} disabled={!hasUnsavedChanges}>
                      <Save className="mr-2 h-4 w-4" /> Save All Changes
                  </Button>
@@ -393,6 +419,15 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                 allProjectBacklogItems={initialBacklog} // Pass all items for ID generation
             />
         )}
+
+         {/* Merge Backlog Items Dialog */}
+         <MergeBacklogDialog
+             isOpen={isMergeDialogOpen}
+             onOpenChange={setIsMergeDialogOpen}
+             availableBacklogItems={mergeCandidates} // Pass only non-historical items
+             onConfirmMerge={handleConfirmMerge}
+         />
     </>
   );
 }
+

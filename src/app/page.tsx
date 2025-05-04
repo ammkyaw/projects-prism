@@ -39,10 +39,10 @@ import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlan
 import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam, initialBacklogTask, taskPriorities } from '@/types/sprint-data'; // Import taskPriorities
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { addDays, format, parseISO, isPast, isValid } from 'date-fns';
+import { addDays, format, parseISO, isPast, isValid, getYear } from 'date-fns'; // Added getYear
 
 // Helper function (remains the same)
-const calculateSprintMetrics = (startDateStr: string | undefined, duration: string | undefined): { totalDays: number, endDate: string } => {
+const calculateSprintMetricsHelper = (startDateStr: string | undefined, duration: string | undefined): { totalDays: number, endDate: string } => {
     let totalDays = 0;
     let calendarDaysToAdd = 0;
 
@@ -80,6 +80,35 @@ const createEmptyTaskRow = (): Task => ({
   qaEstimatedTime: '2d',
   bufferTime: '1d',
 });
+
+
+// Helper function to generate the next backlog ID based on *all* items
+const generateNextBacklogId = (allProjectBacklogItems: Task[], baseId?: string, suffix?: string): string => {
+    if (baseId && suffix) {
+        return `${baseId}-${suffix}`;
+    }
+
+   const currentYear = getYear(new Date()).toString().slice(-2); // Get last two digits of the year
+   const prefix = `BL-${currentYear}`;
+   let maxNum = 0;
+
+   allProjectBacklogItems.forEach(item => {
+     const id = item.backlogId; // Use the actual backlogId
+     if (id && id.startsWith(prefix) && !id.includes('-') && !id.includes('m')) { // Only consider base BL-YYxxxx IDs
+       const numPart = parseInt(id.substring(prefix.length), 10);
+       if (!isNaN(numPart) && numPart > maxNum) {
+         maxNum = numPart;
+       }
+     }
+   });
+
+   const nextNum = maxNum + 1;
+   const nextNumPadded = nextNum.toString().padStart(4, '0'); // Pad with leading zeros to 4 digits
+   const newBaseId = `${prefix}${nextNumPadded}`;
+   // If suffix is 'm', return immediately, otherwise return base ID
+   return suffix === 'm' ? `${newBaseId}-m` : newBaseId;
+ };
+
 
 
 export default function Home() {
@@ -328,7 +357,7 @@ export default function Home() {
                                // Optional fields checked below
                            ) {
                                let status: SprintStatus = sprintData.status ?? 'Planned';
-                               const metrics = calculateSprintMetrics(sprintData.startDate, sprintData.duration);
+                               const metrics = calculateSprintMetricsHelper(sprintData.startDate, sprintData.duration);
 
                                // Auto-complete based on date if status is not already 'Completed'
                                if (metrics.endDate !== 'N/A' && clientNow && isPast(parseISO(metrics.endDate)) && status === 'Active') {
@@ -605,7 +634,7 @@ export default function Home() {
                        if (newStatus && newStatus !== s.status) {
                             finalStatus = newStatus;
                             statusUpdateMessage = ` Sprint ${sprintNumber} status updated to ${newStatus}.`;
-                       } else if (!newStatus && s.status === 'Active' && clientNow && s.endDate && isPast(parseISO(s.endDate))) {
+                       } else if (!newStatus && s.status === 'Active' && clientNow && s.endDate && isValid(parseISO(s.endDate)) && isPast(parseISO(s.endDate))) {
                              // Auto-complete if end date passed (only if status wasn't explicitly provided)
                              // We might want to disable auto-complete or make it optional
                              console.warn(`Auto-completing sprint ${sprintNumber} based on end date.`);
@@ -1134,28 +1163,33 @@ export default function Home() {
                         movedToSprint: undefined, // Ensure it's not marked as moved to a sprint
                     };
 
-                    // 2. Prepare new split tasks with unique IDs
-                    const newSplitTasksWithIds = splitTasks.map((task, index) => ({
-                        ...task,
-                        id: `split_${originalTaskId}_${index}_${Date.now()}`, // Generate unique ID
-                    }));
+                    // 2. Prepare new split tasks with unique IDs and backlog IDs
+                    const allItemsForIdGen = [...(p.backlog || []), ...splitTasks]; // Include potential new tasks for ID uniqueness check
+                    const newSplitTasksWithIds = splitTasks.map((task, index) => {
+                         const suffix = String.fromCharCode('a'.charCodeAt(0) + index);
+                         const backlogId = generateNextBacklogId(allItemsForIdGen, originalItem.backlogId, suffix);
+                         return {
+                           ...task,
+                           id: `split_${originalTaskId}_${index}_${Date.now()}`, // Generate unique ID
+                           backlogId: backlogId, // Assign generated split ID
+                           ticketNumber: backlogId, // Default ticket number
+                           needsGrooming: true, // Mark as needing grooming
+                           readyForSprint: false, // Mark as not ready
+                         };
+                    });
                      newIds = newSplitTasksWithIds.map(t => t.backlogId || t.id); // Store new IDs for toast
 
-                    // 3. Update the backlog array
+                    // 3. Update the backlog array: Replace original with historical, add new splits
                     const updatedBacklog = [
-                        // Keep items before the original
                         ...(p.backlog?.slice(0, originalBacklogIndex) ?? []),
-                        // Add the marked original item (now historical)
-                        markedOriginalItem,
-                        // Add the new split items
-                        ...newSplitTasksWithIds,
-                        // Keep items after the original
+                        markedOriginalItem, // Keep historical original
+                        ...newSplitTasksWithIds, // Add new split tasks
                         ...(p.backlog?.slice(originalBacklogIndex + 1) ?? []),
                     ];
 
                     return {
                         ...p,
-                        backlog: updatedBacklog,
+                        backlog: updatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')), // Re-sort backlog
                     };
                 }
                 return p;
@@ -1172,6 +1206,74 @@ export default function Home() {
         }
     }, [selectedProjectId, toast]);
 
+
+    // Handler to merge backlog items
+    const handleMergeBacklogItems = useCallback((taskIdsToMerge: string[], mergedTask: Task) => {
+       if (!selectedProjectId) {
+         toast({ variant: "destructive", title: "Error", description: "No project selected." });
+         return;
+       }
+       if (taskIdsToMerge.length < 2) {
+          toast({ variant: "destructive", title: "Error", description: "At least two items must be selected for merging." });
+          return;
+       }
+
+       let mergedItemDetails: string[] = [];
+
+       setProjects(prevProjects => {
+          const updatedProjects = prevProjects.map(p => {
+             if (p.id === selectedProjectId) {
+                let updatedBacklog = [...(p.backlog ?? [])];
+                const itemsToMarkHistorical: Task[] = [];
+
+                // Mark original items as merged
+                updatedBacklog = updatedBacklog.map(item => {
+                   if (taskIdsToMerge.includes(item.id)) {
+                       mergedItemDetails.push(`${item.backlogId} (${item.title || 'No Title'})`);
+                       itemsToMarkHistorical.push({
+                           ...item,
+                           historyStatus: 'Merge' as HistoryStatus,
+                           movedToSprint: undefined, // Ensure not marked as moved
+                       });
+                       return null; // Mark for removal from active backlog later
+                   }
+                   return item;
+                }).filter((item): item is Task => item !== null); // Remove the original items from active view
+
+                // Add the new merged task
+                const newMergedTaskWithId: Task = {
+                   ...mergedTask,
+                   id: `merged_${Date.now()}_${Math.random()}`, // Generate unique ID
+                   backlogId: generateNextBacklogId([...updatedBacklog, ...itemsToMarkHistorical], undefined, 'm'), // Generate merged ID like BL-YYNNNN-m
+                   ticketNumber: generateNextBacklogId([...updatedBacklog, ...itemsToMarkHistorical], undefined, 'm'), // Default ticket number
+                   needsGrooming: true,
+                   readyForSprint: false,
+                };
+
+                // Combine active backlog, new merged task, and historical items
+                 const finalBacklog = [
+                    ...updatedBacklog,
+                    newMergedTaskWithId,
+                    ...itemsToMarkHistorical
+                 ];
+
+                return {
+                   ...p,
+                   backlog: finalBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')), // Re-sort
+                };
+             }
+             return p;
+          });
+          return updatedProjects;
+       });
+
+        toast({
+            title: "Items Merged",
+            description: `Items [${mergedItemDetails.join(', ')}] marked as Merged. New item '${mergedTask.title}' created.`,
+            duration: 5000,
+        });
+
+    }, [selectedProjectId, toast]);
 
 
   // Handler to add members to the *newly created* project (from dialog)
@@ -1550,7 +1652,7 @@ export default function Home() {
                     members: selectedProject.members ?? [],
                     holidayCalendars: selectedProject.holidayCalendars ?? [],
                     teams: selectedProject.teams ?? [],
-                    backlog: selectedProject.backlog?.filter(task => !task.movedToSprint && task.readyForSprint) ?? [], // Only pass ready items not already moved
+                    backlog: selectedProject.backlog?.filter(task => !task.historyStatus && task.readyForSprint) ?? [], // Pass ready & non-historical items
                     onRevertTask: handleRevertTaskToBacklog, // Pass revert function
                     onCompleteSprint: handleCompleteSprint, // Pass complete function
                  };
@@ -1575,6 +1677,7 @@ export default function Home() {
                      initialBacklog: selectedProject.backlog ?? [], // Pass full backlog
                      onSaveBacklog: handleSaveBacklog,
                      onSplitBacklogItem: handleSplitBacklogItem, // Pass split handler
+                     onMergeBacklogItems: handleMergeBacklogItems, // Pass merge handler
                  };
                 break;
              case 'backlog/history': // Updated sub-tab path
@@ -1783,3 +1886,4 @@ export default function Home() {
     </div>
   );
 }
+
