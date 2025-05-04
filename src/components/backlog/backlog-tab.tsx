@@ -511,7 +511,7 @@ export default function BacklogTab({
                 item.id === itemId ? { ...item, [field]: value ?? '' } : item
             )
         );
-        setHasUnsavedChanges(true); // Mark changes as unsaved
+        // We don't set hasUnsavedChanges here, rely on a dedicated "Save All" or per-row save button
     };
 
     // Handle select changes for SAVED items
@@ -530,7 +530,7 @@ export default function BacklogTab({
           item.id === itemId ? { ...item, [field]: !!checked } : item
         )
       );
-      setHasUnsavedChanges(true); // Mark changes as unsaved
+      // We don't set hasUnsavedChanges here
     };
 
 
@@ -580,6 +580,17 @@ export default function BacklogTab({
            .filter(item => item.id !== editingDepsTaskId && item.backlogId?.trim()) // Exclude self and items without ID
            .map(item => ({ id: item.backlogId!, title: item.title || `Item ${item.backlogId}` }));
    }, [savedBacklogItems, editingDepsTaskId]);
+
+   // Memoized list of potential dependencies for the NEW items table
+    const potentialDependenciesForNewItems = useMemo(() => {
+        if (!editingDepsTaskId) return [];
+        const allBacklogItems = [
+            ...savedBacklogItems.map(t => ({ id: t.backlogId!, title: t.title || `Item ${t.backlogId}` })),
+            ...newBacklogRows.filter(r => r._internalId !== editingDepsTaskId && r.backlogId).map(r => ({ id: r.backlogId!, title: r.title || `Item ${r.backlogId}` }))
+        ];
+        return allBacklogItems.filter(item => item.id?.trim()); // Ensure IDs are valid
+    }, [savedBacklogItems, newBacklogRows, editingDepsTaskId]);
+
 
   return (
     <>
@@ -809,42 +820,51 @@ export default function BacklogTab({
                <div className="overflow-x-auto">
                  {/* Adjust min-width based on columns */}
                  <div className="min-w-[1600px] space-y-4">
-                     {/* Header for SAVED items table */}
-                     <div className="hidden md:grid grid-cols-[120px_1fr_120px_120px_120px_100px_100px_80px_60px_60px_80px_40px] gap-x-3 items-center pb-2 border-b sticky top-0 bg-card z-10">
-                         <Button variant="ghost" onClick={() => requestSort('backlogId')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                            Backlog ID {getSortIndicator('backlogId')}
-                         </Button>
-                         <Button variant="ghost" onClick={() => requestSort('title')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                            Title {getSortIndicator('title')}
-                         </Button>
-                         <Label className="text-xs font-medium text-muted-foreground">Task Type</Label>
-                         <Label className="text-xs font-medium text-muted-foreground">Initiator</Label>
-                         <Button variant="ghost" onClick={() => requestSort('createdDate')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                            Created {getSortIndicator('createdDate')}
-                         </Button>
-                         <Button variant="ghost" onClick={() => requestSort('priority')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                            Priority {getSortIndicator('priority')}
-                         </Button>
-                         <Label className="text-xs font-medium text-muted-foreground">Dependencies</Label>
-                         <Button variant="ghost" onClick={() => requestSort('needsGrooming')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
-                            Groom? {getSortIndicator('needsGrooming')}
-                         </Button>
-                         <Button variant="ghost" onClick={() => requestSort('readyForSprint')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
-                            Ready? {getSortIndicator('readyForSprint')}
-                         </Button>
-                         <Label className="text-xs font-medium text-muted-foreground text-center">Actions</Label>
-                         <div />
-                     </div>
-                     {/* Rows for SAVED items */}
-                     <div className="space-y-4 md:space-y-2">
+                 <Table>
+                     <TableHeader>
+                          <TableRow>
+                             <TableHead className="w-[120px]">
+                                 <Button variant="ghost" onClick={() => requestSort('backlogId')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                    Backlog ID {getSortIndicator('backlogId')}
+                                 </Button>
+                              </TableHead>
+                              <TableHead>
+                                 <Button variant="ghost" onClick={() => requestSort('title')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                    Title {getSortIndicator('title')}
+                                 </Button>
+                              </TableHead>
+                              <TableHead className="w-[120px]">Task Type</TableHead>
+                              <TableHead className="w-[120px]">Initiator</TableHead>
+                              <TableHead className="w-[120px]">
+                                  <Button variant="ghost" onClick={() => requestSort('createdDate')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                     Created {getSortIndicator('createdDate')}
+                                  </Button>
+                              </TableHead>
+                              <TableHead className="w-[100px]">
+                                  <Button variant="ghost" onClick={() => requestSort('priority')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                                     Priority {getSortIndicator('priority')}
+                                  </Button>
+                              </TableHead>
+                              <TableHead className="w-[100px]">Dependencies</TableHead>
+                              <TableHead className="w-[80px] text-center">
+                                   <Button variant="ghost" onClick={() => requestSort('needsGrooming')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
+                                      Groom? {getSortIndicator('needsGrooming')}
+                                   </Button>
+                              </TableHead>
+                              <TableHead className="w-[60px] text-center">
+                                  <Button variant="ghost" onClick={() => requestSort('readyForSprint')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
+                                      Ready? {getSortIndicator('readyForSprint')}
+                                  </Button>
+                              </TableHead>
+                              <TableHead className="w-[80px] text-center">Actions</TableHead>
+                              <TableHead className="w-[40px]"></TableHead> {/* Delete column */}
+                          </TableRow>
+                     </TableHeader>
+                     <TableBody>
                          {filteredAndSortedSavedRows.map((row) => (
-                             <div
-                                 key={row.id} // Use persistent ID for saved items
-                                 ref={row.ref}
-                                 className="grid grid-cols-2 md:grid-cols-[120px_1fr_120px_120px_120px_100px_100px_80px_60px_60px_80px_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0 transition-colors duration-1000"
-                             >
+                             <TableRow key={row.id} ref={row.ref} className="transition-colors duration-1000">
                                  {/* Backlog ID (Link/Editable) */}
-                                <TableCell className="md:col-span-1 col-span-1">
+                                <TableCell className="font-medium">
                                     {row.isEditing ? (
                                         <Input
                                             id={`saved-backlog-id-${row.id}`}
@@ -866,7 +886,7 @@ export default function BacklogTab({
                                     )}
                                 </TableCell>
                                 {/* Title (Editable) */}
-                                <TableCell className="md:col-span-1 col-span-2">
+                                <TableCell>
                                     {row.isEditing ? (
                                         <Input
                                             id={`saved-title-${row.id}`}
@@ -881,7 +901,7 @@ export default function BacklogTab({
                                     )}
                                 </TableCell>
                                 {/* Task Type (Editable) */}
-                                <TableCell className="md:col-span-1 col-span-1">
+                                <TableCell>
                                     {row.isEditing ? (
                                         <Select value={row.taskType ?? 'New Feature'} onValueChange={(value) => handleSavedSelectChange(row.id, 'taskType', value)}>
                                             <SelectTrigger id={`saved-type-${row.id}`} className="h-9">
@@ -898,7 +918,7 @@ export default function BacklogTab({
                                     )}
                                 </TableCell>
                                 {/* Initiator (Editable) */}
-                                <TableCell className="md:col-span-1 col-span-1">
+                                <TableCell>
                                     {row.isEditing ? (
                                         <Select value={row.initiator ?? 'none'} onValueChange={(value) => handleSavedSelectChange(row.id, 'initiator', value)} disabled={members.length === 0}>
                                             <SelectTrigger id={`saved-initiator-${row.id}`} className="h-9">
@@ -917,9 +937,9 @@ export default function BacklogTab({
                                     )}
                                 </TableCell>
                                  {/* Created Date (Readonly) */}
-                                 <TableCell className="md:col-span-1 col-span-1 text-sm">{row.createdDate && isValid(parseISO(row.createdDate)) ? format(parseISO(row.createdDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
+                                 <TableCell className="text-sm">{row.createdDate && isValid(parseISO(row.createdDate)) ? format(parseISO(row.createdDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
                                  {/* Priority (Editable) */}
-                                <TableCell className="md:col-span-1 col-span-1">
+                                <TableCell>
                                     {row.isEditing ? (
                                         <Select value={row.priority ?? 'Medium'} onValueChange={(value) => handleSavedSelectChange(row.id, 'priority', value)}>
                                             <SelectTrigger id={`saved-priority-${row.id}`} className="h-9">
@@ -936,7 +956,7 @@ export default function BacklogTab({
                                     )}
                                 </TableCell>
                                  {/* Dependencies */}
-                                  <TableCell className="md:col-span-1 col-span-2 self-center">
+                                  <TableCell className="self-center">
                                       <div className="flex items-center gap-1 flex-wrap min-h-[36px]">
                                           {(row.dependsOn && row.dependsOn.length > 0) ? (
                                               row.dependsOn.map(depId => (
@@ -967,7 +987,7 @@ export default function BacklogTab({
                                       </div>
                                   </TableCell>
                                    {/* Needs Grooming */}
-                                  <TableCell className="md:col-span-1 col-span-1 text-center">
+                                  <TableCell className="text-center">
                                       <Checkbox
                                           checked={row.needsGrooming}
                                           onCheckedChange={(checked) => handleSavedCheckboxChange(row.id, 'needsGrooming', checked)}
@@ -976,7 +996,7 @@ export default function BacklogTab({
                                       />
                                   </TableCell>
                                   {/* Ready for Sprint */}
-                                  <TableCell className="md:col-span-1 col-span-1 text-center">
+                                  <TableCell className="text-center">
                                       <Checkbox
                                           checked={row.readyForSprint}
                                           onCheckedChange={(checked) => handleSavedCheckboxChange(row.id, 'readyForSprint', checked)}
@@ -985,30 +1005,32 @@ export default function BacklogTab({
                                       />
                                   </TableCell>
                                  {/* Actions Cell */}
-                                  <TableCell className="md:col-span-1 col-span-2 flex items-center gap-1 justify-center">
-                                      {row.isEditing ? (
-                                          <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" onClick={() => handleSaveSingleEditedItem(row.id)}>
-                                              <Save className="h-4 w-4" />
-                                          </Button>
-                                      ) : (
-                                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleSavedItemEditToggle(row.id)}>
-                                              <Edit className="h-4 w-4" />
-                                          </Button>
-                                      )}
-                                     <Button
-                                         variant="ghost"
-                                         size="icon"
-                                         className="h-7 w-7"
-                                         disabled={availableSprints.length === 0 || !row.id?.trim() || !row.readyForSprint || row.isEditing} // Disable if not ready or editing
-                                         onClick={() => handleOpenMoveDialog(row.id)}
-                                         aria-label="Move to Sprint"
-                                         title={row.isEditing ? "Save or cancel edit first" : !row.readyForSprint ? "Item not ready for sprint" : availableSprints.length === 0 ? "No active/planned sprints" : "Move to Sprint"}
-                                     >
-                                         <ArrowRightSquare className="h-4 w-4" />
-                                     </Button>
+                                  <TableCell className="text-center">
+                                      <div className="flex items-center justify-center gap-1">
+                                          {row.isEditing ? (
+                                              <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" onClick={() => handleSaveSingleEditedItem(row.id)} title="Save Changes">
+                                                  <Save className="h-4 w-4" />
+                                              </Button>
+                                          ) : (
+                                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleSavedItemEditToggle(row.id)} title="Edit Item">
+                                                  <Edit className="h-4 w-4" />
+                                              </Button>
+                                          )}
+                                         <Button
+                                             variant="ghost"
+                                             size="icon"
+                                             className="h-7 w-7"
+                                             disabled={availableSprints.length === 0 || !row.id?.trim() || !row.readyForSprint || row.isEditing} // Disable if not ready or editing
+                                             onClick={() => handleOpenMoveDialog(row.id)}
+                                             aria-label="Move to Sprint"
+                                             title={row.isEditing ? "Save or cancel edit first" : !row.readyForSprint ? "Item not ready for sprint" : availableSprints.length === 0 ? "No active/planned sprints" : "Move to Sprint"}
+                                         >
+                                             <ArrowRightSquare className="h-4 w-4" />
+                                         </Button>
+                                      </div>
                                   </TableCell>
                                   {/* Delete Button */}
-                                  <TableCell className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
+                                  <TableCell>
                                        <Button
                                            type="button"
                                            variant="ghost"
@@ -1017,23 +1039,19 @@ export default function BacklogTab({
                                            className="h-9 w-9 text-muted-foreground hover:text-destructive"
                                            aria-label="Delete saved backlog item"
                                            disabled={row.isEditing} // Disable delete while editing
+                                           title="Delete Item"
                                        >
                                            <Trash2 className="h-4 w-4" />
                                        </Button>
                                    </TableCell>
-                             </div>
+                             </TableRow>
                          ))}
-                     </div>
+                     </TableBody>
+                 </Table>
                  </div>
              </div>
            )}
        </CardContent>
-        {/* Footer might not be needed if edits are saved per row */}
-         {/* <CardFooter className="border-t pt-4 flex justify-end">
-             <Button onClick={handleSaveAllEditedItems} disabled={!hasUnsavedChanges}>
-                 <Save className="mr-2 h-4 w-4" /> Save All Changes
-             </Button>
-         </CardFooter> */}
      </Card>
 
      {/* --- Modals --- */}
@@ -1163,3 +1181,5 @@ export default function BacklogTab({
     </>
   );
 }
+
+    
