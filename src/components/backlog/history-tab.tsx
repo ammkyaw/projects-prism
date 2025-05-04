@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react'; // Added React import
+import React, { useState, useMemo } from 'react';
 import type { Task, Sprint, HistoryStatus } from '@/types/sprint-data'; // Import HistoryStatus
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -87,7 +87,7 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
                  aValue = a.needsGrooming ? 1 : 0;
                  bValue = b.needsGrooming ? 1 : 0;
                  break;
-            case 'readyForSprint': // Sort booleans (false first)
+            case 'readyForSprint': // Sort booleans (false first) - Still sortable even if hidden
                  aValue = a.readyForSprint ? 1 : 0;
                  bValue = b.readyForSprint ? 1 : 0;
                  break;
@@ -152,8 +152,8 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
                </div>
             ) : (
               <div className="overflow-x-auto">
-                 {/* Adjust min-width if necessary to accommodate new columns */}
-                <div className="min-w-[1500px]">
+                 {/* Adjust min-width if necessary to accommodate removed columns */}
+                <div className="min-w-[1300px]"> {/* Adjusted min-width */}
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -195,11 +195,7 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
                                   Groom? {getSortIndicator('needsGrooming')}
                               </Button>
                           </TableHead>
-                          <TableHead className="w-[60px] text-center">
-                              <Button variant="ghost" onClick={() => requestSort('readyForSprint')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
-                                  Ready? {getSortIndicator('readyForSprint')}
-                              </Button>
-                          </TableHead>
+                           {/* Removed "Ready?" Header */}
                           <TableHead className="w-[100px]"> {/* Add History Status Header */}
                               <Button variant="ghost" onClick={() => requestSort('historyStatus')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
                                   Status {getSortIndicator('historyStatus')}
@@ -211,7 +207,7 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
                               </Button>
                           </TableHead>
                          <TableHead className="w-[80px] text-right">Story Pts</TableHead>
-                         <TableHead className="w-[80px] text-center">Actions</TableHead> {/* Added Action Header */}
+                         {/* Removed "Actions" Header */}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -238,9 +234,7 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
                             <TableCell className="text-center">
                                 <Checkbox checked={task.needsGrooming} disabled className="h-4 w-4"/>
                             </TableCell>
-                            <TableCell className="text-center">
-                                <Checkbox checked={task.readyForSprint} disabled className="h-4 w-4"/>
-                            </TableCell>
+                             {/* Removed "Ready?" Cell */}
                            <TableCell>
                               {task.historyStatus ? (
                                   <Badge variant="outline" className="capitalize">
@@ -252,20 +246,7 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
                           </TableCell>
                            <TableCell>{task.movedToSprint ?? '-'}</TableCell>
                           <TableCell className="text-right">{task.storyPoints ?? '-'}</TableCell>
-                           {/* Action Cell with Undo Button */}
-                          <TableCell className="text-center">
-                              {(task.historyStatus === 'Split' || task.historyStatus === 'Merge') && (
-                                  <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => onUndoBacklogAction(task.id)} // Use the passed callback
-                                      className="h-7 w-7 text-blue-600 hover:text-blue-700"
-                                      title={`Undo ${task.historyStatus}`}
-                                  >
-                                      <Undo className="h-4 w-4" />
-                                  </Button>
-                              )}
-                          </TableCell>
+                           {/* Removed "Actions" Cell */}
                         </TableRow>
                       ))}
                     </TableBody>
@@ -276,7 +257,7 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
         </CardContent>
       </Card>
 
-       {/* View Details Dialog */}
+       {/* View Details Dialog (remains the same) */}
      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -344,3 +325,5 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
     </>
   );
 }
+
+    
