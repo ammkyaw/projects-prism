@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx';
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Added CardContent
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History, CheckCircle, Undo, ArrowUpDown } from 'lucide-react'; // Added ArrowUpDown icon
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History, CheckCircle, Undo, ArrowUpDown, ListChecks } from 'lucide-react'; // Added ArrowUpDown, ListChecks icons
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -17,19 +17,22 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 // Main Content Components (Tabs) - Renamed and New Placeholders
 import DashboardTab from '@/components/dashboard-tab'; // Renamed from HomeTab
 import BacklogTab from '@/components/backlog/backlog-tab'; // Updated path
-// PlanningTab is now part of Sprints section
+import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Updated path
+import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
+import HistoryTab from '@/components/backlog/history-tab'; // Import HistoryTab component
+
+// Team and Settings Tabs
 import MembersTab from '@/components/teams/members-tab'; // Updated path
 import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
 import TeamsTab from '@/components/teams/teams-tab'; // Updated path
 import AddMembersDialog from '@/components/add-members-dialog';
-import HistoryTab from '@/components/backlog/history-tab'; // Import HistoryTab component
-// import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Removed import
-import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
 
-// Placeholder Sub-Tab Components
+// Sprint Sub-Tab Components
 import SprintSummaryTab from '@/components/sprints/sprint-summary-tab'; // Updated path
 import SprintPlanningTab from '@/components/sprints/sprint-planning-tab'; // New component for planning
 import SprintRetrospectiveTab from '@/components/sprints/sprint-retrospective-tab'; // Updated path
+
+// Analytics Sub-Tab Components
 import AnalyticsChartsTab from '@/components/analytics-charts-tab';
 import AnalyticsReportsTab from '@/components/analytics-reports-tab'; // Updated path
 
@@ -39,47 +42,6 @@ import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam, in
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isPast, isValid, getYear } from 'date-fns'; // Added getYear
-
-// Helper function (remains the same)
-const calculateSprintMetricsHelper = (startDateStr: string | undefined, duration: string | undefined): { totalDays: number, endDate: string } => {
-    let totalDays = 0;
-    let calendarDaysToAdd = 0;
-
-    if (!duration || !startDateStr) return { totalDays: 0, endDate: 'N/A' };
-
-
-    switch (duration) {
-        case "1 Week": totalDays = 5; calendarDaysToAdd = 6; break;
-        case "2 Weeks": totalDays = 10; calendarDaysToAdd = 13; break;
-        case "3 Weeks": totalDays = 15; calendarDaysToAdd = 20; break;
-        case "4 Weeks": totalDays = 20; calendarDaysToAdd = 27; break;
-        default: return { totalDays: 0, endDate: 'N/A' };
-    }
-
-     if (!isValid(parseISO(startDateStr))) {
-         return { totalDays: 0, endDate: 'N/A' };
-     }
-
-    try {
-        const startDate = parseISO(startDateStr);
-        const endDate = addDays(startDate, calendarDaysToAdd);
-        return { totalDays, endDate: format(endDate, 'yyyy-MM-dd') };
-    } catch (e) {
-        console.error("Error calculating end date:", e);
-        return { totalDays, endDate: 'N/A' };
-    }
-};
-
-// Helper to create an empty task row for validation/defaults
-const createEmptyTaskRow = (): Task => ({
-  id: '',
-  backlogId: '', // Ensure backlogId exists
-  ticketNumber: '',
-  description: '',
-  status: 'To Do',
-  qaEstimatedTime: '2d',
-  bufferTime: '1d',
-});
 
 
 // Helper function to generate the next backlog ID based on *all* items (including historical and unsaved)
@@ -178,6 +140,8 @@ export default function Home() {
                            priority: taskPriorities.includes(task.priority as any) ? task.priority : 'Medium',
                            // Ensure backlogId exists during validation
                            backlogId: task.backlogId ?? `BL-LEGACY-${task.id}`, // Provide a fallback if missing
+                           needsGrooming: task.needsGrooming ?? false, // Default to false if missing
+                           readyForSprint: task.readyForSprint ?? false, // Default to false if missing
                      })).sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
                      sprintData: {
                          ...project.sprintData,
@@ -335,23 +299,20 @@ export default function Home() {
 
 
                       // Ensure task IDs are present and correctly typed before saving
-                       const emptyTask = createEmptyTaskRow();
-                      const validatedPlanning: SprintPlanning = {
+                       const validatedPlanning: SprintPlanning = {
                            ...planningData,
                            newTasks: (planningData.newTasks || []).map(task => ({
                               ...task,
                               id: task.id || `task_save_new_${Date.now()}_${Math.random()}`,
-                              devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime, // Preserve or default
-                              qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
-                              bufferTime: task.bufferTime ?? emptyTask.bufferTime,
+                              qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
+                              bufferTime: task.bufferTime ?? '1d', // Default Buffer time
                               backlogId: task.backlogId ?? '', // Ensure backlogId
                            })),
                            spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
                               ...task,
                               id: task.id || `task_save_spill_${Date.now()}_${Math.random()}`,
-                              devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime, // Preserve or default
-                              qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
-                              bufferTime: task.bufferTime ?? emptyTask.bufferTime,
+                              qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
+                              bufferTime: task.bufferTime ?? '1d', // Default buffer time
                               backlogId: task.backlogId ?? '', // Ensure backlogId
                            })),
                       };
@@ -405,23 +366,20 @@ export default function Home() {
             }
 
              // Validate planning data before creating
-             const emptyTask = createEmptyTaskRow();
              const validatedPlanning: SprintPlanning = {
                 ...planningData,
                  newTasks: (planningData.newTasks || []).map(task => ({
                     ...task,
                     id: task.id || `task_create_new_${Date.now()}_${Math.random()}`,
-                    devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime,
-                    qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
-                    bufferTime: task.bufferTime ?? emptyTask.bufferTime,
+                    qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
+                    bufferTime: task.bufferTime ?? '1d', // Default buffer time
                     backlogId: task.backlogId ?? '', // Ensure backlogId
                  })),
                  spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
                     ...task,
                     id: task.id || `task_create_spill_${Date.now()}_${Math.random()}`,
-                    devEstimatedTime: task.devEstimatedTime ?? emptyTask.devEstimatedTime,
-                    qaEstimatedTime: task.qaEstimatedTime ?? emptyTask.qaEstimatedTime,
-                    bufferTime: task.bufferTime ?? emptyTask.bufferTime,
+                    qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
+                    bufferTime: task.bufferTime ?? '1d', // Default buffer time
                     backlogId: task.backlogId ?? '', // Ensure backlogId
                  })),
              };
@@ -616,37 +574,67 @@ export default function Home() {
      toast({ title: "Success", description: `Teams updated for project '${currentProjectName}'.` });
    }, [selectedProjectId, toast]);
 
-    // Handler to save backlog data for the selected project
-   const handleSaveBacklog = useCallback((updatedBacklog: Task[]) => {
-       if (!selectedProjectId) {
-           toast({ variant: "destructive", title: "Error", description: "No project selected." });
-           return;
-       }
-       let currentProjectName = 'N/A';
-       setProjects(prevProjects => {
-           const updatedProjects = prevProjects.map(p => {
-               if (p.id === selectedProjectId) {
-                   currentProjectName = p.name; // Capture name
-                   // Validate tasks before saving? (Ensure IDs, required fields, etc.)
-                   const validatedBacklog = updatedBacklog.map(task => ({
-                       ...task,
-                       id: task.id || `backlog_save_${Date.now()}_${Math.random()}`, // Ensure ID
-                       // Status is not saved for backlog items
-                       priority: task.priority ?? 'Medium', // Ensure priority
-                       movedToSprint: task.movedToSprint, // Preserve history field
-                       historyStatus: task.historyStatus, // Preserve history status
-                       needsGrooming: task.needsGrooming ?? false, // Preserve flag
-                       readyForSprint: task.readyForSprint ?? false, // Preserve flag
-                       backlogId: task.backlogId ?? '', // Ensure backlogId
-                   }));
-                   return { ...p, backlog: validatedBacklog };
-               }
-               return p;
-           });
-           return updatedProjects;
-       });
-       toast({ title: "Success", description: `Backlog updated for project '${currentProjectName}'.` });
-   }, [selectedProjectId, toast]);
+    // Handler to save NEW backlog items (from the new items table)
+    const handleSaveNewBacklogItems = useCallback((newItems: Task[]) => {
+        if (!selectedProjectId) {
+            toast({ variant: "destructive", title: "Error", description: "No project selected." });
+            return;
+        }
+        let currentProjectName = 'N/A';
+        setProjects(prevProjects => {
+            const updatedProjects = prevProjects.map(p => {
+                if (p.id === selectedProjectId) {
+                    currentProjectName = p.name;
+                    const existingBacklog = p.backlog ?? [];
+                    // Assign persistent IDs to new items before adding
+                    const itemsWithIds = newItems.map((item, index) => ({
+                        ...item,
+                        id: `backlog_${p.id}_${Date.now()}_${index}`, // Generate a more robust unique ID
+                    }));
+                    const updatedBacklog = [...existingBacklog, ...itemsWithIds];
+                    // Re-sort the entire backlog after adding
+                     updatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
+                    return { ...p, backlog: updatedBacklog };
+                }
+                return p;
+            });
+            return updatedProjects;
+        });
+        // No separate toast here, handled in BacklogTab's save function
+    }, [selectedProjectId, toast]);
+
+    // Handler to update a specific SAVED backlog item
+     const handleUpdateSavedBacklogItem = useCallback((updatedItem: Task) => {
+        if (!selectedProjectId) {
+            toast({ variant: "destructive", title: "Error", description: "No project selected." });
+            return;
+        }
+        setProjects(prevProjects =>
+            prevProjects.map(p =>
+                p.id === selectedProjectId
+                    ? { ...p, backlog: (p.backlog ?? []).map(item => item.id === updatedItem.id ? updatedItem : item) }
+                    : p
+            )
+        );
+        // Optional: Add a success toast here if needed
+     }, [selectedProjectId, toast]);
+
+     // Handler to delete a specific SAVED backlog item
+      const handleDeleteSavedBacklogItem = useCallback((itemId: string) => {
+         if (!selectedProjectId) {
+             toast({ variant: "destructive", title: "Error", description: "No project selected." });
+             return;
+         }
+         // TODO: Add confirmation dialog here before deleting
+         setProjects(prevProjects =>
+             prevProjects.map(p =>
+                 p.id === selectedProjectId
+                     ? { ...p, backlog: (p.backlog ?? []).filter(item => item.id !== itemId) }
+                     : p
+             )
+         );
+         toast({ title: "Backlog Item Deleted", description: "The item has been removed from the backlog." });
+      }, [selectedProjectId, toast]);
 
 
    // Handler to move a backlog item to a sprint
@@ -868,15 +856,14 @@ export default function Home() {
                      const allItemsForIdGen = [...(p.backlog || []), ...splitTasks]; // Include potential new tasks for ID uniqueness check
 
                      const newSplitTasksWithIds = splitTasks.map((task, index) => {
-                         // Generate the new ID using the helper function, considering all items
+                         // Split results now get their own unique, standard IDs
                          const backlogId = generateNextBacklogId(allItemsForIdGen);
-                         // Need to immediately add this generated ID to the context for the next potential call
-                         allItemsForIdGen.push({ ...task, backlogId }); // Simulate adding the new item
+                         allItemsForIdGen.push({ ...task, backlogId }); // Simulate adding the new item for next ID gen
 
                          return {
                            ...task,
-                           id: `split_${originalTaskId}_${backlogId}_${Date.now()}`, // Generate unique ID using new backlogId
-                           backlogId: backlogId, // Assign generated split ID (e.g., BL-YYNNNN)
+                           id: `split_${originalTaskId}_${backlogId}_${Date.now()}`, // Use new backlog ID in unique ID
+                           backlogId: backlogId, // Assign generated standard ID
                            ticketNumber: backlogId, // Default ticket number
                            needsGrooming: true, // Mark as needing grooming
                            readyForSprint: false, // Mark as not ready
@@ -1014,38 +1001,42 @@ export default function Home() {
                     undoneItemDetails = `${historyItem.backlogId} (${historyItem.title || 'No Title'})`;
 
                     // Remove the items created by the action (Split/Merge)
-                     const baseId = historyItem.backlogId;
-                     if (!baseId) {
+                     const originalBacklogId = historyItem.backlogId;
+                     if (!originalBacklogId) {
                          console.error(`Cannot undo action for item ID ${taskId} without a backlogId.`);
                          toast({ variant: "destructive", title: "Error", description: "Original item has no Backlog ID." });
                          return p;
                      }
 
                     if (undoneActionType === 'Split') {
-                        // Find and remove items created by this split (e.g., BL-XXXX-1, BL-XXXX-2)
-                        // This logic needs refinement - how to find the *exact* split results?
-                         // Assumption: Split results have backlog IDs starting with the original ID + "-".
-                         console.log(`Undoing Split for base ID: ${baseId}`);
-                         updatedBacklog = updatedBacklog.filter(item => !(item.backlogId?.startsWith(baseId + '-') && !item.historyStatus));
-                         // Example: Keep BL-240001 (marked Split), remove BL-240001-1, BL-240001-2 etc.
+                        // Find and remove items created by this split
+                        // This relies on the split items having IDs starting with the original + unique suffix OR being the direct result
+                        // For simplicity, let's assume we remove items that might have been generated based on ID structure - needs robust linking in real app
+                         console.log(`Attempting to undo Split for base ID: ${originalBacklogId}`);
+                         // This filtering is weak; needs better tracking (e.g., 'splitFromId' field)
+                         updatedBacklog = updatedBacklog.filter(item => !(item.id.startsWith(`split_${taskId}`))); // Example: remove items with IDs derived from the original split event
                     } else if (undoneActionType === 'Merge') {
-                         // Find and remove the single item created by the merge action
-                         // This requires knowing which item was the result. This is tricky as merged items get standard IDs.
-                         // For now, we focus on restoring the originals marked as 'Merge'. Removing the result needs better linking.
-                         console.warn(`Undoing Merge for base ID: ${baseId}. Restoring originals, but cannot reliably remove the merged result without better linking.`);
                          // Restore all items originally part of this merge (the ones marked 'Merge')
-                         updatedBacklog = updatedBacklog.map(item => {
-                             if (item.id === taskId && item.historyStatus === 'Merge') { // Restore the clicked one
-                                return { ...item, historyStatus: undefined };
+                          console.log(`Attempting to undo Merge involving item with Backlog ID: ${originalBacklogId}`);
+                         // Find and remove the single item created by the merge action (this is difficult without a link)
+                         // A placeholder for finding the merge result - NEEDS BETTER TRACKING (e.g., mergeEventId)
+                          console.warn(`Cannot reliably remove the merged result item without better tracking.`);
+                         // updatedBacklog = updatedBacklog.filter(item => item.id !== 'ID_OF_MERGE_RESULT'); // Placeholder
+
+                         // Find and restore *all* items marked as 'Merge' related to this event (again, needs better linking)
+                         // For now, we just restore the one clicked.
+                          updatedBacklog = updatedBacklog.map((item) => {
+                             if (item.id === taskId && item.historyStatus === 'Merge') {
+                                 return { ...item, historyStatus: undefined };
                              }
-                             // How to find others part of the same merge event? Needs a link (e.g., mergeEventId)
+                             // Ideally, find others with same mergeEventId and restore them too.
                              return item;
-                         });
+                          });
                     }
 
-                    // Restore the original item(s) status (specifically the one clicked for Undo)
+                    // Restore the status of the *specific historical item* that was clicked for Undo
                     updatedBacklog = updatedBacklog.map((item) => {
-                        if (item.id === taskId) { // Restore the clicked item's history status
+                        if (item.id === taskId) {
                             return { ...item, historyStatus: undefined };
                         }
                         return item;
@@ -1065,7 +1056,7 @@ export default function Home() {
         if (undoneItemDetails && undoneActionType) {
             toast({
                 title: `${undoneActionType} Undone`,
-                description: `Action for item '${undoneItemDetails}' undone. Related items removed/reverted.`,
+                description: `Action for item '${undoneItemDetails}' undone. Related items may need manual cleanup if linking is imperfect.`,
                 duration: 5000,
             });
         }
@@ -1156,27 +1147,6 @@ export default function Home() {
            XLSX.utils.book_append_sheet(wb, wsSummary, 'Sprint Summary');
        }
 
-       // Sprint Details Sheet (Legacy)
-       const detailsExist = selectedProject.sprintData?.sprints?.some(s => s.details && s.details.length > 0);
-       if (detailsExist) {
-           const allDetails: any[] = [];
-           selectedProject.sprintData.sprints.forEach(sprint => {
-               (sprint.details || []).forEach(detail => {
-                   allDetails.push({
-                       'SprintNumber': sprint.sprintNumber,
-                       'TicketNumber': detail.ticketNumber,
-                       'Developer': detail.developer,
-                       'StoryPoints': detail.storyPoints,
-                       'DevelopmentTime': detail.devTime,
-                   });
-               });
-           });
-           if (allDetails.length > 0) {
-               const wsDetails = XLSX.utils.json_to_sheet(allDetails);
-               XLSX.utils.book_append_sheet(wb, wsDetails, 'Sprint Details (Legacy)');
-           }
-       }
-
        // Planning Sheets (Summary and Tasks)
        const planningExists = selectedProject.sprintData?.sprints?.some(s => s.planning && (s.planning.goal || s.planning.newTasks?.length > 0 || s.planning.spilloverTasks?.length > 0 || s.planning.definitionOfDone || s.planning.testingStrategy));
        if (planningExists) {
@@ -1208,8 +1178,6 @@ export default function Home() {
                       'Status': task.status,
                       'StartDate': task.startDate,
                       'Priority': task.priority,
-                      // Include legacy fields if they exist, marked as legacy
-                      'DevTime (Legacy)': task.devTime,
                     });
 
 
@@ -1474,8 +1442,6 @@ export default function Home() {
 
         // Add specific props based on the sub-tab component
          switch (`${mainKey}/${subKey}`) {
-            case 'dashboard': // Main dashboard tab (handled below in else block)
-               break;
             case 'sprints/summary':
                componentProps = { ...componentProps, sprintData: selectedProject.sprintData, onDeleteSprint: handleDeleteSprint };
                break;
@@ -1494,31 +1460,45 @@ export default function Home() {
                  };
                 break;
             case 'sprints/retrospective':
-                 // Add props for Retrospective tab if needed
                  componentProps = { ...componentProps, sprints: selectedProject.sprintData.sprints ?? [] };
                  break;
             case 'backlog/management':
                 componentProps = {
                     ...componentProps,
-                    initialBacklog: selectedProject.backlog ?? [], // Pass ALL items for ID generation
-                    onSaveBacklog: handleSaveBacklog,
+                    initialBacklog: selectedProject.backlog ?? [], // Pass ALL items
+                    onSaveNewItems: handleSaveNewBacklogItems, // Pass handler for new items
+                    onUpdateSavedItem: handleUpdateSavedBacklogItem, // Pass handler for updates
+                    onDeleteSavedItem: handleDeleteSavedBacklogItem, // Pass handler for deletion
                     members: selectedProject.members ?? [],
                     sprints: selectedProject.sprintData.sprints ?? [],
                     onMoveToSprint: handleMoveToSprint,
                     generateNextBacklogId: generateNextBacklogId, // Pass the helper
                  };
                 break;
-             // Removed prioritization tab
+             case 'backlog/prioritization': // Re-added
+                 componentProps = {
+                     ...componentProps,
+                     initialBacklog: selectedProject.backlog?.filter(task => !task.historyStatus && !task.movedToSprint) ?? [], // Pass only active, non-moved backlog items
+                      onSaveBacklog: (updatedPrioritizedBacklog: Task[]) => {
+                          // Combine updated prioritized items with historical/moved items before saving
+                          const historicalItems = selectedProject.backlog?.filter(task => task.historyStatus || task.movedToSprint) ?? [];
+                          const fullBacklog = [...updatedPrioritizedBacklog, ...historicalItems];
+                          handleUpdateSavedBacklogItem(fullBacklog); // Use a general save handler if needed
+                          // OR: Create a specific handler for prioritized save if logic differs significantly
+                     },
+                 };
+                 break;
             case 'backlog/grooming':
                 componentProps = {
                      ...componentProps,
                      initialBacklog: selectedProject.backlog ?? [], // Pass full backlog
-                     onSaveBacklog: handleSaveBacklog,
+                      // Grooming usually modifies existing items, so reuse update handler or create specific one
+                      onSaveBacklog: (groomedBacklog: Task[]) => { handleUpdateSavedBacklogItem(groomedBacklog); },
                      onSplitBacklogItem: handleSplitBacklogItem, // Pass split handler
                      onMergeBacklogItems: handleMergeBacklogItems, // Pass merge handler
                      onUndoBacklogAction: handleUndoBacklogAction, // Pass undo handler
                      generateNextBacklogId: generateNextBacklogId, // Pass helper for merge ID
-                     allProjectBacklogItems: selectedProject.backlog ?? [], // Pass all items for split/merge uniqueness check
+                     allProjectBacklogItems: selectedProject.backlog ?? [], // Pass all items for uniqueness check
                  };
                 break;
              case 'backlog/history': // Updated sub-tab path
@@ -1558,7 +1538,6 @@ export default function Home() {
                  };
                  break;
             default:
-               // Fallback or handle unexpected cases
                 ActiveComponent = () => <div>Unknown Tab</div>;
                 componentProps = {};
                 break;

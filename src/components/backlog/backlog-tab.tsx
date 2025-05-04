@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -9,36 +10,57 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { PlusCircle, Trash2, Package, Save, ArrowUpDown, View, ArrowRightSquare, LinkIcon, Filter } from 'lucide-react'; // Added Filter icon
+import { PlusCircle, Trash2, Package, Save, ArrowUpDown, View, ArrowRightSquare, LinkIcon, Filter, GripVertical, ListChecks } from 'lucide-react'; // Added ListChecks
 import type { Task, Member, Sprint, SprintStatus, TaskType } from '@/types/sprint-data'; // Added TaskType
 import { taskTypes, taskPriorities, initialBacklogTask } from '@/types/sprint-data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format, parseISO, isValid, getYear } from 'date-fns'; // Added getYear
 import SelectDependenciesDialog from '@/components/select-dependencies-dialog'; // Import the new dialog
+import { Separator } from '@/components/ui/separator'; // Import Separator
 
 interface BacklogTabProps {
   projectId: string;
   projectName: string;
   initialBacklog: Task[]; // Receive ALL backlog items for the project
-  onSaveBacklog: (backlog: Task[]) => void;
+  onSaveNewItems: (newItems: Task[]) => void; // Renamed prop
   members: Member[];
   sprints: Sprint[];
   onMoveToSprint: (backlogItemId: string, targetSprintNumber: number) => void;
   generateNextBacklogId: (allProjectBacklogItems: Task[]) => string; // Receive the helper function
+  // Add callbacks for editing saved items if needed later
+  onUpdateSavedItem: (updatedItem: Task) => void; // Example: callback to update a single saved item
+  onDeleteSavedItem: (itemId: string) => void; // Example: callback to delete a saved item
 }
 
 type SortKey = 'backlogId' | 'title' | 'priority' | 'createdDate' | 'needsGrooming' | 'readyForSprint'; // Added sorting keys
 type SortDirection = 'asc' | 'desc';
 
-interface BacklogRow extends Omit<Task, 'status'> {
+// Renamed BacklogRow to EditingBacklogRow for clarity
+interface EditingBacklogRow extends Omit<Task, 'status'> {
   _internalId: string;
   createdDateObj?: Date | undefined;
-  ref?: React.RefObject<HTMLDivElement>; // Add ref for scrolling
 }
 
-export default function BacklogTab({ projectId, projectName, initialBacklog, onSaveBacklog, members, sprints, onMoveToSprint, generateNextBacklogId }: BacklogTabProps) {
-  const [backlogRows, setBacklogRows] = useState<BacklogRow[]>([]);
+// Type for displayed saved rows (including refs)
+interface DisplayBacklogRow extends Task {
+    ref?: React.RefObject<HTMLDivElement>;
+}
+
+export default function BacklogTab({
+  projectId,
+  projectName,
+  initialBacklog,
+  onSaveNewItems, // Renamed prop
+  members,
+  sprints,
+  onMoveToSprint,
+  generateNextBacklogId,
+  onUpdateSavedItem, // Example prop
+  onDeleteSavedItem, // Example prop
+}: BacklogTabProps) {
+  // State for the *new items* being added in the top table
+  const [newBacklogRows, setNewBacklogRows] = useState<EditingBacklogRow[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const { toast } = useToast();
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
@@ -48,19 +70,16 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
   const [selectedTargetSprint, setSelectedTargetSprint] = useState<number | null>(null);
   const [isDepsDialogOpen, setIsDepsDialogOpen] = useState(false); // State for dependencies dialog
   const [editingDepsTaskId, setEditingDepsTaskId] = useState<string | null>(null); // ID of the task whose dependencies are being edited
-  const backlogContainerRef = useRef < HTMLDivElement > (null); // Ref for the container of backlog rows
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection } | null>(null); // State for sorting
-  const [isFilteringReady, setIsFilteringReady] = useState(false); // State for filter
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: SortDirection } | null>(null); // State for sorting saved items
+  const [isFilteringReady, setIsFilteringReady] = useState(false); // State for filter on saved items
 
-  // Memoize only the backlog items that are NOT moved to a sprint for display
-  const displayableBacklogItems = useMemo(() => {
-      return initialBacklog.filter(task => !task.movedToSprint && !task.historyStatus); // Filter out historical items too
-  }, [initialBacklog]);
+   // Memoize only the backlog items that are NOT moved to a sprint or historical for display in the second table
+   const displayableSavedItems = useMemo(() => {
+       return initialBacklog.filter(task => !task.movedToSprint && !task.historyStatus);
+   }, [initialBacklog]);
 
-
-  // Map internal IDs to refs for scrolling
-  const rowRefs = useRef < Map < string, React.RefObject < HTMLDivElement >> > (new Map());
-
+  // Map internal IDs to refs for scrolling within saved items table
+  const savedRowRefs = useRef<Map<string, React.RefObject<HTMLDivElement>>>(new Map());
 
   const parseDateString = (dateString: string | undefined): Date | undefined => {
     if (!dateString) return undefined;
@@ -76,73 +95,32 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       return sprints.filter(s => s.status === 'Active' || s.status === 'Planned').sort((a, b) => a.sprintNumber - b.sprintNumber);
   }, [sprints]);
 
-  // Initialize or update rows based on displayableBacklogItems
+  // Clear new rows when project changes
   useEffect(() => {
-      rowRefs.current.clear(); // Clear refs when backlog changes
-      const mappedBacklog = displayableBacklogItems.map((task, index) => {
-          const internalId = task.id || `initial_backlog_${index}_${Date.now()}`;
-          // Ensure each row has a ref
-          if (!rowRefs.current.has(internalId)) {
-              rowRefs.current.set(internalId, React.createRef<HTMLDivElement>());
-          }
-          return {
-              ...task,
-              _internalId: internalId,
-              ref: rowRefs.current.get(internalId), // Assign ref
-              storyPoints: task.storyPoints?.toString() ?? '',
-              taskType: task.taskType ?? 'New Feature',
-              priority: task.priority ?? 'Medium',
-              createdDate: task.createdDate ?? format(new Date(), 'yyyy-MM-dd'),
-              createdDateObj: parseDateString(task.createdDate),
-              initiator: task.initiator ?? '',
-              dependsOn: task.dependsOn ?? [],
-              backlogId: task.backlogId ?? '', // Use existing ID or empty string
-              needsGrooming: task.needsGrooming ?? false,
-              readyForSprint: task.readyForSprint ?? false,
-          };
-      });
-      setBacklogRows(mappedBacklog);
-      // DO NOT add an empty row by default
+      setNewBacklogRows([]);
       setHasUnsavedChanges(false);
-  }, [displayableBacklogItems, projectId]); // Removed initialBacklog, backlogRows dependencies
+  }, [projectId]);
 
-
-  // Track unsaved changes
+  // Initialize refs for saved items table
    useEffect(() => {
-        const cleanBacklog = (tasks: (Task | BacklogRow)[]): Omit<Task, 'id' | 'status' | 'createdDateObj' | '_internalId' | 'ref' | 'movedToSprint' | 'historyStatus' | 'ticketNumber'>[] => // Removed fields not relevant to backlog item state
-           tasks.map(({ id, status, createdDateObj, _internalId, ref, movedToSprint, historyStatus, ticketNumber, ...rest }: any) => ({ // Exclude ref and movedToSprint/historyStatus
-               ...rest,
-               backlogId: (rest.backlogId)?.trim() || '', // Use backlogId or ticketNumber, fallback empty
-               title: rest.title?.trim() || '',
-               description: rest.description?.trim() || '',
-               storyPoints: rest.storyPoints?.toString().trim() || '',
-               priority: rest.priority ?? 'Medium',
-               taskType: rest.taskType ?? 'New Feature',
-               createdDate: rest.createdDate ?? '',
-               initiator: rest.initiator?.trim() || '',
-               dependsOn: (rest.dependsOn || []).sort(), // Sort dependencies for consistent comparison
-               needsGrooming: !!rest.needsGrooming, // Ensure boolean
-               readyForSprint: !!rest.readyForSprint, // Ensure boolean
-               devEstimatedTime: undefined,
-               qaEstimatedTime: undefined,
-               bufferTime: undefined,
-               assignee: undefined,
-               reviewer: undefined,
-               startDate: undefined,
-           })).sort((a, b) => (a.backlogId || '').localeCompare(b.backlogId || ''));
+       savedRowRefs.current.clear();
+       displayableSavedItems.forEach(task => {
+           if (!savedRowRefs.current.has(task.id)) {
+               savedRowRefs.current.set(task.id, React.createRef<HTMLDivElement>());
+           }
+       });
+   }, [displayableSavedItems]);
 
-       const originalBacklogString = JSON.stringify(cleanBacklog(initialBacklog.filter(t => !t.movedToSprint && !t.historyStatus))); // Compare against initial non-moved/non-historical items
-       const currentBacklogString = JSON.stringify(
-           cleanBacklog(
-               backlogRows.filter(row => row.backlogId?.trim() || row.title?.trim() || row.storyPoints)
-           )
-       );
-       setHasUnsavedChanges(originalBacklogString !== currentBacklogString);
-   }, [backlogRows, initialBacklog]);
 
-    // Apply filtering and sorting to backlog rows
-    const filteredAndSortedRows = useMemo(() => {
-        let items = [...backlogRows];
+  // Track unsaved changes in the new items table
+   useEffect(() => {
+       // Unsaved changes exist if there are any rows in the new items table
+       setHasUnsavedChanges(newBacklogRows.length > 0);
+   }, [newBacklogRows]);
+
+    // Apply filtering and sorting to SAVED backlog rows for display
+    const filteredAndSortedSavedRows = useMemo(() => {
+        let items = [...displayableSavedItems];
 
         // Apply filter if active
         if (isFilteringReady) {
@@ -183,9 +161,8 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                          bValue = b.readyForSprint ? 1 : 0;
                          break;
                     default:
-                        // Fallback for other potential string keys, but use explicit cases above
-                        aValue = (a[sortConfig.key as keyof BacklogRow] as any)?.toString().toLowerCase() || '';
-                        bValue = (b[sortConfig.key as keyof BacklogRow] as any)?.toString().toLowerCase() || '';
+                        aValue = (a[sortConfig.key as keyof Task] as any)?.toString().toLowerCase() || '';
+                        bValue = (b[sortConfig.key as keyof Task] as any)?.toString().toLowerCase() || '';
                 }
 
                 if (aValue < bValue) {
@@ -200,8 +177,12 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
              // Default sort by priority if no specific sort is selected
             items.sort((a, b) => taskPriorities.indexOf(a.priority || 'Medium') - taskPriorities.indexOf(b.priority || 'Medium'));
         }
-        return items;
-    }, [backlogRows, sortConfig, isFilteringReady]); // Add isFilteringReady dependency
+        // Map to include refs
+        return items.map(task => ({
+           ...task,
+           ref: savedRowRefs.current.get(task.id)
+        }));
+    }, [displayableSavedItems, sortConfig, isFilteringReady]); // Add isFilteringReady dependency
 
 
     // Sorting handlers
@@ -215,7 +196,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
     const getSortIndicator = (key: SortKey) => {
         if (!sortConfig || sortConfig.key !== key) {
-            return <ArrowUpDown className="ml-2 h-3 w-3 opacity-30 inline" />; // Added inline
+            return <ArrowUpDown className="ml-1 h-3 w-3 opacity-30 inline" />; // Made smaller
         }
         return sortConfig.direction === 'asc' ? ' ▲' : ' ▼';
     };
@@ -226,14 +207,14 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
     };
 
 
-  const handleAddRow = () => {
+  const handleAddNewRow = () => {
       // Combine existing initial backlog (all items) and current unsaved rows
       const allCurrentItems = [
           ...initialBacklog, // Includes historical/moved items
-          ...backlogRows.filter(r => !initialBacklog.some(init => init.id === r.id)) // Add only truly new, unsaved rows from current state
+          ...newBacklogRows // Include items currently being added
       ];
       const nextId = generateNextBacklogId(allCurrentItems);
-      const newRow: BacklogRow = {
+      const newRow: EditingBacklogRow = {
           ...initialBacklogTask,
           _internalId: `backlog_${Date.now()}_${Math.random()}`,
           id: '', // Keep ID empty until save
@@ -244,39 +225,32 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
           needsGrooming: false,
           readyForSprint: false,
       };
-      const newRowRef = React.createRef<HTMLDivElement>(); // Create ref for the new row
-      rowRefs.current.set(newRow._internalId, newRowRef); // Store the ref
 
-       setBacklogRows(prev => [...prev, { ...newRow, ref: newRowRef }]); // Add the new row with its ref
-      setHasUnsavedChanges(true); // Adding a row is an unsaved change
-
-       // Scroll the new row into view slightly after state update
-       setTimeout(() => {
-         newRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-       }, 100);
+       setNewBacklogRows(prev => [...prev, newRow]);
+       setHasUnsavedChanges(true); // Adding a row is an unsaved change
   };
 
 
-  const handleRemoveRow = (internalId: string) => {
-      rowRefs.current.delete(internalId); // Remove ref when row is removed
-      setBacklogRows(prevRows => {
+  const handleRemoveNewRow = (internalId: string) => {
+      setNewBacklogRows(prevRows => {
           const newRows = prevRows.filter(row => row._internalId !== internalId);
-          return newRows; // No need to add empty row
+          return newRows;
       });
-       setHasUnsavedChanges(true); // Removing a row is an unsaved change
+       // Update unsaved changes based on whether rows remain
+       setHasUnsavedChanges(newBacklogRows.length > 1);
   };
 
 
-  const handleInputChange = (internalId: string, field: keyof Omit<BacklogRow, 'id' | '_internalId' | 'dependsOn' | 'createdDateObj' | 'ref' | 'movedToSprint' | 'needsGrooming' | 'readyForSprint' | 'historyStatus'>, value: string | number | undefined) => {
-    setBacklogRows(rows =>
+  const handleNewInputChange = (internalId: string, field: keyof Omit<EditingBacklogRow, 'id' | '_internalId' | 'dependsOn' | 'createdDateObj' | 'ref' | 'movedToSprint' | 'needsGrooming' | 'readyForSprint' | 'historyStatus'>, value: string | number | undefined) => {
+    setNewBacklogRows(rows =>
       rows.map(row => (row._internalId === internalId ? { ...row, [field]: value ?? '' } : row))
     );
      setHasUnsavedChanges(true);
   };
 
-   const handleDateChange = (internalId: string, field: 'createdDate', date: Date | undefined) => {
+   const handleNewDateChange = (internalId: string, field: 'createdDate', date: Date | undefined) => {
      const dateString = date ? format(date, 'yyyy-MM-dd') : '';
-     setBacklogRows(rows =>
+     setNewBacklogRows(rows =>
        rows.map(row =>
          row._internalId === internalId
            ? { ...row, [field]: dateString, [`${field}Obj`]: date }
@@ -286,17 +260,17 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       setHasUnsavedChanges(true);
    };
 
-  const handleSelectChange = (internalId: string, field: 'taskType' | 'priority' | 'initiator', value: string) => {
+  const handleNewSelectChange = (internalId: string, field: 'taskType' | 'priority' | 'initiator', value: string) => {
      let finalValue: string | undefined | null = value;
      if (value === 'none') {
         finalValue = undefined;
      }
-    handleInputChange(internalId, field, finalValue);
+    handleNewInputChange(internalId, field, finalValue);
      setHasUnsavedChanges(true);
-  };
+   };
 
-   const handleCheckboxChange = (internalId: string, field: 'needsGrooming' | 'readyForSprint', checked: boolean | 'indeterminate') => {
-     setBacklogRows(rows =>
+   const handleNewCheckboxChange = (internalId: string, field: 'needsGrooming' | 'readyForSprint', checked: boolean | 'indeterminate') => {
+     setNewBacklogRows(rows =>
        rows.map(row =>
          row._internalId === internalId ? { ...row, [field]: !!checked } : row // Ensure boolean
        )
@@ -304,7 +278,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       setHasUnsavedChanges(true);
    };
 
-  const handleViewDetails = (task: BacklogRow) => {
+  const handleViewDetails = (task: Task) => { // Accepts Task type now
       if (task.backlogId?.trim()) {
           setViewingTask(task);
           setIsViewDialogOpen(true);
@@ -327,62 +301,79 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
      setMovingTaskId(null);
    };
 
-   // Handler for opening the dependencies dialog
-   const handleOpenDepsDialog = (taskId: string) => {
-       setEditingDepsTaskId(taskId);
+   // Handler for opening the dependencies dialog (needs adaptation for saved items)
+   const handleOpenDepsDialog = (taskId: string, isNewItem: boolean) => {
+       if (isNewItem) {
+           setEditingDepsTaskId(taskId); // Use internalId for new items
+       } else {
+           setEditingDepsTaskId(taskId); // Use task.id for saved items
+       }
        setIsDepsDialogOpen(true);
    };
 
-   // Handler for saving dependencies from the dialog
+   // Handler for saving dependencies from the dialog (needs adaptation)
    const handleSaveDependencies = (selectedDeps: string[]) => {
        if (!editingDepsTaskId) return;
-       setBacklogRows(prevRows =>
-           prevRows.map(row =>
-               row._internalId === editingDepsTaskId
-                   ? { ...row, dependsOn: selectedDeps.sort() } // Update dependencies and sort them
-                   : row
-           )
-       );
+
+       // Check if we are editing a new item or a saved item
+       const isEditingNewItem = newBacklogRows.some(row => row._internalId === editingDepsTaskId);
+
+       if (isEditingNewItem) {
+            setNewBacklogRows(prevRows =>
+               prevRows.map(row =>
+                   row._internalId === editingDepsTaskId
+                       ? { ...row, dependsOn: selectedDeps.sort() }
+                       : row
+               )
+           );
+            setHasUnsavedChanges(true);
+       } else {
+           // Find the saved item and update it via callback
+           const savedItem = displayableSavedItems.find(item => item.id === editingDepsTaskId);
+           if (savedItem) {
+               onUpdateSavedItem({ ...savedItem, dependsOn: selectedDeps.sort() });
+           }
+       }
+
        setIsDepsDialogOpen(false);
        setEditingDepsTaskId(null);
-        setHasUnsavedChanges(true);
    };
 
-    // Handler to scroll to a dependency row
+    // Handler to scroll to a dependency row in the saved items table
     const handleScrollToDependency = (dependencyBacklogId: string) => {
-        const targetRow = backlogRows.find(row => row.backlogId === dependencyBacklogId);
-        if (targetRow && targetRow.ref?.current) {
-            targetRow.ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            // Optionally add a temporary highlight effect
-            targetRow.ref.current.classList.add('bg-accent/20'); // Use lighter accent for highlight
+        const targetRow = displayableSavedItems.find(row => row.backlogId === dependencyBacklogId);
+        const targetRef = targetRow ? savedRowRefs.current.get(targetRow.id) : undefined;
+
+        if (targetRef?.current) {
+            targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetRef.current.classList.add('bg-accent/20');
             setTimeout(() => {
-                targetRow.ref.current?.classList.remove('bg-accent/20'); // Remove highlight after a delay
+                targetRef.current?.classList.remove('bg-accent/20');
             }, 1500);
         } else {
             toast({ variant: "default", title: "Info", description: `Backlog item '${dependencyBacklogId}' not found or not rendered.` });
         }
     };
 
-  const handleSave = () => {
+  const handleSaveNewItems = () => {
     let hasErrors = false;
-    const finalBacklogPortion: Task[] = []; // Only includes the items displayed/edited in this tab
+    const itemsToSave: Task[] = [];
     const allKnownBacklogIds = new Set<string>();
 
     // Populate with ALL IDs from initial backlog (including historical)
     initialBacklog.forEach(task => {
         if (task.backlogId) allKnownBacklogIds.add(task.backlogId.toLowerCase());
     });
-    // Populate with IDs from the CURRENT rows being edited (to catch duplicates within the edit session)
-    backlogRows.forEach(row => {
+    // Populate with IDs from the CURRENT rows being added (to catch duplicates within the edit session)
+    newBacklogRows.forEach(row => {
         if (row.backlogId) allKnownBacklogIds.add(row.backlogId.toLowerCase());
     });
 
 
-    backlogRows.forEach((row, index) => {
-      // Skip effectively empty rows
+    newBacklogRows.forEach((row, index) => {
       const isEmptyRow = !row.backlogId?.trim() && !row.title?.trim() && !row.storyPoints?.toString().trim();
       if (isEmptyRow) {
-          return;
+          return; // Skip empty rows
       }
 
       const backlogId = row.backlogId?.trim() || '';
@@ -400,10 +391,16 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
 
       let rowErrors: string[] = [];
       if (!backlogId) rowErrors.push("Backlog ID required");
-      // Check against ALL known IDs (initial + current), BUT allow the row to keep its *own* ID if it already exists (i.e., it was loaded, not new)
-      if (backlogId && allKnownBacklogIds.has(backlogId.toLowerCase()) && row.id === '') {
-           // This is a new row (no persistent ID yet) trying to use an existing ID
-           rowErrors.push(`Duplicate Backlog ID "${backlogId}"`);
+      // Check against ALL known IDs (initial + current rows being added)
+      if (backlogId && allKnownBacklogIds.has(backlogId.toLowerCase())) {
+           // Check if it's a duplicate within the new rows themselves
+           if (newBacklogRows.filter(r => r.backlogId === backlogId).length > 1) {
+               rowErrors.push(`Duplicate Backlog ID "${backlogId}" in new items.`);
+           }
+           // Check if it conflicts with an existing saved ID
+           else if (initialBacklog.some(t => t.backlogId === backlogId)) {
+                rowErrors.push(`Backlog ID "${backlogId}" already exists in the saved backlog.`);
+           }
        }
 
       if (!title) rowErrors.push("Title required");
@@ -411,10 +408,10 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       if (!createdDate || !isValid(parseISO(createdDate))) rowErrors.push("Invalid Created Date (use YYYY-MM-DD)");
       if (!taskType || !taskTypes.includes(taskType as any)) rowErrors.push("Invalid Task Type");
       if (!priority || !taskPriorities.includes(priority as any)) rowErrors.push("Invalid Priority");
-       // Validate dependencies exist in the current combined backlog (displayed + initial)
+       // Validate dependencies exist in the combined backlog (saved + new items being added, excluding self)
        const combinedBacklogIds = new Set([
-         ...initialBacklog.filter(t => t.id !== row.id).map(t => t.backlogId!).filter(Boolean), // Exclude self from initial list, filter out undefined/empty
-         ...backlogRows.filter(r => r._internalId !== row._internalId && r.backlogId).map(r => r.backlogId!), // Exclude self from current rows
+         ...initialBacklog.map(t => t.backlogId!).filter(Boolean),
+         ...newBacklogRows.filter(r => r._internalId !== row._internalId && r.backlogId).map(r => r.backlogId!),
        ]);
        const invalidDeps = dependsOn.filter(depId => !combinedBacklogIds.has(depId));
        if (invalidDeps.length > 0) {
@@ -425,18 +422,17 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       if (rowErrors.length > 0) {
         toast({
           variant: "destructive",
-          title: `Error in Backlog Row ${index + 1}`,
+          title: `Error in New Backlog Row ${index + 1}`,
           description: rowErrors.join(', ')
         });
         hasErrors = true;
         return;
       }
 
-       // Add to set only if it's a new row being added and validated
-       if (backlogId && row.id === '') allKnownBacklogIds.add(backlogId.toLowerCase());
+       if (backlogId) allKnownBacklogIds.add(backlogId.toLowerCase()); // Add validated ID to set for subsequent checks
 
-      finalBacklogPortion.push({
-        id: row.id || `backlog_${projectId}_${Date.now()}_${index}`, // Keep existing ID or generate new if truly new
+      itemsToSave.push({
+        id: '', // ID will be assigned by the parent component/saving logic
         backlogId: backlogId,
         ticketNumber: backlogId, // Keep ticketNumber aligned with backlogId for simplicity now
         title,
@@ -449,9 +445,9 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
         priority: priority as Task['priority'],
         needsGrooming,
         readyForSprint,
-        // These should remain undefined for backlog items unless moved
-        movedToSprint: row.movedToSprint,
-        historyStatus: row.historyStatus,
+        // Ensure these are undefined for new backlog items
+        movedToSprint: undefined,
+        historyStatus: undefined,
         devEstimatedTime: undefined,
         qaEstimatedTime: undefined,
         bufferTime: undefined,
@@ -467,141 +463,99 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       return;
     }
 
-    // Combine the saved portion with the existing historical/moved items from the initial prop
-    const historicalItems = initialBacklog.filter(task => task.historyStatus || task.movedToSprint);
-    const fullBacklogToSave = [...finalBacklogPortion, ...historicalItems];
+    if (itemsToSave.length === 0) {
+        toast({ variant: "default", title: "No New Items", description: "Add items to the table first." });
+        return;
+    }
 
-    fullBacklogToSave.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
-
-
-    onSaveBacklog(fullBacklogToSave); // Save the combined and sorted backlog
+    onSaveNewItems(itemsToSave); // Call the specific prop for saving new items
+    setNewBacklogRows([]); // Clear the new items table
     setHasUnsavedChanges(false);
-     // Update state to reflect sorted/cleaned data with potentially new IDs
-     // Only map the items that should be displayed in this tab
-     setBacklogRows(finalBacklogPortion.map((task, index) => {
-         const internalId = task.id || `saved_backlog_${index}_${Date.now()}`;
-          if (!rowRefs.current.has(internalId)) {
-              rowRefs.current.set(internalId, React.createRef<HTMLDivElement>());
-          }
-         return {
-             ...task,
-             storyPoints: task.storyPoints?.toString() ?? '',
-             _internalId: internalId,
-             ref: rowRefs.current.get(internalId),
-             createdDateObj: parseDateString(task.createdDate),
-             dependsOn: task.dependsOn ?? [], // Ensure dependsOn is always an array
-             needsGrooming: task.needsGrooming ?? false,
-             readyForSprint: task.readyForSprint ?? false,
-         };
-     }));
+    toast({ title: "Success", description: `${itemsToSave.length} new backlog item(s) saved.` });
   };
 
-   // Memoized list of potential dependencies (other backlog items)
+   // Memoized list of potential dependencies (considering both saved and new items)
    const potentialDependencies = useMemo(() => {
-        if (!editingDepsTaskId) return [];
-        // Get the backlogId of the task being edited
-         const currentBacklogId = backlogRows.find(row => row._internalId === editingDepsTaskId)?.backlogId;
-        return backlogRows
-            .filter(row => row._internalId !== editingDepsTaskId && row.backlogId?.trim() && row.backlogId !== currentBacklogId) // Exclude self, rows without ID, and self ID
-            .map(row => ({ id: row.backlogId!, title: row.title || `Item ${row.backlogId}` })); // Use backlogId as the ID
-   }, [backlogRows, editingDepsTaskId]);
+       if (!editingDepsTaskId) return [];
+
+       // Find the item being edited (could be new or saved)
+       const editingNewItem = newBacklogRows.find(row => row._internalId === editingDepsTaskId);
+       const editingSavedItem = !editingNewItem ? displayableSavedItems.find(item => item.id === editingDepsTaskId) : undefined;
+       const editingItemId = editingNewItem?._internalId : editingSavedItem?.id;
+       const editingBacklogId = editingNewItem?.backlogId || editingSavedItem?.backlogId;
+
+       // Combine potential dependencies from saved and new items, excluding the item being edited
+       const depsFromSaved = displayableSavedItems
+           .filter(item => item.id !== editingItemId && item.backlogId !== editingBacklogId && item.backlogId?.trim())
+           .map(item => ({ id: item.backlogId!, title: item.title || `Item ${item.backlogId}` }));
+
+       const depsFromNew = newBacklogRows
+           .filter(row => row._internalId !== editingItemId && row.backlogId !== editingBacklogId && row.backlogId?.trim())
+           .map(row => ({ id: row.backlogId!, title: row.title || `Item ${row.backlogId}` }));
+
+       // Combine and remove duplicates based on ID
+       const combinedDepsMap = new Map<string, PotentialDependency>();
+       [...depsFromSaved, ...depsFromNew].forEach(dep => {
+           if (!combinedDepsMap.has(dep.id)) {
+               combinedDepsMap.set(dep.id, dep);
+           }
+       });
+
+       return Array.from(combinedDepsMap.values());
+   }, [displayableSavedItems, newBacklogRows, editingDepsTaskId]);
 
   return (
     <>
+    {/* --- Add New Backlog Items Section --- */}
     <Card>
       <CardHeader>
         <div className="flex justify-between items-center">
           <div>
-            <CardTitle className="flex items-center gap-2"><Package className="h-5 w-5 text-primary" /> Project Backlog: {projectName}</CardTitle>
-            <CardDescription>Manage tasks that are not yet planned for a specific sprint. Add, edit, prioritize, and detail backlog items.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><PlusCircle className="h-5 w-5 text-primary" /> Add New Backlog Items</CardTitle>
+            <CardDescription>Add new tasks to the project backlog. Click 'Save New Items' to add them to the main backlog list below.</CardDescription>
           </div>
-          <div className="flex items-center gap-2">
-             <Button
-                 variant={isFilteringReady ? "secondary" : "outline"}
-                 size="sm"
-                 onClick={toggleFilterReady}
-             >
-                 <Filter className="mr-2 h-4 w-4" />
-                 {isFilteringReady ? "Show All" : "Show Ready Only"}
-             </Button>
-             <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
-                 <Save className="mr-2 h-4 w-4" /> Save Backlog
-             </Button>
-          </div>
+          <Button onClick={handleSaveNewItems} disabled={!hasUnsavedChanges || newBacklogRows.length === 0}>
+             <Save className="mr-2 h-4 w-4" /> Save New Items
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="overflow-x-auto" ref={backlogContainerRef}>
-             {/* Adjust min-width to accommodate new columns */}
+        <div className="overflow-x-auto">
             <div className="min-w-[1600px] space-y-4">
-                {/* Backlog Table Header - Add headers for new flags */}
-                <div className="hidden md:grid grid-cols-[120px_1fr_120px_120px_120px_100px_100px_80px_60px_60px_80px_40px] gap-x-3 items-center pb-2 border-b sticky top-0 bg-card z-10"> {/* Updated grid */}
-                     <Button variant="ghost" onClick={() => requestSort('backlogId')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                        Backlog ID* {getSortIndicator('backlogId')}
-                     </Button>
-                     <Button variant="ghost" onClick={() => requestSort('title')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                        Title* {getSortIndicator('title')}
-                     </Button>
+                {/* Header for the NEW items table */}
+                <div className="hidden md:grid grid-cols-[120px_1fr_120px_120px_120px_100px_100px_80px_60px_60px_40px] gap-x-3 items-center pb-2 border-b sticky top-0 bg-card z-10">
+                    <Label className="text-xs font-medium text-muted-foreground">Backlog ID*</Label>
+                    <Label className="text-xs font-medium text-muted-foreground">Title*</Label>
                     <Label className="text-xs font-medium text-muted-foreground">Task Type*</Label>
                     <Label className="text-xs font-medium text-muted-foreground">Initiator</Label>
-                     <Button variant="ghost" onClick={() => requestSort('createdDate')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                        Created Date* {getSortIndicator('createdDate')}
-                     </Button>
-                     <Button variant="ghost" onClick={() => requestSort('priority')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
-                        Priority* {getSortIndicator('priority')}
-                     </Button>
+                    <Label className="text-xs font-medium text-muted-foreground">Created Date*</Label>
+                    <Label className="text-xs font-medium text-muted-foreground">Priority*</Label>
                     <Label className="text-xs font-medium text-muted-foreground">Dependencies</Label>
-                    {/* New Flag Headers */}
-                     <Button variant="ghost" onClick={() => requestSort('needsGrooming')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
-                       Groom? {getSortIndicator('needsGrooming')}
-                    </Button>
-                    <Button variant="ghost" onClick={() => requestSort('readyForSprint')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
-                       Ready? {getSortIndicator('readyForSprint')}
-                    </Button>
-                    <Label className="text-xs font-medium text-muted-foreground text-center">Actions</Label>
+                    <Label className="text-xs font-medium text-muted-foreground text-center">Groom?</Label>
+                    <Label className="text-xs font-medium text-muted-foreground text-center">Ready?</Label>
                     <div />
                 </div>
-
-                {/* Backlog Rows - Add inputs for new flags */}
+                {/* Rows for NEW items */}
                 <div className="space-y-4 md:space-y-2">
-                {filteredAndSortedRows.map((row) => ( // Use filteredAndSortedRows here
-                    <div
-                        key={row._internalId}
-                        ref={row.ref} // Assign ref to the row container
-                        className="grid grid-cols-2 md:grid-cols-[120px_1fr_120px_120px_120px_100px_100px_80px_60px_60px_80px_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0 transition-colors duration-1000" // Updated grid
-                    >
-                        {/* Backlog ID */}
-                        <div className="md:col-span-1 col-span-1 relative">
-                             <Label htmlFor={`backlog-id-${row._internalId}`} className="md:hidden text-xs font-medium">Backlog ID*</Label>
+                {newBacklogRows.map((row) => (
+                    <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[120px_1fr_120px_120px_120px_100px_100px_80px_60px_60px_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
+                        {/* Backlog ID (Generated) */}
+                        <div className="md:col-span-1 col-span-1">
+                             <Label htmlFor={`new-backlog-id-${row._internalId}`} className="md:hidden text-xs font-medium">Backlog ID*</Label>
                              <Input
-                                 id={`backlog-id-${row._internalId}`}
+                                 id={`new-backlog-id-${row._internalId}`}
                                  value={row.backlogId ?? ''}
-                                 onChange={e => handleInputChange(row._internalId, 'backlogId', e.target.value)}
-                                 placeholder="BL-YYNNNN"
-                                 className={cn("h-9", row.id && row.backlogId?.trim() && "text-transparent")} // Hide text if ID exists and link is shown
-                                 required
-                                 disabled={!!row.id} // Disable editing ID once saved (has a persistent ID)
-                                 readOnly={!!row.id} // Make it read-only visually as well
+                                 readOnly // Generated ID is read-only
+                                 className="h-9 bg-muted/50 cursor-not-allowed"
                              />
-                             {/* Show details link only if ID exists and has been potentially saved */}
-                             {row.id && row.backlogId?.trim() && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleViewDetails(row)}
-                                    className="absolute inset-0 z-10 flex items-center pl-3 text-sm font-medium text-primary underline cursor-pointer bg-transparent border-none hover:text-primary/80"
-                                    aria-label={`View details for ${row.backlogId}`}
-                                >
-                                    {row.backlogId}
-                                </button>
-                             )}
                         </div>
                         {/* Title */}
                         <div className="md:col-span-1 col-span-2">
-                            <Label htmlFor={`backlog-title-${row._internalId}`} className="md:hidden text-xs font-medium">Title*</Label>
+                            <Label htmlFor={`new-backlog-title-${row._internalId}`} className="md:hidden text-xs font-medium">Title*</Label>
                             <Input
-                                id={`backlog-title-${row._internalId}`}
+                                id={`new-backlog-title-${row._internalId}`}
                                 value={row.title ?? ''}
-                                onChange={e => handleInputChange(row._internalId, 'title', e.target.value)}
+                                onChange={e => handleNewInputChange(row._internalId, 'title', e.target.value)}
                                 placeholder="Task Title"
                                 className="h-9"
                                 required
@@ -609,9 +563,9 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                         </div>
                          {/* Task Type */}
                          <div className="md:col-span-1 col-span-1">
-                             <Label htmlFor={`backlog-type-${row._internalId}`} className="md:hidden text-xs font-medium">Task Type*</Label>
-                             <Select value={row.taskType ?? 'New Feature'} onValueChange={(value) => handleSelectChange(row._internalId, 'taskType', value)}>
-                                 <SelectTrigger id={`backlog-type-${row._internalId}`} className="h-9">
+                             <Label htmlFor={`new-backlog-type-${row._internalId}`} className="md:hidden text-xs font-medium">Task Type*</Label>
+                             <Select value={row.taskType ?? 'New Feature'} onValueChange={(value) => handleNewSelectChange(row._internalId, 'taskType', value)}>
+                                 <SelectTrigger id={`new-backlog-type-${row._internalId}`} className="h-9">
                                      <SelectValue placeholder="Type" />
                                  </SelectTrigger>
                                  <SelectContent>
@@ -623,13 +577,13 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                          </div>
                           {/* Initiator */}
                           <div className="md:col-span-1 col-span-1">
-                             <Label htmlFor={`backlog-initiator-${row._internalId}`} className="md:hidden text-xs font-medium">Initiator</Label>
+                             <Label htmlFor={`new-backlog-initiator-${row._internalId}`} className="md:hidden text-xs font-medium">Initiator</Label>
                              <Select
                                  value={row.initiator ?? 'none'}
-                                 onValueChange={(value) => handleSelectChange(row._internalId, 'initiator', value)}
+                                 onValueChange={(value) => handleNewSelectChange(row._internalId, 'initiator', value)}
                                  disabled={members.length === 0}
                              >
-                                 <SelectTrigger id={`backlog-initiator-${row._internalId}`} className="h-9">
+                                 <SelectTrigger id={`new-backlog-initiator-${row._internalId}`} className="h-9">
                                      <SelectValue placeholder="Initiator" />
                                  </SelectTrigger>
                                  <SelectContent>
@@ -643,20 +597,20 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                           </div>
                          {/* Created Date */}
                          <div className="md:col-span-1 col-span-1">
-                            <Label htmlFor={`backlog-created-${row._internalId}`} className="md:hidden text-xs font-medium">Created Date*</Label>
+                            <Label htmlFor={`new-backlog-created-${row._internalId}`} className="md:hidden text-xs font-medium">Created Date*</Label>
                             <Input
-                                id={`backlog-created-${row._internalId}`}
+                                id={`new-backlog-created-${row._internalId}`}
                                 type="date"
                                 value={row.createdDate}
-                                onChange={e => handleInputChange(row._internalId, 'createdDate', e.target.value)}
+                                onChange={e => handleNewInputChange(row._internalId, 'createdDate', e.target.value)}
                                 required className="h-9 w-full"
                             />
                          </div>
                          {/* Priority */}
                          <div className="md:col-span-1 col-span-1">
-                             <Label htmlFor={`backlog-priority-${row._internalId}`} className="md:hidden text-xs font-medium">Priority*</Label>
-                             <Select value={row.priority ?? 'Medium'} onValueChange={(value) => handleSelectChange(row._internalId, 'priority', value)}>
-                                 <SelectTrigger id={`backlog-priority-${row._internalId}`} className="h-9">
+                             <Label htmlFor={`new-backlog-priority-${row._internalId}`} className="md:hidden text-xs font-medium">Priority*</Label>
+                             <Select value={row.priority ?? 'Medium'} onValueChange={(value) => handleNewSelectChange(row._internalId, 'priority', value)}>
+                                 <SelectTrigger id={`new-backlog-priority-${row._internalId}`} className="h-9">
                                      <SelectValue placeholder="Priority" />
                                  </SelectTrigger>
                                  <SelectContent>
@@ -668,18 +622,13 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                          </div>
                          {/* Dependencies */}
                          <div className="md:col-span-1 col-span-2 self-center">
-                            <Label htmlFor={`backlog-deps-${row._internalId}`} className="md:hidden text-xs font-medium">Dependencies</Label>
-                            <div className="flex items-center gap-1 flex-wrap min-h-[36px]"> {/* Ensure min height */}
+                            <Label htmlFor={`new-backlog-deps-${row._internalId}`} className="md:hidden text-xs font-medium">Dependencies</Label>
+                            <div className="flex items-center gap-1 flex-wrap min-h-[36px]">
                                 {(row.dependsOn && row.dependsOn.length > 0) ? (
                                     row.dependsOn.map(depId => (
-                                        <button
-                                            key={depId}
-                                            type="button"
-                                            onClick={() => handleScrollToDependency(depId)}
-                                            className="text-xs text-primary underline hover:text-primary/80 px-1 py-0.5 rounded bg-primary/10 cursor-pointer border-none"
-                                        >
+                                        <span key={depId} className="text-xs text-muted-foreground px-1 py-0.5 rounded bg-muted/50">
                                             {depId}
-                                        </button>
+                                        </span>
                                     ))
                                 ) : (
                                     <span className="text-xs text-muted-foreground italic">None</span>
@@ -688,7 +637,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                                     variant="ghost"
                                     size="icon"
                                     className="h-6 w-6 ml-1"
-                                    onClick={() => handleOpenDepsDialog(row._internalId)}
+                                    onClick={() => handleOpenDepsDialog(row._internalId, true)}
                                     aria-label="Edit Dependencies"
                                 >
                                     <LinkIcon className="h-3 w-3" />
@@ -697,47 +646,33 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                          </div>
                           {/* Needs Grooming Checkbox */}
                           <div className="md:col-span-1 col-span-1 flex items-center justify-center pt-2 md:pt-0">
-                             <Label htmlFor={`needs-grooming-${row._internalId}`} className="md:hidden text-xs font-medium">Groom?</Label>
+                             <Label htmlFor={`new-needs-grooming-${row._internalId}`} className="md:hidden text-xs font-medium">Groom?</Label>
                              <Checkbox
-                                id={`needs-grooming-${row._internalId}`}
+                                id={`new-needs-grooming-${row._internalId}`}
                                 checked={row.needsGrooming}
-                                onCheckedChange={(checked) => handleCheckboxChange(row._internalId, 'needsGrooming', checked)}
+                                onCheckedChange={(checked) => handleNewCheckboxChange(row._internalId, 'needsGrooming', checked)}
                                 className="h-5 w-5"
                              />
                           </div>
                            {/* Ready for Sprint Checkbox */}
                            <div className="md:col-span-1 col-span-1 flex items-center justify-center pt-2 md:pt-0">
-                             <Label htmlFor={`ready-sprint-${row._internalId}`} className="md:hidden text-xs font-medium">Ready?</Label>
+                             <Label htmlFor={`new-ready-sprint-${row._internalId}`} className="md:hidden text-xs font-medium">Ready?</Label>
                              <Checkbox
-                                id={`ready-sprint-${row._internalId}`}
+                                id={`new-ready-sprint-${row._internalId}`}
                                 checked={row.readyForSprint}
-                                onCheckedChange={(checked) => handleCheckboxChange(row._internalId, 'readyForSprint', checked)}
+                                onCheckedChange={(checked) => handleNewCheckboxChange(row._internalId, 'readyForSprint', checked)}
                                 className="h-5 w-5"
                              />
                            </div>
-                          {/* Actions Cell */}
-                          <div className="md:col-span-1 col-span-2 flex items-center gap-1 justify-center">
-                             <Button
-                                 variant="ghost"
-                                 size="icon"
-                                 className="h-7 w-7"
-                                 disabled={availableSprints.length === 0 || !row.id?.trim() || !row.readyForSprint} // Disable if not ready for sprint
-                                 onClick={() => handleOpenMoveDialog(row.id)}
-                                 aria-label="Move to Sprint"
-                                 title={!row.readyForSprint ? "Mark as 'Ready?' to move" : availableSprints.length === 0 ? "No active/planned sprints" : "Move to Sprint"}
-                             >
-                                 <ArrowRightSquare className="h-4 w-4" />
-                             </Button>
-                         </div>
                         {/* Delete Button */}
                         <div className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
                             <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => handleRemoveRow(row._internalId)}
+                                onClick={() => handleRemoveNewRow(row._internalId)}
                                 className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                                aria-label="Remove backlog row"
+                                aria-label="Remove new backlog row"
                             >
                                 <Trash2 className="h-4 w-4" />
                             </Button>
@@ -745,20 +680,176 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                     </div>
                 ))}
                 </div>
-                 <Button type="button" onClick={handleAddRow} variant="outline" size="sm" className="mt-4">
+                 <Button type="button" onClick={handleAddNewRow} variant="outline" size="sm" className="mt-4">
                     <PlusCircle className="mr-2 h-4 w-4" />
-                    Add Backlog Item
+                    Add Another Item
                 </Button>
             </div>
          </div>
-      </CardContent>
-      <CardFooter className="flex justify-between items-center border-t pt-4">
-        <p className="text-xs text-muted-foreground">* Required field.</p>
-        <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
-            <Save className="mr-2 h-4 w-4" /> Save Backlog
-        </Button>
-      </CardFooter>
+         <CardFooter className="flex justify-between items-center border-t pt-4">
+           <p className="text-xs text-muted-foreground">* Required field.</p>
+           <Button onClick={handleSaveNewItems} disabled={!hasUnsavedChanges || newBacklogRows.length === 0}>
+               <Save className="mr-2 h-4 w-4" /> Save New Items ({newBacklogRows.length})
+           </Button>
+         </CardFooter>
+       </CardContent>
     </Card>
+
+    <Separator className="my-6" />
+
+    {/* --- Saved Backlog Items Table --- */}
+     <Card>
+       <CardHeader>
+         <div className="flex justify-between items-center">
+           <div>
+             <CardTitle className="flex items-center gap-2"><ListChecks className="h-5 w-5 text-primary" /> Saved Backlog Items</CardTitle>
+             <CardDescription>View and manage existing backlog items. Use the filter or sort options.</CardDescription>
+           </div>
+           <div className="flex items-center gap-2">
+              <Button
+                  variant={isFilteringReady ? "secondary" : "outline"}
+                  size="sm"
+                  onClick={toggleFilterReady}
+              >
+                  <Filter className="mr-2 h-4 w-4" />
+                  {isFilteringReady ? "Show All" : "Show Ready Only"}
+              </Button>
+              {/* Add other actions for saved items if needed, e.g., batch edit, export */}
+           </div>
+         </div>
+       </CardHeader>
+       <CardContent className="space-y-4">
+           {filteredAndSortedSavedRows.length === 0 ? (
+                 <div className="flex flex-col items-center justify-center min-h-[200px] border-dashed border-2 rounded-md p-6">
+                    <Package className="h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-muted-foreground">{isFilteringReady ? "No items marked 'Ready for Sprint'." : "The backlog is empty."}</p>
+                    <p className="text-sm text-muted-foreground">{isFilteringReady ? "Clear the filter or mark items as ready." : "Add new items using the section above."}</p>
+                 </div>
+             ) : (
+               <div className="overflow-x-auto">
+                 <div className="min-w-[1600px] space-y-4">
+                     {/* Header for SAVED items table */}
+                     <div className="hidden md:grid grid-cols-[120px_1fr_120px_120px_120px_100px_100px_80px_60px_60px_80px_40px] gap-x-3 items-center pb-2 border-b sticky top-0 bg-card z-10">
+                         <Button variant="ghost" onClick={() => requestSort('backlogId')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                            Backlog ID {getSortIndicator('backlogId')}
+                         </Button>
+                         <Button variant="ghost" onClick={() => requestSort('title')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                            Title {getSortIndicator('title')}
+                         </Button>
+                         <Label className="text-xs font-medium text-muted-foreground">Task Type</Label>
+                         <Label className="text-xs font-medium text-muted-foreground">Initiator</Label>
+                         <Button variant="ghost" onClick={() => requestSort('createdDate')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                            Created {getSortIndicator('createdDate')}
+                         </Button>
+                         <Button variant="ghost" onClick={() => requestSort('priority')} className="px-1 h-auto justify-start text-xs font-medium text-muted-foreground">
+                            Priority {getSortIndicator('priority')}
+                         </Button>
+                         <Label className="text-xs font-medium text-muted-foreground">Dependencies</Label>
+                         <Button variant="ghost" onClick={() => requestSort('needsGrooming')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
+                            Groom? {getSortIndicator('needsGrooming')}
+                         </Button>
+                         <Button variant="ghost" onClick={() => requestSort('readyForSprint')} className="px-1 h-auto justify-center text-xs font-medium text-muted-foreground">
+                            Ready? {getSortIndicator('readyForSprint')}
+                         </Button>
+                         <Label className="text-xs font-medium text-muted-foreground text-center">Actions</Label>
+                         <div />
+                     </div>
+                     {/* Rows for SAVED items */}
+                     <div className="space-y-4 md:space-y-2">
+                         {filteredAndSortedSavedRows.map((row) => (
+                             <div
+                                 key={row.id} // Use persistent ID for saved items
+                                 ref={row.ref}
+                                 className="grid grid-cols-2 md:grid-cols-[120px_1fr_120px_120px_120px_100px_100px_80px_60px_60px_80px_40px] gap-x-3 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0 transition-colors duration-1000"
+                             >
+                                 {/* Backlog ID (Link) */}
+                                 <TableCell className="font-medium md:col-span-1 col-span-1">
+                                     <button
+                                         type="button"
+                                         onClick={() => handleViewDetails(row)}
+                                         className="text-primary underline cursor-pointer hover:text-primary/80 text-sm font-semibold"
+                                         aria-label={`View details for ${row.backlogId}`}
+                                     >
+                                         {row.backlogId}
+                                     </button>
+                                 </TableCell>
+                                 {/* Title */}
+                                 <TableCell className="md:col-span-1 col-span-2 text-sm">{row.title}</TableCell>
+                                 {/* Task Type */}
+                                 <TableCell className="md:col-span-1 col-span-1 text-sm">{row.taskType}</TableCell>
+                                 {/* Initiator */}
+                                 <TableCell className="md:col-span-1 col-span-1 text-sm">{row.initiator || '-'}</TableCell>
+                                 {/* Created Date */}
+                                 <TableCell className="md:col-span-1 col-span-1 text-sm">{row.createdDate && isValid(parseISO(row.createdDate)) ? format(parseISO(row.createdDate), 'MMM d, yyyy') : 'N/A'}</TableCell>
+                                 {/* Priority */}
+                                 <TableCell className="md:col-span-1 col-span-1 text-sm">{row.priority}</TableCell>
+                                 {/* Dependencies */}
+                                  <TableCell className="md:col-span-1 col-span-2 self-center">
+                                      <div className="flex items-center gap-1 flex-wrap min-h-[36px]">
+                                          {(row.dependsOn && row.dependsOn.length > 0) ? (
+                                              row.dependsOn.map(depId => (
+                                                  <button
+                                                      key={depId}
+                                                      type="button"
+                                                      onClick={() => handleScrollToDependency(depId)}
+                                                      className="text-xs text-primary underline hover:text-primary/80 px-1 py-0.5 rounded bg-primary/10 cursor-pointer border-none"
+                                                  >
+                                                      {depId}
+                                                  </button>
+                                              ))
+                                          ) : (
+                                              <span className="text-xs text-muted-foreground italic">None</span>
+                                          )}
+                                           {/* Edit Dependencies Icon (adjust if needed for saved items) */}
+                                          {/* <Button variant="ghost" size="icon" className="h-6 w-6 ml-1" onClick={() => handleOpenDepsDialog(row.id, false)}><LinkIcon className="h-3 w-3" /></Button> */}
+                                      </div>
+                                  </TableCell>
+                                   {/* Needs Grooming */}
+                                  <TableCell className="md:col-span-1 col-span-1 text-center">
+                                      <Checkbox checked={row.needsGrooming} disabled className="h-5 w-5" />
+                                  </TableCell>
+                                  {/* Ready for Sprint */}
+                                  <TableCell className="md:col-span-1 col-span-1 text-center">
+                                      <Checkbox checked={row.readyForSprint} disabled className="h-5 w-5"/>
+                                  </TableCell>
+                                 {/* Actions Cell */}
+                                  <TableCell className="md:col-span-1 col-span-2 flex items-center gap-1 justify-center">
+                                     <Button
+                                         variant="ghost"
+                                         size="icon"
+                                         className="h-7 w-7"
+                                         disabled={availableSprints.length === 0 || !row.id?.trim() || !row.readyForSprint} // Disable if not ready
+                                         onClick={() => handleOpenMoveDialog(row.id)}
+                                         aria-label="Move to Sprint"
+                                         title={!row.readyForSprint ? "Item not ready for sprint" : availableSprints.length === 0 ? "No active/planned sprints" : "Move to Sprint"}
+                                     >
+                                         <ArrowRightSquare className="h-4 w-4" />
+                                     </Button>
+                                     {/* Add Edit button for saved items here if needed */}
+                                  </TableCell>
+                                  {/* Delete Button (For Saved Items - Optional) */}
+                                  <TableCell className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
+                                       <Button
+                                           type="button"
+                                           variant="ghost"
+                                           size="icon"
+                                           onClick={() => onDeleteSavedItem(row.id)} // Use delete callback
+                                           className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                                           aria-label="Delete saved backlog item"
+                                       >
+                                           <Trash2 className="h-4 w-4" />
+                                       </Button>
+                                   </TableCell>
+                             </div>
+                         ))}
+                     </div>
+                 </div>
+             </div>
+           )}
+       </CardContent>
+     </Card>
+
+     {/* --- Modals --- */}
 
      {/* View Details Dialog */}
      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
@@ -768,11 +859,12 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
             </DialogHeader>
              {viewingTask && (
                 <div className="grid gap-4 py-4 text-sm">
-                    <div className="grid grid-cols-3 items-center gap-4">
+                     {/* Details */}
+                     <div className="grid grid-cols-3 items-center gap-4">
                         <Label className="text-right font-medium text-muted-foreground">Title</Label>
                         <span className="col-span-2">{viewingTask.title || '-'}</span>
                     </div>
-                    <div className="grid grid-cols-3 items-center gap-4">
+                     <div className="grid grid-cols-3 items-center gap-4">
                         <Label className="text-right font-medium text-muted-foreground">Type</Label>
                         <span className="col-span-2">{viewingTask.taskType}</span>
                     </div>
@@ -824,7 +916,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
             <DialogHeader>
                 <DialogTitle>Move Backlog Item to Sprint</DialogTitle>
                 <DialogDescription>
-                    Select the target sprint to move backlog item '{backlogRows.find(r => r.id === movingTaskId)?.backlogId}' to.
+                    Select the target sprint to move backlog item '{initialBacklog.find(r => r.id === movingTaskId)?.backlogId}' to.
                 </DialogDescription>
             </DialogHeader>
              <div className="py-4">
@@ -861,12 +953,24 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       <SelectDependenciesDialog
          isOpen={isDepsDialogOpen}
          onOpenChange={setIsDepsDialogOpen}
-         currentDependencies={backlogRows.find(row => row._internalId === editingDepsTaskId)?.dependsOn ?? []}
+         currentDependencies={
+             (newBacklogRows.find(row => row._internalId === editingDepsTaskId)?.dependsOn) ??
+             (displayableSavedItems.find(item => item.id === editingDepsTaskId)?.dependsOn) ??
+             []
+         }
          potentialDependencies={potentialDependencies}
          onSave={handleSaveDependencies}
-         currentTaskName={backlogRows.find(row => row._internalId === editingDepsTaskId)?.title || ''}
-         currentTaskId={backlogRows.find(row => row._internalId === editingDepsTaskId)?.backlogId || ''}
+         currentTaskName={
+             (newBacklogRows.find(row => row._internalId === editingDepsTaskId)?.title) ||
+             (displayableSavedItems.find(item => item.id === editingDepsTaskId)?.title) || ''
+          }
+         currentTaskId={
+             (newBacklogRows.find(row => row._internalId === editingDepsTaskId)?.backlogId) ||
+             (displayableSavedItems.find(item => item.id === editingDepsTaskId)?.backlogId) || ''
+         }
       />
     </>
   );
 }
+
+    
