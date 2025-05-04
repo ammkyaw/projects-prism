@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -976,151 +975,161 @@ export default function Home() {
     }, [selectedProjectId, toast]); // Removed generateNextBacklogId dependency
 
     // Handler to undo a backlog action (Split/Merge)
-    const handleUndoBacklogAction = useCallback((taskId: string) => {
-        if (!selectedProjectId) {
-            toast({ variant: "destructive", title: "Error", description: "No project selected." });
-            return;
-        }
+     const handleUndoBacklogAction = useCallback((taskId: string) => {
+         if (!selectedProjectId) {
+             toast({ variant: "destructive", title: "Error", description: "No project selected." });
+             return;
+         }
 
-        let undoneActionType: HistoryStatus | undefined;
-        let undoneItemDetails: string | null = null;
-        let restoredItemIds: string[] = [];
-        let removedItemIds: string[] = [];
-        let actionSuccess = false; // Track if the undo logic successfully modified state
+         let undoneActionType: HistoryStatus | undefined;
+         let undoneItemDetails: string | null = null;
+         let restoredItemIds: string[] = [];
+         let removedItemIds: string[] = [];
+         let actionSuccess = false; // Track if the undo logic successfully modified state
 
-         // Defer toast to avoid render interference
-        const showToast = (options: any) => setTimeout(() => toast(options), 50);
+          // Defer toast to avoid render interference
+         const showToast = (options: any) => setTimeout(() => toast(options), 50);
 
-        setProjects(prevProjects => {
-            let projectUpdated = false;
-            const updatedProjects = prevProjects.map(p => {
-                if (p.id === selectedProjectId) {
-                    let updatedBacklog = [...(p.backlog || [])];
-                    const triggerItem = updatedBacklog.find(item => item.id === taskId);
+         setProjects(prevProjects => {
+             let projectUpdated = false;
+             const updatedProjects = prevProjects.map(p => {
+                 if (p.id === selectedProjectId) {
+                     let updatedBacklog = [...(p.backlog || [])];
+                     const triggerItem = updatedBacklog.find(item => item.id === taskId);
 
-                    if (!triggerItem) {
-                        console.error("Undo Trigger item not found:", taskId);
-                        showToast({ variant: "destructive", title: "Error", description: "Cannot perform undo: Item not found." });
-                        return p;
-                    }
+                     if (!triggerItem) {
+                         console.error("Undo Trigger item not found:", taskId);
+                         showToast({ variant: "destructive", title: "Error", description: "Cannot perform undo: Item not found." });
+                         return p;
+                     }
 
-                    let originalItemToRestore: Task | undefined;
-                    let itemsToRemove: Task[] = [];
-                    let itemsToRestore: Task[] = [];
+                      // Enhanced logging for debugging
+                      console.log("Attempting to undo action for item:", triggerItem);
 
-                    // Determine action based on trigger item
-                    if (triggerItem.historyStatus === 'Split') { // Undoing original historical Split item
-                        undoneActionType = 'Split';
-                        originalItemToRestore = triggerItem;
-                        undoneItemDetails = `${originalItemToRestore.backlogId} (${originalItemToRestore.title || 'No Title'})`;
-                        itemsToRemove = updatedBacklog.filter(item => item.splitFromId === originalItemToRestore!.id);
-                        itemsToRestore = [originalItemToRestore];
-                        removedItemIds = itemsToRemove.map(t => t.backlogId || t.id);
-                    } else if (triggerItem.historyStatus === 'Merge') { // Undoing original historical Merge item
-                        undoneActionType = 'Merge';
-                        const mergeEventId = triggerItem.mergeEventId;
-                        if (!mergeEventId) {
-                            console.error("Cannot undo merge: Missing mergeEventId on historical item", taskId);
-                            showToast({ variant: "destructive", title: "Error", description: "Cannot undo merge action (missing link)." });
-                            return p;
-                        }
-                        itemsToRestore = updatedBacklog.filter(item => item.mergeEventId === mergeEventId && item.historyStatus === 'Merge');
-                        itemsToRemove = updatedBacklog.filter(item => item.mergeEventId === mergeEventId && !item.historyStatus);
-                        undoneItemDetails = `Merged Items (Event: ${mergeEventId})`;
-                        removedItemIds = itemsToRemove.map(t => t.backlogId || t.id);
-                        restoredItemIds = itemsToRestore.map(t=>t.backlogId || t.id);
-                    } else if (triggerItem.splitFromId) { // Undoing a resulting Split item
-                        undoneActionType = 'Split';
-                        originalItemToRestore = updatedBacklog.find(item => item.id === triggerItem.splitFromId && item.historyStatus === 'Split');
-                        if (!originalItemToRestore) {
-                            console.error("Cannot undo split: Original item not found for split item", taskId);
-                            showToast({ variant: "destructive", title: "Error", description: "Cannot undo split action (original missing)." });
-                            return p;
-                        }
-                        undoneItemDetails = `${originalItemToRestore.backlogId} (${originalItemToRestore.title || 'No Title'})`;
-                        itemsToRemove = updatedBacklog.filter(item => item.splitFromId === originalItemToRestore!.id);
-                        itemsToRestore = [originalItemToRestore];
-                        removedItemIds = itemsToRemove.map(t => t.backlogId || t.id);
-                    } else if (triggerItem.mergeEventId && !triggerItem.historyStatus) { // Undoing a resulting Merge item
-                        undoneActionType = 'Merge';
-                        const mergeEventId = triggerItem.mergeEventId;
-                        itemsToRemove = [triggerItem];
-                        itemsToRestore = updatedBacklog.filter(item => item.mergeEventId === mergeEventId && item.historyStatus === 'Merge');
-                        undoneItemDetails = `Merged Item '${triggerItem.title}' (Event: ${mergeEventId})`;
-                        removedItemIds = itemsToRemove.map(t => t.backlogId || t.id);
-                        restoredItemIds = itemsToRestore.map(t=>t.backlogId || t.id);
-                    } else {
-                        console.error("Item not eligible for undo:", taskId, triggerItem);
-                        showToast({ variant: "destructive", title: "Error", description: "Cannot undo this action (item not eligible)." });
-                        return p;
-                    }
+                     let originalItemToRestore: Task | undefined;
+                     let itemsToRemove: Task[] = [];
+                     let itemsToRestore: Task[] = [];
+                     let mergeEventId: string | undefined;
 
-                    // Perform the updates
-                    if (itemsToRestore.length > 0 || itemsToRemove.length > 0) {
+                     // Determine action and related items based on the *trigger item*
+                     if (triggerItem.historyStatus === 'Split') { // Undoing original historical Split item
+                         undoneActionType = 'Split';
+                         originalItemToRestore = triggerItem; // This is the item to restore
+                         itemsToRemove = updatedBacklog.filter(item => item.splitFromId === originalItemToRestore!.id); // Find results by splitFromId
+                     } else if (triggerItem.historyStatus === 'Merge') { // Undoing original historical Merge item
+                         undoneActionType = 'Merge';
+                         mergeEventId = triggerItem.mergeEventId;
+                         if (!mergeEventId) {
+                             console.error("Cannot undo merge: Missing mergeEventId on historical item", taskId);
+                             showToast({ variant: "destructive", title: "Error", description: "Cannot undo merge action (missing link)." });
+                             return p;
+                         }
+                         // Find the resulting merged item and the original items using the mergeEventId
+                         itemsToRemove = updatedBacklog.filter(item => item.mergeEventId === mergeEventId && !item.historyStatus); // The non-historical item with the event ID is the result
+                         itemsToRestore = updatedBacklog.filter(item => item.mergeEventId === mergeEventId && item.historyStatus === 'Merge'); // Original items have status 'Merge' and the event ID
+                     } else if (triggerItem.splitFromId) { // Undoing a resulting Split item
+                         undoneActionType = 'Split';
+                         // Find the original historical item that was split
+                         originalItemToRestore = updatedBacklog.find(item => item.id === triggerItem.splitFromId && item.historyStatus === 'Split');
+                         if (!originalItemToRestore) {
+                             console.error("Cannot undo split: Original item not found for split item", taskId);
+                             showToast({ variant: "destructive", title: "Error", description: "Cannot undo split action (original missing)." });
+                             return p;
+                         }
+                         // Find all items resulting from that split (including the trigger item itself)
+                         itemsToRemove = updatedBacklog.filter(item => item.splitFromId === originalItemToRestore!.id);
+                     } else if (triggerItem.mergeEventId && !triggerItem.historyStatus) { // Undoing a resulting Merge item
+                         undoneActionType = 'Merge';
+                         mergeEventId = triggerItem.mergeEventId;
+                         itemsToRemove = [triggerItem]; // The item itself is the result to remove
+                         itemsToRestore = updatedBacklog.filter(item => item.mergeEventId === mergeEventId && item.historyStatus === 'Merge'); // Find originals via event ID
+                     } else {
+                         console.error("Item not eligible for undo:", taskId, triggerItem);
+                         showToast({ variant: "destructive", title: "Error", description: "Cannot undo this action (item not eligible)." });
+                         return p;
+                     }
+
+
+                     // Set details for toast message based on the action type and trigger item
+                     if (undoneActionType === 'Split') {
+                        undoneItemDetails = originalItemToRestore ? `${originalItemToRestore.backlogId} (${originalItemToRestore.title || 'No Title'})` : `Split items related to ${triggerItem.backlogId}`;
+                     } else if (undoneActionType === 'Merge') {
+                        undoneItemDetails = mergeEventId ? `Merged Items (Event: ${mergeEventId})` : `Merge related to ${triggerItem.backlogId}`;
+                     }
+
+
+                     // Perform the updates only if an action type was determined
+                     if (undoneActionType) {
                          projectUpdated = true;
                          actionSuccess = true; // Assume success unless checks fail
 
-                        // 1. Restore original items: Remove historyStatus and related IDs
-                        const restoredIds = new Set(itemsToRestore.map(t => t.id));
-                         updatedBacklog = updatedBacklog.map(item => {
-                            if (restoredIds.has(item.id)) {
-                                restoredItemIds.push(item.id); // Track successfully restored IDs
-                                return { ...item, historyStatus: undefined, splitFromId: undefined, mergeEventId: undefined, movedToSprint: undefined };
-                            }
-                            return item;
-                         });
-
-
-                         // 2. Filter out the items created by the action
+                         // IDs of items to be removed
                          const removedIdsSet = new Set(itemsToRemove.map(t => t.id));
+                         removedItemIds = itemsToRemove.map(t => t.backlogId || t.id); // Store IDs for toast
+
+                         // Filter out the items created by the action
                          updatedBacklog = updatedBacklog.filter(item => !removedIdsSet.has(item.id));
 
-                         // Validation checks
-                         if (undoneActionType === 'Merge' && itemsToRestore.length === 0) {
-                             console.error(`Undo Merge: Could not find original items for mergeEventId ${triggerItem.mergeEventId}`);
-                             showToast({ variant: "warning", title: "Undo Incomplete", description: "Could not restore original merged items." });
-                              actionSuccess = false; // Mark as failed
-                              return p; // Revert state change by returning original project
+
+                         // IDs of items to be restored (either original split parent or original merge children)
+                         const itemsToMakeActive = undoneActionType === 'Split' ? [originalItemToRestore] : itemsToRestore;
+                         const restoredIdsSet = new Set(itemsToMakeActive.filter(Boolean).map(t => t!.id));
+                         restoredItemIds = itemsToMakeActive.filter(Boolean).map(t => t!.backlogId || t!.id); // Store IDs for toast
+
+                         // Restore original items: Remove historyStatus and related IDs
+                         updatedBacklog = updatedBacklog.map(item => {
+                             if (restoredIdsSet.has(item.id)) {
+                                  console.log("Restoring item:", item.id, item.backlogId);
+                                 return { ...item, historyStatus: undefined, splitFromId: undefined, mergeEventId: undefined, movedToSprint: undefined };
+                             }
+                             return item;
+                         });
+
+                          // Validation checks
+                         if (undoneActionType === 'Merge' && itemsToRestore.length === 0 && mergeEventId) {
+                             console.error(`Undo Merge: Could not find original items for mergeEventId ${mergeEventId}`);
+                              showToast({ variant: "warning", title: "Undo Incomplete", description: "Could not restore original merged items." });
+                              actionSuccess = false;
+                              return p; // Revert state change
                          }
                          if (itemsToRemove.length === 0 && (undoneActionType === 'Split' || undoneActionType === 'Merge')) {
                               console.warn(`Undo ${undoneActionType}: Could not find the resulting item(s) to remove. Originals restored.`);
                               showToast({ variant: "warning", title: "Undo Warning", description: `Resulting ${undoneActionType === 'Split' ? 'split' : 'merged'} item(s) not found, originals restored.` });
-                              // Proceed with restoring originals
                          }
 
                          return {
                              ...p,
                              backlog: updatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
                          };
-                    } else {
-                        // No items found to restore or remove, likely an issue
-                        console.error("Undo Error: No items identified for restoration or removal for action related to", taskId);
+                     } else {
+                         // Should not reach here if logic above is correct, but acts as a safeguard
+                         console.error("Undo Error: Could not determine action type for item", taskId);
                          showToast({ variant: "destructive", title: "Undo Failed", description: "Could not process the undo request." });
-                        return p;
-                    }
-                }
-                return p;
-            });
+                         return p;
+                     }
+                 }
+                 return p;
+             });
 
-             // Show appropriate toast after the state update attempt
-            if (actionSuccess && undoneItemDetails && undoneActionType) {
-                const restoredCount = restoredItemIds.length;
-                const removedCount = removedItemIds.length;
-                showToast({
-                    title: `${undoneActionType} Undone`,
-                    description: `Action related to '${undoneItemDetails}' undone. ${restoredCount} item(s) restored, ${removedCount} item(s) removed.`,
-                    duration: 5000,
-                });
-             } else if (!actionSuccess && undoneActionType) {
-                 // Toast for failure might have already been shown, but add a generic one if needed
-                 // showToast({ variant: "destructive", title: "Undo Failed", description: "The undo operation could not be completed." });
-             }
+              // Show appropriate toast after the state update attempt
+             if (actionSuccess && undoneItemDetails && undoneActionType) {
+                 const restoredCount = restoredItemIds.length;
+                 const removedCount = removedItemIds.length;
+                 showToast({
+                     title: `${undoneActionType} Undone`,
+                     description: `Action related to '${undoneItemDetails}' undone. ${restoredCount} item(s) restored, ${removedCount} item(s) removed.`,
+                     duration: 5000,
+                 });
+              } else if (!actionSuccess && undoneActionType) {
+                  // Toast for failure might have already been shown, but add a generic one if needed
+                  // showToast({ variant: "destructive", title: "Undo Failed", description: "The undo operation could not be completed." });
+              }
 
 
-            return projectUpdated ? updatedProjects : prevProjects; // Return original state if no update occurred
-        });
+             return projectUpdated ? updatedProjects : prevProjects; // Return original state if no update occurred
+         });
 
-    }, [selectedProjectId, toast, setProjects]); // Added setProjects dependency
+     }, [selectedProjectId, toast, setProjects]); // Added setProjects dependency
 
 
   // Handler to add members to the *newly created* project (from dialog)
@@ -1554,7 +1563,6 @@ export default function Home() {
                      onSplitBacklogItem: handleSplitBacklogItem, // Pass split handler
                      onMergeBacklogItems: handleMergeBacklogItems, // Pass merge handler
                      onUndoBacklogAction: handleUndoBacklogAction, // Pass undo handler
-                     // generateNextBacklogId: generateNextBacklogId, // Pass helper for merge ID - Removed, ID logic changed
                      allProjectBacklogItems: selectedProject.backlog ?? [], // Pass all items for uniqueness check
                  };
                 break;
@@ -1818,5 +1826,3 @@ export default function Home() {
   );
 
 }
-
-    
