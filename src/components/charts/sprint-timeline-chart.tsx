@@ -161,10 +161,10 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     const processedTasks = tasks
         .map((task, index) => {
              // Get assignee's member ID and specific holidays
-             //const assigneeMember = members.find(m => m.name === task.assignee);
-             //const assigneeId = assigneeMember?.id;
-             //const memberHolidays = assigneeId ? (memberHolidayMap.get(assigneeId) ?? new Set<string>()) : new Set<string>(); // Use assignee-specific holidays
-             const memberHolidays = task.assignee ? (memberHolidayMap.get(task.assignee) ?? new Set<string>()) : new Set<string>();
+             const assigneeMember = members.find(m => m.name === task.assignee);
+             const assigneeId = assigneeMember?.id;
+             const memberHolidays = task.assignee ? (memberHolidayMap.get(task.assignee) ?? new Set<string>()) : new Set<string>(); // Use assignee-specific holidays
+             //const memberHolidays = assigneeId ? (memberHolidayMap.get(assigneeId) ?? new Set<string>()) : new Set<string>();
 
             if (!task.startDate || !isValid(parseISO(task.startDate))) {
                 console.warn(`Task ${index + 1} (${task.ticketNumber}): Invalid or missing start date.`); // Use ticketNumber
@@ -283,7 +283,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 bufferRange: bufferPhaseValid && clampedBufferEnd >= clampedBufferStart ? [clampedBufferStart, clampedBufferEnd + 1] : undefined,
                 tooltip: tooltipContent,
                 assignee: task.assignee, // Pass assignee for potential holiday highlighting
-                assigneeId: assigneeMember?.id, // Pass assignee ID for holiday mapping
+                assigneeId: assigneeMember?.id ?? null, // Pass assignee ID for holiday mapping
             };
              // Include if *any* range is valid
              return result.devRange || result.qaRange || result.bufferRange ? result : null;
@@ -493,3 +493,4 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     </ChartContainer>
   );
 }
+
