@@ -271,21 +271,40 @@ export default function Home() {
           if (p.id === selectedProjectId) {
               currentProjectName = p.name; // Capture project name here
               let tempSprints = [...(p.sprintData.sprints ?? [])]; // Create a mutable copy (handle null/undefined)
+              let otherActiveSprintExists = false; // Flag to check if another sprint is already active
 
-              // First pass: Deactivate other sprints if the target is becoming active
+              // Check if starting this sprint would violate the single active sprint rule
               if (newStatus === 'Active') {
-                  tempSprints = tempSprints.map(otherS =>
-                      otherS.sprintNumber !== sprintNumber && otherS.status === 'Active'
-                          ? { ...otherS, status: 'Planned' } // Change other active to Planned
-                          : otherS
-                  );
-                  // Make sure the target sprint's status is set correctly below
-              } else if (newStatus === 'Completed') {
-                   // Logic to handle completion (e.g., calculate completed points, move unfinished tasks?) - currently just sets status
+                 otherActiveSprintExists = tempSprints.some(s => s.sprintNumber !== sprintNumber && s.status === 'Active');
+              }
+
+              if (otherActiveSprintExists) {
+                  // Don't proceed with the update, show toast instead
+                  setTimeout(() => {
+                      toast({
+                          variant: "destructive",
+                          title: "Active Sprint Limit",
+                          description: `Only one sprint can be active at a time. Sprint ${tempSprints.find(s => s.status === 'Active')?.sprintNumber} is already active.`,
+                      });
+                  }, 0);
+                   return p; // Return the project unchanged
               }
 
 
-              // Second pass: Update the target sprint's planning and status
+              // Deactivate other sprints only if the target is becoming active AND no other is already active
+              // This logic seems redundant if the check above passes, but kept for clarity
+              // if (newStatus === 'Active' && !otherActiveSprintExists) {
+              //     tempSprints = tempSprints.map(otherS =>
+              //         otherS.sprintNumber !== sprintNumber && otherS.status === 'Active'
+              //             ? { ...otherS, status: 'Planned' } // Change other active to Planned
+              //             : otherS
+              //     );
+              // } else if (newStatus === 'Completed') {
+                   // Logic to handle completion (e.g., calculate completed points, move unfinished tasks?) - currently just sets status
+              // }
+
+
+              // Update the target sprint's planning and status
               const updatedSprints = tempSprints.map(s => {
                   if (s.sprintNumber === sprintNumber) {
                       let finalStatus = s.status;
@@ -341,9 +360,15 @@ export default function Home() {
           return p;
         });
         // Trigger save effect by returning a new array reference
+        // Only show success toast if the operation wasn't blocked
+        if (!otherActiveSprintExists) {
+            setTimeout(() => { // Defer toast
+                 toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
+             }, 0);
+        }
         return [...updatedProjects];
      });
-     toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
+     // toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
    }, [selectedProjectId, toast, clientNow]);
 
 
@@ -358,6 +383,20 @@ export default function Home() {
     }
     let projectNameForToast = 'N/A';
     let projectWasUpdated = false;
+
+    // Check sprint limits BEFORE attempting to create
+     const currentSprints = projects.find(p => p.id === selectedProjectId)?.sprintData.sprints ?? [];
+     const numPlanned = currentSprints.filter(s => s.status === 'Planned').length;
+     const numActive = currentSprints.filter(s => s.status === 'Active').length;
+
+     if ((numPlanned >= 2) || (numPlanned >= 1 && numActive >= 1)) {
+        toast({
+            variant: "destructive",
+            title: "Sprint Limit Reached",
+            description: "Cannot plan new sprint. Limit is 2 Planned or 1 Planned + 1 Active.",
+        });
+         return; // Prevent creation
+     }
 
     setProjects(prevProjects => {
        const updatedProjects = prevProjects.map(p => {
@@ -438,7 +477,7 @@ export default function Home() {
          }, 50); // Increased timeout
      }
 
-  }, [selectedProjectId, toast]);
+  }, [selectedProjectId, toast, projects]); // Added projects dependency for limit check
 
   // Handler to complete a sprint
   const handleCompleteSprint = useCallback((sprintNumber: number) => {
@@ -1836,3 +1875,5 @@ export default function Home() {
   );
 
 }
+
+    

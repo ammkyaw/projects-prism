@@ -181,6 +181,15 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
   // Determine if the current form should be disabled
   const isFormDisabled = isSprintCompleted; // Can edit active sprint, but completed is read-only
 
+   // Calculate sprint planning limits status
+   const sprintLimits = useMemo(() => {
+       const numPlanned = sprints.filter(s => s.status === 'Planned').length;
+       const numActive = sprints.filter(s => s.status === 'Active').length;
+       const canPlanNew = !(numPlanned >= 2 || (numPlanned >= 1 && numActive >= 1));
+       const canStartNew = numActive === 0; // Only allow starting if none are active
+       return { numPlanned, numActive, canPlanNew, canStartNew };
+   }, [sprints]);
+
   const currentSprintStartDate = useMemo(() => {
      if (isCreatingNewSprint && newSprintForm.startDate) {
          return format(newSprintForm.startDate, 'yyyy-MM-dd');
@@ -303,6 +312,15 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
   };
 
   const handlePlanNewSprintClick = () => {
+      // Check limits before allowing planning mode
+      if (!sprintLimits.canPlanNew) {
+          toast({
+              variant: "destructive",
+              title: "Sprint Limit Reached",
+              description: "Cannot plan new sprint. Limit is 2 Planned or 1 Planned + 1 Active.",
+          });
+          return;
+      }
       setIsCreatingNewSprint(true);
   };
 
@@ -603,6 +621,16 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
  };
 
   const handleCreateAndSaveNewSprint = () => {
+      // Check limits again before final save attempt
+      if (!sprintLimits.canPlanNew) {
+          toast({
+              variant: "destructive",
+              title: "Sprint Limit Reached",
+              description: "Cannot plan new sprint. Limit is 2 Planned or 1 Planned + 1 Active.",
+          });
+          return;
+      }
+
       const sprintNumInt = parseInt(newSprintForm.sprintNumber, 10);
       const startDateObj = newSprintForm.startDate;
       const startDateStr = startDateObj ? format(startDateObj, 'yyyy-MM-dd') : '';
@@ -655,9 +683,9 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
            toast({ variant: "destructive", title: "Error", description: "Only 'Planned' sprints can be started." });
            return;
        }
-       const alreadyActiveSprint = sprints.find(s => s.status === 'Active');
-       if (alreadyActiveSprint) {
-           toast({ variant: "destructive", title: "Error", description: `Sprint ${alreadyActiveSprint.sprintNumber} is already active. Complete or replan it first.` });
+       // Check if starting is allowed based on limits
+       if (!sprintLimits.canStartNew) {
+           toast({ variant: "destructive", title: "Active Sprint Limit", description: `Only one sprint can be active at a time. Sprint ${sprints.find(s => s.status === 'Active')?.sprintNumber} is already active.` });
            return;
        }
 
@@ -1103,7 +1131,13 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                 <div className="flex justify-between items-center">
                     <CardTitle>Plan New Sprint</CardTitle>
                     {!isCreatingNewSprint && (
-                        <Button variant="outline" size="sm" onClick={handlePlanNewSprintClick}>
+                        <Button
+                           variant="outline"
+                           size="sm"
+                           onClick={handlePlanNewSprintClick}
+                           disabled={!sprintLimits.canPlanNew} // Disable based on limits
+                           title={!sprintLimits.canPlanNew ? "Sprint limit reached (Max 2 Planned or 1 Planned + 1 Active)" : "Plan a New Sprint"}
+                         >
                             <PlusCircle className="mr-2 h-4 w-4" /> Plan New Sprint
                         </Button>
                     )}
@@ -1224,7 +1258,14 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                     </CardContent>
                     <CardFooter className="border-t pt-4 flex justify-end gap-2">
                          {isSprintPlanned && (
-                             <Button onClick={handleStartSprint} variant="secondary" size="sm" className="bg-green-600 hover:bg-green-700 text-white">
+                             <Button
+                                 onClick={handleStartSprint}
+                                 variant="secondary"
+                                 size="sm"
+                                 className="bg-green-600 hover:bg-green-700 text-white"
+                                 disabled={!sprintLimits.canStartNew} // Disable based on limit
+                                 title={!sprintLimits.canStartNew ? "Another sprint is already active" : "Start Sprint"}
+                             >
                                  <PlayCircle className="mr-2 h-4 w-4" /> Start Sprint
                              </Button>
                          )}
@@ -1263,3 +1304,5 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
     </div>
   );
 }
+
+    
