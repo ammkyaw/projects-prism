@@ -1,5 +1,7 @@
+
 "use client";
 
+import * as React from 'react'; // Import React
 import type { Task, Member, HolidayCalendar, PublicHoliday } from '@/types/sprint-data';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine, ReferenceArea } from 'recharts';
 import { ChartConfig, ChartContainer } from "@/components/ui/chart"; // Removed ChartTooltipContent as we use custom tooltip
@@ -142,7 +144,15 @@ interface ChartDataPoint {
     tooltip: string;
     assignee?: string;
     assigneeId?: string | null; // Store assignee MEMBER ID for holiday lookup
-    originalTask?: Task; // Include original task for assignee view tooltip
+    originalTask?: Task; // Include original task data
+}
+
+// Interface for holiday information linked to a specific assignee on a specific day
+interface AssigneeHolidayInfo {
+    assigneeId: string | null; // Null if unassigned task has a 'default' holiday? unlikely
+    name: string; // Holiday name
+    color: string; // Color assigned to this holiday's calendar
+    calendarName: string; // Name of the calendar
 }
 
 
@@ -176,7 +186,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                    }
                });
            }
-           map.set(member.name, { holidays, calendarId }); // Store set and calendar ID using member NAME as key
+           // Use MEMBER ID as key for easier lookup from chart data
+           map.set(member.id, { holidays, calendarId });
        });
        return map;
    }, [members, holidayCalendars]);
@@ -194,10 +205,13 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     const processedTasks = tasks
         .map((task, index) => {
             const assigneeName = task.assignee;
-            // Get member holiday data using ASSIGNEE NAME as key
-            const memberHolidayData = assigneeName ? memberHolidayMap.get(assigneeName) : undefined;
+             // Find member object by name to get the MEMBER ID
+            const assigneeMember = members.find(m => m.name === assigneeName);
+            const assigneeId = assigneeMember?.id ?? null;
+
+            // Get member holiday data using MEMBER ID as key
+            const memberHolidayData = assigneeId ? memberHolidayMap.get(assigneeId) : undefined;
             const memberHolidays = memberHolidayData?.holidays ?? new Set<string>();
-            const assigneeMember = members.find(m => m.name === assigneeName); // Find member object by name
 
             if (!task.startDate || !isValid(parseISO(task.startDate))) {
                 console.warn(`Task ${task.ticketNumber}: Invalid or missing start date.`);
@@ -212,7 +226,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 return null;
             }
 
-             // Adjust the initial start date forward if it falls on a non-working day
+             // Adjust the initial start date forward if it falls on a non-working day for the *specific assignee*
              let currentPhaseStartDate = new Date(taskStartObj);
              while (isNonWorkingDay(currentPhaseStartDate, memberHolidays)) {
                  currentPhaseStartDate = addDays(currentPhaseStartDate, 1);
@@ -304,8 +318,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  qaRange: qaPhaseValid && clampedQaEnd >= clampedQaStart ? [clampedQaStart, clampedQaEnd + 1] : undefined,
                  bufferRange: bufferPhaseValid && clampedBufferEnd >= clampedBufferStart ? [clampedBufferStart, clampedBufferEnd + 1] : undefined,
                  tooltip: tooltipContent,
-                 assignee: task.assignee, // Pass assignee for potential holiday highlighting
-                 assigneeId: assigneeMember?.id, // Pass assignee MEMBER ID for holiday mapping
+                 assignee: task.assignee, // Pass assignee NAME for tooltip/grouping
+                 assigneeId: assigneeId, // Pass assignee MEMBER ID for holiday mapping
                  originalTask: task, // Keep original task data
              };
              // Include if *any* range is valid
@@ -345,7 +359,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             return processedTasks;
         }
 
-  }, [tasks, sprintStartDate, sprintEndDate, clientNow, memberHolidayMap, members, viewMode]); // Added viewMode
+  }, [tasks, sprintStartDate, sprintEndDate, clientNow, memberHolidayMap, members, viewMode]); // Added members dependency
 
 
    const weekendIndices = useMemo(() => {
@@ -367,9 +381,10 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
        return indices;
    }, [sprintStartDate, sprintEndDate]);
 
-   // Calculate holiday indices and names relevant to the specific calendars USED by assignees in the chart
-    const assignedHolidayMap = useMemo(() => {
-       const map = new Map<number, { name: string; color: string; calendarName: string }>(); // Map day index to holiday details
+   // Map of holiday details per day index, relevant ONLY to the assigned member for that task/assignee group
+   const assignedHolidayMap = useMemo(() => {
+       // Maps dayIndex => Map<assigneeId, AssigneeHolidayInfo>
+       const map = new Map<number, Map<string | null, AssigneeHolidayInfo>>();
        const calendarColors = new Map<string, string>(); // Map calendar ID to assigned color
        let colorIndex = 0;
 
@@ -378,57 +393,56 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
        const end = parseISO(sprintEndDate);
 
        try {
-         const days = eachDayOfInterval({ start, end });
+           const days = eachDayOfInterval({ start, end });
 
-         days.forEach(date => {
-           const dateStr = format(date, 'yyyy-MM-dd');
-           const dayIndex = differenceInDays(date, start);
-           let holidayForDay: { name: string; color: string; calendarName: string } | null = null;
+           // Iterate through each day in the sprint
+           days.forEach(date => {
+               const dateStr = format(date, 'yyyy-MM-dd');
+               const dayIndex = differenceInDays(date, start);
 
-           // Find *any* assigned member who has a holiday on this day
-           // Use the MEMBER ID stored in ChartDataPoint's assigneeId for lookup
-           const membersWithHolidayOnDay = chartData
-             .filter(dp => dp.assigneeId && memberHolidayMap.get(dp.assignee!)?.holidays.has(dateStr)) // Filter by assignee name to get holiday set
-             .map(dp => dp.assigneeId); // Get MEMBER IDs of members with holiday on this day
+               // Check each task/assignee data point
+               chartData.forEach(dp => {
+                   const assigneeId = dp.assigneeId; // Get the MEMBER ID
+                   const memberHolidayData = assigneeId ? memberHolidayMap.get(assigneeId) : undefined;
 
-            // Now find the CALENDAR ID for these members
-            const calendarIdsForDay = membersWithHolidayOnDay.map(memberId => members.find(m => m.id === memberId)?.holidayCalendarId).filter(Boolean);
+                   if (memberHolidayData?.holidays.has(dateStr)) {
+                       const calendarId = memberHolidayData.calendarId;
+                        if (calendarId) {
+                            const calendar = holidayCalendars.find(cal => cal.id === calendarId);
+                             if (calendar) {
+                                 // Assign color if not already assigned
+                                 if (!calendarColors.has(calendarId)) {
+                                     calendarColors.set(calendarId, holidayColorBase[colorIndex % holidayColorBase.length]);
+                                     colorIndex++;
+                                 }
+                                 const color = calendarColors.get(calendarId)!;
+                                 const holiday = calendar.holidays.find(hol => hol.date === dateStr);
+                                 const holidayInfo: AssigneeHolidayInfo = {
+                                     assigneeId: assigneeId,
+                                     name: holiday?.name ?? 'Public Holiday',
+                                     color: color,
+                                     calendarName: calendar.name || 'Unknown Calendar',
+                                 };
 
-
-           if (calendarIdsForDay.length > 0) {
-               // Prioritize showing one holiday, maybe the first one found?
-               const firstCalendarIdWithHoliday = calendarIdsForDay[0];
-                if (firstCalendarIdWithHoliday) {
-                    const calendar = holidayCalendars.find(cal => cal.id === firstCalendarIdWithHoliday);
-                    if (calendar) {
-                        // Assign color if not already assigned
-                       if (!calendarColors.has(firstCalendarIdWithHoliday)) {
-                         calendarColors.set(firstCalendarIdWithHoliday, holidayColorBase[colorIndex % holidayColorBase.length]);
-                         colorIndex++;
-                       }
-                       const color = calendarColors.get(firstCalendarIdWithHoliday)!;
-                       const holiday = calendar.holidays.find(hol => hol.date === dateStr);
-                       holidayForDay = {
-                         name: holiday?.name ?? 'Public Holiday',
-                         color: color,
-                         calendarName: calendar.name || 'Unknown Calendar',
-                       };
-                    }
-                }
-           }
-
-           if (holidayForDay) {
-             map.set(dayIndex, holidayForDay);
-           }
-         });
+                                  // Add this holiday info to the map for the current day, keyed by assignee ID
+                                 if (!map.has(dayIndex)) {
+                                     map.set(dayIndex, new Map());
+                                 }
+                                 map.get(dayIndex)!.set(assigneeId, holidayInfo);
+                             }
+                        }
+                   }
+               });
+           });
        } catch (e) {
-         console.error("Error calculating assigned holiday map:", e);
-         return new Map();
+           console.error("Error calculating assigned holiday map:", e);
+           return new Map();
        }
        return map;
-   }, [sprintStartDate, sprintEndDate, memberHolidayMap, holidayCalendars, chartData, members]); // Added members dependency
+   }, [sprintStartDate, sprintEndDate, memberHolidayMap, holidayCalendars, chartData]); // Removed members dependency, included chartData
 
-   // Generate Chart Config dynamically based on used calendars
+
+   // Generate Chart Config dynamically based on used calendars and weekend
    const chartConfig = useMemo(() => {
        const config: ChartConfig = {
            dev: { label: 'Development', color: devTaskBarColor },
@@ -436,13 +450,22 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
            buffer: { label: 'Buffer', color: bufferTaskBarColor },
            weekend: { label: 'Weekend', color: weekendColor },
        };
-       assignedHolidayMap.forEach((holidayInfo, dayIndex) => {
-           // Create a unique key based on calendar name and day index to handle multiple holidays from same calendar
-           const key = `holiday-${holidayInfo.calendarName.replace(/[^a-zA-Z0-9]/g, '-')}-${dayIndex}`;
-           if (!config[key]) {
-               config[key] = { label: holidayInfo.calendarName, color: holidayInfo.color };
-           }
-       });
+
+       // Collect unique calendar names and colors actually present in the assignedHolidayMap
+        const usedCalendars = new Set<string>(); // Store calendar IDs
+        assignedHolidayMap.forEach(dayMap => {
+            dayMap.forEach(holidayInfo => {
+                if (!usedCalendars.has(holidayInfo.calendarName)) {
+                     // Create a unique key for the legend based on calendar name
+                    const legendKey = `holiday-${holidayInfo.calendarName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                     if (!config[legendKey]) {
+                          config[legendKey] = { label: holidayInfo.calendarName, color: holidayInfo.color };
+                          usedCalendars.add(holidayInfo.calendarName); // Mark calendar as added to config
+                     }
+                }
+            });
+        });
+
        return config;
    }, [assignedHolidayMap]);
 
@@ -455,17 +478,22 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
            return dataPoint?.name ?? `Assignee ${value + 1}`; // Fallback if name not found
        } else {
            // Task view: find the data point by index
-           const dataPoint = chartData[value];
-           return dataPoint?.name ?? `Task ${value + 1}`; // Fallback if name not found
+           // Need to find the first data point with this index as multiple tasks might have the same index in assignee view processing
+           const dataPoint = chartData.find(d => d.index === value);
+           return dataPoint?.originalTask?.ticketNumber ?? `Task ${value + 1}`; // Use ticketNumber from original task
        }
    };
 
 
    // Determine unique Y-axis domain values (assignee names or task names)
     const yDomainValues = useMemo(() => {
-        // Get unique names based on the current view mode
-        return [...new Set(chartData.map(d => d.name))];
-    }, [chartData]); // Recalculate when chartData changes
+        if (viewMode === 'assignee') {
+             return [...new Set(chartData.map(d => d.name))];
+        } else {
+             // Task view: use original task ticket numbers
+             return chartData.map(d => d.originalTask?.ticketNumber || `Task ${d.index + 1}`);
+        }
+    }, [chartData, viewMode]); // Recalculate when chartData or viewMode changes
 
    // Calculate dynamic height based on the number of unique Y-axis values
    const rowHeight = 30; // Adjust as needed for spacing
@@ -512,7 +540,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                     return null;
                  }
                  // Only show holiday legends if that calendar actually has holidays in the map
-                 if (key.startsWith('holiday-') && !Array.from(assignedHolidayMap.values()).some(h => h.calendarName === value.label)) {
+                 if (key.startsWith('holiday-') && !Array.from(assignedHolidayMap.values()).some(map => Array.from(map.values()).some(h => h.calendarName === value.label))) {
                      return null;
                  }
                  return (
@@ -549,30 +577,67 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
              interval={0} // Show all calculated ticks
              allowDuplicatedCategory={true} // Allow sparse ticks
            />
-            {/* Render Weekend and Holiday areas first */}
-           {sprintDayIndices.map((index) => {
-             const isWeekend = weekendIndices.includes(index);
-             const holidayInfo = assignedHolidayMap.get(index);
-             const fillColor = holidayInfo ? holidayInfo.color : (isWeekend ? weekendColor : undefined);
-             const tooltipText = holidayInfo ? `${holidayInfo.calendarName}: ${holidayInfo.name}` : (isWeekend ? 'Weekend' : '');
+           {/* Weekend and Holiday Reference Areas */}
+            {sprintDayIndices.map((index) => {
+                const isWeekend = weekendIndices.includes(index);
+                 // In assignee view, get holidays ONLY for the assignee associated with this Y-axis index
+                const assigneeIndexForHoliday = viewMode === 'assignee'
+                     ? chartData.find(d => d.index === Math.round(index / chartHeight * yDomainValues.length))?.index ?? -1 // Heuristic to get assignee index
+                     : -1; // Not applicable in task view for filtering
 
-             if (fillColor) {
-                 return (
-                     <ReferenceArea
-                         key={`nonwork-area-${index}`}
-                         x1={index} // Start at the beginning of the day index
-                         x2={index + 1} // End at the start of the next day index
-                         y1={-0.5} // Start slightly above first bar
-                         y2={yDomainValues.length - 0.5} // Extend slightly below last bar/assignee
-                         ifOverflow="visible" // Allow overflow slightly for visual continuity
-                         fill={fillColor}
-                         fillOpacity={1} // Make weekend/holiday fully opaque
-                         yAxisId={0}
-                         strokeWidth={0} // No border for the area itself
-                     />
-                 );
-             }
-             return null;
+                 const holidayDayMap = assignedHolidayMap.get(index);
+                 let holidayInfo: AssigneeHolidayInfo | undefined = undefined;
+
+                 if (holidayDayMap) {
+                     if (viewMode === 'assignee') {
+                         // Find the data point corresponding to the Y-axis index to get the correct assigneeId
+                         const dataPointForYIndex = chartData.find(dp => dp.index === Math.round(index / chartHeight * yDomainValues.length)); // Adjust logic based on actual Y-axis mapping
+                         const assigneeIdForYIndex = dataPointForYIndex?.assigneeId;
+                         if (assigneeIdForYIndex) {
+                             holidayInfo = holidayDayMap.get(assigneeIdForYIndex);
+                         }
+                     } else {
+                         // In task view, show the first holiday found for that day (arbitrary)
+                         holidayInfo = Array.from(holidayDayMap.values())[0];
+                     }
+                 }
+
+
+                 const fillColor = holidayInfo ? holidayInfo.color : (isWeekend ? weekendColor : undefined);
+
+                 if (fillColor) {
+                    // Determine the Y range for this specific day/assignee
+                     let y1 = -0.5;
+                     let y2 = yDomainValues.length - 0.5;
+                      // In assignee view, restrict the holiday block to the specific assignee's row
+                      if (viewMode === 'assignee' && holidayInfo) {
+                         // Find the index corresponding to the assignee
+                          const assigneeYIndex = chartData.find(dp => dp.assigneeId === holidayInfo!.assigneeId)?.index;
+                          if (assigneeYIndex !== undefined) {
+                               y1 = assigneeYIndex - 0.45; // Slightly less than half the row height
+                               y2 = assigneeYIndex + 0.45; // Slightly less than half the row height
+                          } else {
+                              return null; // Don't render if assignee index not found (shouldn't happen)
+                          }
+                      }
+
+
+                     return (
+                         <ReferenceArea
+                             key={`nonwork-area-${index}-${holidayInfo?.assigneeId ?? 'weekend'}`}
+                             x1={index}
+                             x2={index + 1}
+                             y1={y1} // Use calculated y1
+                             y2={y2} // Use calculated y2
+                             ifOverflow="hidden" // Clip to the Y-axis bounds
+                             fill={fillColor}
+                             fillOpacity={1}
+                             yAxisId={0}
+                             strokeWidth={0}
+                         />
+                     );
+                 }
+                 return null;
            })}
 
           <YAxis
