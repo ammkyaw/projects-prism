@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Task, Member, HolidayCalendar, PublicHoliday } from '@/types/sprint-data'; // Added HolidayCalendar, PublicHoliday
@@ -80,30 +81,32 @@ const calculateEndDateSkippingNonWorkingDays = (startDate: Date, workingDays: nu
 
   // If 0 working days, return the start date, possibly adjusted if it's non-working
   if (workingDays <= 0) {
+       // Ensure the start date itself isn't a non-working day before returning
        while (isNonWorkingDay(currentDate, memberHolidays)) {
           currentDate = addDays(currentDate, 1);
-      }
+       }
        return currentDate;
   }
 
+   // Adjust start date forward if it falls on a non-working day
+   while (isNonWorkingDay(currentDate, memberHolidays)) {
+        currentDate = addDays(currentDate, 1);
+   }
+
   // Loop until the required number of working days are counted
   while (workingDaysCounted < workingDays) {
-     // Adjust start date forward if it falls on a non-working day
-     while (isNonWorkingDay(currentDate, memberHolidays)) {
-         currentDate = addDays(currentDate, 1);
-     }
-
+     // We've already ensured the first day is a working day
      workingDaysCounted++;
 
      // Only advance the date if we haven't finished counting
      if (workingDaysCounted < workingDays) {
          currentDate = addDays(currentDate, 1);
+         // Skip subsequent non-working days
+         while (isNonWorkingDay(currentDate, memberHolidays)) {
+             currentDate = addDays(currentDate, 1);
+         }
      }
   }
-  // After counting all working days, ensure the final date isn't a non-working day
-   while (isNonWorkingDay(currentDate, memberHolidays)) {
-       currentDate = addDays(currentDate, 1);
-   }
 
   return currentDate;
 };
@@ -194,21 +197,18 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             }
 
             let currentStartDate = new Date(taskStartObj); // Clone for calculations
-            let lastPhaseEndDateObj = new Date(taskStartObj); // Initialize with task start
-
-            // Ensure the effective start date of the *first* phase is a working day
-            while (isNonWorkingDay(currentStartDate, memberHolidays)) {
-                 currentStartDate = addDays(currentStartDate, 1);
-            }
-            lastPhaseEndDateObj = currentStartDate; // Update last end date after adjustment
 
             // --- Development Phase ---
+             while (isNonWorkingDay(currentStartDate, memberHolidays)) {
+                 currentStartDate = addDays(currentStartDate, 1);
+             }
             const devWorkingDays = parseEstimatedTimeToDays(task.devEstimatedTime);
             let devStartDateObj = currentStartDate; // Start dev from the adjusted working day
             let devEndDateObj = devStartDateObj;
             let devStartDayIndex = -1;
             let devEndDayIndex = -1;
             let devPhaseValid = false;
+             let lastPhaseEndDateObj = devStartDateObj; // Track the end of the last valid phase
 
              if (devWorkingDays !== null && devWorkingDays >= 0) {
                  devEndDateObj = calculateEndDateSkippingNonWorkingDays(devStartDateObj, devWorkingDays, memberHolidays);
@@ -218,9 +218,9 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  lastPhaseEndDateObj = devEndDateObj; // Update last end date
              } else {
                  console.warn(`Task ${task.ticketNumber}: Invalid Dev Est. Time ${task.devEstimatedTime}`);
-                 lastPhaseEndDateObj = devStartDateObj; // If dev invalid, last date is dev start
+                 // If dev is invalid, the effective end date for subsequent phases is the dev start date
+                 lastPhaseEndDateObj = devStartDateObj;
              }
-
 
             // --- QA Phase ---
              let qaStartDateObj = getNextWorkingDay(lastPhaseEndDateObj, memberHolidays);
@@ -238,7 +238,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  lastPhaseEndDateObj = qaEndDateObj; // Update last end date
              } else {
                   console.warn(`Task ${task.ticketNumber}: Invalid QA Est. Time ${task.qaEstimatedTime}`);
-                  lastPhaseEndDateObj = qaStartDateObj; // If QA invalid, last date is QA start
+                  // If QA invalid, last date remains from the previous phase (or dev start if dev was also invalid)
+                  lastPhaseEndDateObj = qaStartDateObj; // Last date is QA start
              }
 
 
@@ -258,7 +259,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 lastPhaseEndDateObj = bufferEndDateObj; // Update last end date
             } else {
                  console.warn(`Task ${task.ticketNumber}: Invalid Buffer Time ${task.bufferTime}`);
-                 lastPhaseEndDateObj = bufferStartDateObj; // If Buffer invalid, last date is Buffer start
+                 lastPhaseEndDateObj = bufferStartDateObj; // Last date is Buffer start
             }
 
             // Clamp indices to be within sprint bounds [0, sprintLengthDays - 1]
@@ -291,8 +292,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 qaRange: qaPhaseValid && clampedQaEnd >= clampedQaStart ? [clampedQaStart, clampedQaEnd + 1] : undefined,
                 bufferRange: bufferPhaseValid && clampedBufferEnd >= clampedBufferStart ? [clampedBufferStart, clampedBufferEnd + 1] : undefined,
                 tooltip: tooltipContent,
-                assignee: task.assignee,
-                assigneeId: assigneeMember?.id,
+                assignee: task.assignee, // Pass assignee for potential holiday highlighting
+                assigneeId: assigneeMember?.id, // Pass assignee ID for holiday mapping
             };
              // Include if *any* range is valid
              return result.devRange || result.qaRange || result.bufferRange ? result : null;
@@ -439,8 +440,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                          key={`nonwork-area-${index}`}
                          x1={index}
                          x2={index + 1} // Full width of the day cell
-                         y1={0} // Start from the top
-                         y2={chartData.length} // Extend to the bottom (adjust if Y axis domain changes)
+                         y1={-0.5} // Start slightly above first bar
+                         y2={chartData.length - 0.5} // Extend slightly below last bar
                          ifOverflow="hidden" // Don't extend beyond chart bounds
                          fill={fillColor}
                          fillOpacity={1} // Solid color
