@@ -77,6 +77,26 @@ const getSimulatedHolidays = (countryCode: string, year: number): PublicHoliday[
                  { name: 'Boxing Day', date: `${year}-12-26` }
             );
             break;
+        case 'JP': // Added Japan
+             holidays.push(
+                { name: "New Year's Day", date: `${year}-01-01` },
+                { name: "Coming of Age Day", date: `${year}-01-08` }, // Example fixed date, actual varies (2nd Mon in Jan)
+                { name: "Foundation Day", date: `${year}-02-11` },
+                { name: "Emperor's Birthday", date: `${year}-02-23` },
+                { name: "Vernal Equinox Day", date: `${year}-03-20` }, // Example fixed date, actual varies
+                { name: "Showa Day", date: `${year}-04-29` },
+                { name: "Constitution Memorial Day", date: `${year}-05-03` },
+                { name: "Greenery Day", date: `${year}-05-04` },
+                { name: "Children's Day", date: `${year}-05-05` },
+                { name: "Marine Day", date: `${year}-07-15` }, // Example fixed date, actual varies (3rd Mon in Jul)
+                { name: "Mountain Day", date: `${year}-08-11` },
+                { name: "Respect for the Aged Day", date: `${year}-09-16` }, // Example fixed date, actual varies (3rd Mon in Sep)
+                { name: "Autumnal Equinox Day", date: `${year}-09-22` }, // Example fixed date, actual varies
+                { name: "Health and Sports Day", date: `${year}-10-14` }, // Example fixed date, actual varies (2nd Mon in Oct)
+                { name: "Culture Day", date: `${year}-11-03` },
+                { name: "Labor Thanksgiving Day", date: `${year}-11-23` }
+             );
+             break;
         // Add other countries as needed
     }
     // Assign unique IDs (simulation)
@@ -361,7 +381,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
 
     calendars.forEach((cal, calIndex) => {
       // Skip completely empty calendars silently
-      if (!cal.name.trim() && cal.holidays.every(h => !h.name.trim() && !h.date.trim())) {
+      if (!cal.name.trim() && cal.holidays.every(h => !h.name.trim() && !h.date.trim()) && !cal.countryCode) {
         return;
       }
 
