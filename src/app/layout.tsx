@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google'; // Using Inter for a clean, modern font
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster'; // Import Toaster
+import { ThemeProvider } from "@/components/theme-provider"; // Import ThemeProvider
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -17,14 +18,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning> {/* suppressHydrationWarning for next-themes */}
       <body className={`${inter.className} antialiased flex flex-col min-h-screen`}>
-        {/* Header can be part of the page or a shared component */}
-        <main className="flex-1"> {/* Wrap main content */}
-          {children}
-        </main>
-        {/* Footer can be part of the page or a shared component */}
-        <Toaster /> {/* Add Toaster component */}
+        <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+        >
+          {/* Header can be part of the page or a shared component */}
+          <main className="flex-1"> {/* Wrap main content */}
+            {children}
+          </main>
+          {/* Footer can be part of the page or a shared component */}
+          <Toaster /> {/* Add Toaster component */}
+        </ThemeProvider>
       </body>
     </html>
   );
