@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning> {/* suppressHydrationWarning for next-themes */}
+    <html lang="en" suppressHydrationWarning>{/* suppressHydrationWarning for next-themes */}
       <body className={`${inter.className} antialiased flex flex-col min-h-screen`}>
         <ThemeProvider
             attribute="class"
