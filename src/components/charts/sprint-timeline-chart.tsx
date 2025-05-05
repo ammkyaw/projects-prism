@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from 'react'; // Import React
@@ -728,4 +727,3 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     </ChartContainer>
   );
 }
-
