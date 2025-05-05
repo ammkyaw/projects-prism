@@ -12,7 +12,7 @@ const Table = React.forwardRef<
     <table
       ref={ref}
       className={cn("w-full caption-bottom text-sm", className)}
-      {...props} // Ensure props are spread directly onto the table tag
+      {...props}
     >{children}</table>
   </div>
 ))
@@ -64,7 +64,7 @@ const TableRow = React.forwardRef<
       className
     )}
     {...props}
-  /> // Removed whitespace here
+  />
 ))
 TableRow.displayName = "TableRow"
 
