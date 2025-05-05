@@ -1,9 +1,8 @@
-
 "use client";
 
 import type { Task, Member, HolidayCalendar, PublicHoliday } from '@/types/sprint-data';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine, ReferenceArea } from 'recharts';
-import { ChartConfig, ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
+import { ChartConfig, ChartContainer } from "@/components/ui/chart"; // Removed ChartTooltipContent as we use custom tooltip
 import { Tooltip as UITooltip, TooltipContent as UITooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, parseISO, differenceInDays, addDays, isWithinInterval, getDay, eachDayOfInterval, isValid, isSameDay } from 'date-fns';
 import { useState, useEffect, useMemo } from 'react';
@@ -11,10 +10,12 @@ import { cn } from "@/lib/utils";
 import { Info } from 'lucide-react';
 
 const weekendColor = 'hsl(0 0% 10%)'; // Black for weekend background
-const holidayColor = 'hsl(0 72% 51%)'; // Dark Red for holidays
-const devTaskBarColor = 'hsl(var(--primary))'; // Use primary color (blue) for dev task bars
-const qaTaskBarColor = 'hsl(var(--chart-2))'; // Use chart-2 color for QA task bars (originally accent)
-const bufferTaskBarColor = 'hsl(var(--chart-3))'; // Use chart-3 color for buffer bars (originally muted)
+// Base colors for tasks
+const devTaskBarColor = 'hsl(var(--primary))';
+const qaTaskBarColor = 'hsl(var(--chart-2))';
+const bufferTaskBarColor = 'hsl(var(--chart-3))';
+// Base colors for holidays - will be dynamically assigned
+const holidayColorBase = ['hsl(var(--chart-4))', 'hsl(var(--chart-5))', 'hsl(var(--destructive))']; // Cycle through these
 
 // --- Helper Functions ---
 
@@ -92,15 +93,14 @@ const calculateEndDateSkippingNonWorkingDays = (startDate: Date, workingDays: nu
   // Loop until the required number of working days are counted
   // The start day is counted if it's a working day (which we ensured above)
   while (workingDaysCounted < workingDays) {
-     workingDaysCounted++;
+     // Count the current day only if it's a working day
+     if (!isNonWorkingDay(currentDate, memberHolidays)) {
+         workingDaysCounted++;
+     }
 
      // Only advance the date if we haven't finished counting
      if (workingDaysCounted < workingDays) {
          currentDate = addDays(currentDate, 1);
-         // Skip subsequent non-working days
-         while (isNonWorkingDay(currentDate, memberHolidays)) {
-             currentDate = addDays(currentDate, 1);
-         }
      }
   }
 
@@ -136,14 +136,13 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
    // Pre-compute holiday sets for each member
    const memberHolidayMap = useMemo(() => {
-       const map = new Map<string, Set<string>>(); // Map member name to set of holiday date strings
+       const map = new Map<string, { holidays: Set<string>, calendarId: string | null }>(); // Map member name to holiday set and calendar ID
        members.forEach(member => {
            const calendarId = member.holidayCalendarId;
            const calendar = holidayCalendars.find(cal => cal.id === calendarId);
            const holidays = new Set<string>();
            if (calendar) {
                calendar.holidays.forEach(holiday => {
-                   // Ensure date is valid and parse it correctly
                    if (holiday.date) {
                        try {
                            const parsedDate = parseISO(holiday.date);
@@ -158,7 +157,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                    }
                });
            }
-           map.set(member.name, holidays); // Use member.name as key
+           map.set(member.name, { holidays, calendarId }); // Store set and calendar ID
        });
        return map;
    }, [members, holidayCalendars]);
@@ -175,7 +174,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     const processedTasks = tasks
         .map((task, index) => {
             const assigneeName = task.assignee;
-            const memberHolidays = assigneeName ? (memberHolidayMap.get(assigneeName) ?? new Set<string>()) : new Set<string>();
+            const memberHolidayData = assigneeName ? memberHolidayMap.get(assigneeName) : undefined;
+            const memberHolidays = memberHolidayData?.holidays ?? new Set<string>();
 
             if (!task.startDate || !isValid(parseISO(task.startDate))) {
                 console.warn(`Task ${task.ticketNumber}: Invalid or missing start date.`);
@@ -213,8 +213,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 currentPhaseStartDate = getNextWorkingDay(devEndDateObj, memberHolidays); // Set start for next phase
             } else {
                 console.warn(`Task ${task.ticketNumber}: Invalid Dev Est. Time ${task.devEstimatedTime}`);
-                // If invalid, the next phase starts immediately after the adjusted task start date
-                 currentPhaseStartDate = getNextWorkingDay(devEndDateObj, memberHolidays);
+                currentPhaseStartDate = getNextWorkingDay(devStartDateObj, memberHolidays); // Start next phase after adjusted task start
             }
 
             // --- QA Phase ---
@@ -233,8 +232,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  currentPhaseStartDate = getNextWorkingDay(qaEndDateObj, memberHolidays); // Set start for next phase
              } else {
                   console.warn(`Task ${task.ticketNumber}: Invalid QA Est. Time ${task.qaEstimatedTime}`);
-                  // If invalid, the next phase starts immediately after the QA start date
-                 currentPhaseStartDate = getNextWorkingDay(qaStartDateObj, memberHolidays);
+                 currentPhaseStartDate = getNextWorkingDay(qaStartDateObj, memberHolidays); // Start next phase after QA start
              }
 
             // --- Buffer Phase ---
@@ -273,8 +271,6 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  task.reviewer ? `Reviewer: ${task.reviewer}` : '',
              ].filter(Boolean).join(' | ');
 
-            const assigneeMember = members.find(m => m.name === task.assignee);
-
             const result = {
                 name: task.ticketNumber || `Task ${task.id}`,
                 taskIndex: index,
@@ -283,14 +279,14 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 bufferRange: bufferPhaseValid && clampedBufferEnd >= clampedBufferStart ? [clampedBufferStart, clampedBufferEnd + 1] : undefined,
                 tooltip: tooltipContent,
                 assignee: task.assignee,
-                assigneeId: assigneeMember?.id,
+                assigneeId: memberHolidayData?.calendarId, // Pass calendar ID for holiday lookups
             };
              return result.devRange || result.qaRange || result.bufferRange ? result : null;
         }).filter(item => item !== null);
 
       return processedTasks as any[];
 
-  }, [tasks, sprintStartDate, sprintEndDate, clientNow, memberHolidayMap, members]);
+  }, [tasks, sprintStartDate, sprintEndDate, clientNow, memberHolidayMap, members]); // Add members dependency
 
 
    const weekendIndices = useMemo(() => {
@@ -312,40 +308,77 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
        return indices;
    }, [sprintStartDate, sprintEndDate]);
 
-    // Calculate holiday indices and names relevant ONLY to the assignees of the TASKS IN THE CHART
-    const assigneeHolidayMap = useMemo(() => {
-        const map = new Map<number, Set<string>>(); // Map day index to Set of holiday names
-        if (!sprintStartDate || !sprintEndDate || !isValid(parseISO(sprintStartDate)) || !isValid(parseISO(sprintEndDate))) return map;
-        const start = parseISO(sprintStartDate);
-        const end = parseISO(sprintEndDate);
+   // Calculate holiday indices and names relevant to the specific calendars USED by assignees in the chart
+    const assignedHolidayMap = useMemo(() => {
+       const map = new Map<number, { name: string; color: string; calendarName: string }>(); // Map day index to holiday details
+       const calendarColors = new Map<string, string>(); // Map calendar ID to assigned color
+       let colorIndex = 0;
 
-        try {
-            eachDayOfInterval({ start, end }).forEach(date => {
-                const dateStr = format(date, 'yyyy-MM-dd');
-                const dayIndex = differenceInDays(date, start);
-                let holidayNamesForDay: Set<string> | undefined;
+       if (!sprintStartDate || !sprintEndDate || !isValid(parseISO(sprintStartDate)) || !isValid(parseISO(sprintEndDate))) return map;
+       const start = parseISO(sprintStartDate);
+       const end = parseISO(sprintEndDate);
 
-                 chartData.forEach(taskData => {
-                     const assigneeName = taskData.assignee;
-                     const memberHolidays = assigneeName ? memberHolidayMap.get(assigneeName) : undefined;
-                     if (memberHolidays?.has(dateStr)) {
-                         if (!holidayNamesForDay) {
-                              holidayNamesForDay = new Set<string>();
-                              map.set(dayIndex, holidayNamesForDay);
-                         }
-                           const member = members.find(m => m.name === assigneeName);
-                          const calendar = holidayCalendars.find(cal => cal.id === member?.holidayCalendarId);
-                          const holiday = calendar?.holidays.find(hol => hol.date === dateStr);
-                          holidayNamesForDay.add(holiday?.name ?? 'Public Holiday');
-                     }
-                 });
-            });
-        } catch (e) {
-            console.error("Error calculating assignee holiday map:", e);
-            return new Map();
-        }
-        return map;
-    }, [sprintStartDate, sprintEndDate, chartData, members, memberHolidayMap, holidayCalendars]);
+       try {
+         const days = eachDayOfInterval({ start, end });
+
+         days.forEach(date => {
+           const dateStr = format(date, 'yyyy-MM-dd');
+           const dayIndex = differenceInDays(date, start);
+           let holidayForDay: { name: string; color: string; calendarName: string } | null = null;
+
+           // Iterate through tasks to find assignees with holidays on this day
+           for (const taskData of chartData) {
+             const assigneeName = taskData.assignee;
+             const memberData = assigneeName ? memberHolidayMap.get(assigneeName) : undefined;
+             if (memberData?.holidays.has(dateStr)) {
+               const calendarId = memberData.calendarId;
+               if (calendarId) {
+                 const calendar = holidayCalendars.find(cal => cal.id === calendarId);
+                 if (calendar) {
+                    // Assign color if not already assigned
+                   if (!calendarColors.has(calendarId)) {
+                     calendarColors.set(calendarId, holidayColorBase[colorIndex % holidayColorBase.length]);
+                     colorIndex++;
+                   }
+                   const color = calendarColors.get(calendarId)!;
+                   const holiday = calendar.holidays.find(hol => hol.date === dateStr);
+                   holidayForDay = {
+                     name: holiday?.name ?? 'Public Holiday',
+                     color: color,
+                     calendarName: calendar.name || 'Unknown Calendar',
+                   };
+                   break; // Found a relevant holiday for this day, no need to check other assignees
+                 }
+               }
+             }
+           }
+           if (holidayForDay) {
+             map.set(dayIndex, holidayForDay);
+           }
+         });
+       } catch (e) {
+         console.error("Error calculating assigned holiday map:", e);
+         return new Map();
+       }
+       return map;
+   }, [sprintStartDate, sprintEndDate, chartData, memberHolidayMap, holidayCalendars]); // Added holidayCalendars
+
+   // Generate Chart Config dynamically based on used calendars
+   const chartConfig = useMemo(() => {
+       const config: ChartConfig = {
+           dev: { label: 'Development', color: devTaskBarColor },
+           qa: { label: 'QA', color: qaTaskBarColor },
+           buffer: { label: 'Buffer', color: bufferTaskBarColor },
+           weekend: { label: 'Weekend', color: weekendColor },
+       };
+       assignedHolidayMap.forEach((holidayInfo, dayIndex) => {
+           const key = `holiday-${holidayInfo.calendarName.replace(/\s+/g, '-')}`;
+           if (!config[key]) {
+               config[key] = { label: holidayInfo.calendarName, color: holidayInfo.color };
+           }
+       });
+       return config;
+   }, [assignedHolidayMap]);
 
 
   if (!clientNow) {
@@ -377,15 +410,6 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
        return '';
    });
 
-
-  const chartConfig = {
-    dev: { label: 'Development', color: devTaskBarColor },
-    qa: { label: 'QA', color: qaTaskBarColor },
-    buffer: { label: 'Buffer', color: bufferTaskBarColor },
-    weekend: { label: 'Weekend', color: weekendColor },
-    holiday: { label: 'Holiday', color: holidayColor },
-  } satisfies ChartConfig;
-
   // Calculate dynamic height based on number of tasks
   const rowHeight = 30; // Adjust as needed for spacing
   const chartHeight = Math.max(250, chartData.length * rowHeight + 100); // Min height 250px, plus header/margins
@@ -393,9 +417,9 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
   // Custom Legend Component
     const CustomLegend = () => (
-      <div className="flex justify-center items-center space-x-4 mt-4 text-xs">
+      <div className="flex justify-center items-center flex-wrap space-x-4 mt-4 text-xs">
         {Object.entries(chartConfig).map(([key, value]) => (
-          <div key={key} className="flex items-center space-x-1">
+          <div key={key} className="flex items-center space-x-1 mb-1">
             <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: value.color }}></span>
             <span>{value.label}</span>
           </div>
@@ -429,9 +453,9 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             {/* Render Weekend and Holiday areas first */}
            {sprintDayIndices.map((index) => {
              const isWeekend = weekendIndices.includes(index);
-             const holidayNames = assigneeHolidayMap.get(index);
-             const fillColor = holidayNames ? holidayColor : (isWeekend ? weekendColor : undefined);
-             const tooltipText = holidayNames ? `Holiday: ${Array.from(holidayNames).join(', ')}` : (isWeekend ? 'Weekend' : '');
+             const holidayInfo = assignedHolidayMap.get(index);
+             const fillColor = holidayInfo ? holidayInfo.color : (isWeekend ? weekendColor : undefined);
+             const tooltipText = holidayInfo ? `${holidayInfo.calendarName}: ${holidayInfo.name}` : (isWeekend ? 'Weekend' : '');
 
              if (fillColor) {
                  return (
