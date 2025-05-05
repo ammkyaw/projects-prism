@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { SprintData, Sprint } from '@/types/sprint-data'; // Import Sprint type
@@ -94,9 +93,9 @@ export default function SprintSummaryTab({ sprintData, projectName, projectId, o
                               variant="ghost"
                               size="icon"
                               aria-label={`Edit Legacy Details for Sprint ${sprint.sprintNumber}`}
-                              title="Edit Legacy Details"
+                              title={sprint.status === 'Completed' ? 'Completed sprint details are read-only' : 'Edit Legacy Details'}
                               disabled={sprint.status === 'Completed'}
-                              className={cn("h-8 w-8", sprint.status === 'Completed' && "cursor-not-allowed opacity-50")} // Smaller icon button
+                              className={cn("h-8 w-8", sprint.status === 'Completed' && "cursor-not-allowed opacity-50")} // Smaller icon button & disable styles
                            >
                              <a><Edit className="h-4 w-4" /></a>
                            </Button>
