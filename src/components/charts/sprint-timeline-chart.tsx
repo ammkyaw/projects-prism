@@ -143,7 +143,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                    }
                });
            }
-           map.set(member.id, holidays);
+           map.set(member.name, holidays);
        });
        return map;
    }, [members, holidayCalendars]);
@@ -161,9 +161,10 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     const processedTasks = tasks
         .map((task, index) => {
              // Get assignee's member ID and specific holidays
-             const assigneeMember = members.find(m => m.name === task.assignee);
-             const assigneeId = assigneeMember?.id;
-             const memberHolidays = assigneeId ? (memberHolidayMap.get(assigneeId) ?? new Set<string>()) : new Set<string>(); // Use assignee-specific holidays
+             //const assigneeMember = members.find(m => m.name === task.assignee);
+             //const assigneeId = assigneeMember?.id;
+             //const memberHolidays = assigneeId ? (memberHolidayMap.get(assigneeId) ?? new Set<string>()) : new Set<string>(); // Use assignee-specific holidays
+             const memberHolidays = task.assignee ? (memberHolidayMap.get(task.assignee) ?? new Set<string>()) : new Set<string>();
 
             if (!task.startDate || !isValid(parseISO(task.startDate))) {
                 console.warn(`Task ${index + 1} (${task.ticketNumber}): Invalid or missing start date.`); // Use ticketNumber
@@ -282,7 +283,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 bufferRange: bufferPhaseValid && clampedBufferEnd >= clampedBufferStart ? [clampedBufferStart, clampedBufferEnd + 1] : undefined,
                 tooltip: tooltipContent,
                 assignee: task.assignee, // Pass assignee for potential holiday highlighting
-                assigneeId: assigneeId, // Pass assignee ID for holiday mapping
+                assigneeId: assigneeMember?.id, // Pass assignee ID for holiday mapping
             };
              // Include if *any* range is valid
              return result.devRange || result.qaRange || result.bufferRange ? result : null;
@@ -326,14 +327,14 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                  // Check if this date is a holiday for ANY assignee of the tasks being displayed
                  chartData.forEach(taskData => {
-                     const memberHolidays = taskData.assigneeId ? memberHolidayMap.get(taskData.assigneeId) : undefined;
+                     const memberHolidays = taskData.assignee ? memberHolidayMap.get(taskData.assignee) : undefined;
                      if (memberHolidays?.has(dateStr)) {
                          if (!holidayNamesForDay) {
                               holidayNamesForDay = new Set<string>();
                               map.set(dayIndex, holidayNamesForDay);
                          }
                           // Find the holiday name from the calendar definition
-                          const calendar = holidayCalendars.find(cal => cal.id === members.find(m => m.id === taskData.assigneeId)?.holidayCalendarId);
+                          const calendar = holidayCalendars.find(cal => cal.id === members.find(m => m.name === taskData.assignee)?.holidayCalendarId);
                           const holiday = calendar?.holidays.find(hol => hol.date === dateStr);
                           holidayNamesForDay.add(holiday?.name ?? 'Public Holiday');
                      }
@@ -348,7 +349,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
 
   if (!clientNow) {
-     return <div className="flex items-center justify-center h-full text-muted-foreground">Loading chart...</div>;
+     return <div className="flex justify-center items-center min-h-screen">Loading sprint details...</div>;
   }
 
   if (chartData.length === 0) {
