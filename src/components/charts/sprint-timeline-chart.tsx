@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Task, Member, HolidayCalendar, PublicHoliday } from '@/types/sprint-data';
@@ -125,9 +126,24 @@ interface SprintTimelineChartProps {
     sprintEndDate: string | undefined;
     members: Member[];
     holidayCalendars: HolidayCalendar[];
+    viewMode: 'task' | 'assignee'; // Add viewMode prop
 }
 
-export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndDate, members, holidayCalendars }: SprintTimelineChartProps) {
+// Interface for processed chart data
+interface ChartDataPoint {
+    name: string; // Task Ticket # or Assignee Name
+    index: number; // Index for Y-axis positioning
+    devRange?: [number, number];
+    qaRange?: [number, number];
+    bufferRange?: [number, number];
+    tooltip: string;
+    assignee?: string;
+    assigneeId?: string | null; // Calendar ID for holiday lookup
+    originalTask?: Task; // Include original task for assignee view tooltip
+}
+
+
+export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndDate, members, holidayCalendars, viewMode }: SprintTimelineChartProps) {
    const [clientNow, setClientNow] = useState<Date | null>(null);
 
    useEffect(() => {
@@ -162,6 +178,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
        return map;
    }, [members, holidayCalendars]);
 
+  // Process data based on the viewMode
   const chartData = useMemo(() => {
     if (!tasks || tasks.length === 0 || !sprintStartDate || !sprintEndDate || !isValid(parseISO(sprintStartDate)) || !isValid(parseISO(sprintEndDate))) {
       return [];
@@ -176,6 +193,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             const assigneeName = task.assignee;
             const memberHolidayData = assigneeName ? memberHolidayMap.get(assigneeName) : undefined;
             const memberHolidays = memberHolidayData?.holidays ?? new Set<string>();
+            const assigneeMember = members.find(m => m.name === assigneeName); // Find member object
 
             if (!task.startDate || !isValid(parseISO(task.startDate))) {
                 console.warn(`Task ${task.ticketNumber}: Invalid or missing start date.`);
@@ -253,7 +271,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  console.warn(`Task ${task.ticketNumber}: Invalid Buffer Time ${task.bufferTime}`);
             }
 
-            const clampIndex = (index: number) => Math.max(0, Math.min(sprintLengthDays - 1, index));
+            const clampIndex = (index: number) => Math.max(0, Math.min(sprintLengthDays, index)); // Use sprintLengthDays directly
 
             const clampedDevStart = clampIndex(devStartDayIndex);
             const clampedDevEnd = clampIndex(devEndDayIndex);
@@ -271,22 +289,54 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  task.reviewer ? `Reviewer: ${task.reviewer}` : '',
              ].filter(Boolean).join(' | ');
 
-            const result = {
-                name: task.ticketNumber || `Task ${task.id}`,
-                taskIndex: index,
+            const result: ChartDataPoint = {
+                name: task.ticketNumber || `Task ${task.id}`, // Use ticket number for default view
+                index: index, // Default index for task view
                 devRange: devPhaseValid && clampedDevEnd >= clampedDevStart ? [clampedDevStart, clampedDevEnd + 1] : undefined,
                 qaRange: qaPhaseValid && clampedQaEnd >= clampedQaStart ? [clampedQaStart, clampedQaEnd + 1] : undefined,
                 bufferRange: bufferPhaseValid && clampedBufferEnd >= clampedBufferStart ? [clampedBufferStart, clampedBufferEnd + 1] : undefined,
                 tooltip: tooltipContent,
                 assignee: task.assignee,
                 assigneeId: memberHolidayData?.calendarId, // Pass calendar ID for holiday lookups
+                originalTask: task, // Keep original task data
             };
+             // Include if *any* range is valid
              return result.devRange || result.qaRange || result.bufferRange ? result : null;
-        }).filter(item => item !== null);
+        }).filter(item => item !== null) as ChartDataPoint[]; // Assert type after filtering nulls
 
-      return processedTasks as any[];
 
-  }, [tasks, sprintStartDate, sprintEndDate, clientNow, memberHolidayMap, members]); // Add members dependency
+        // Group and process data based on viewMode
+        if (viewMode === 'assignee') {
+            const groupedByAssignee: { [key: string]: ChartDataPoint[] } = {};
+            processedTasks.forEach(task => {
+                const assigneeKey = task.assignee || 'Unassigned';
+                if (!groupedByAssignee[assigneeKey]) {
+                    groupedByAssignee[assigneeKey] = [];
+                }
+                groupedByAssignee[assigneeKey].push(task);
+            });
+
+            const assigneeChartData: ChartDataPoint[] = [];
+            Object.keys(groupedByAssignee).forEach((assigneeName, assigneeIndex) => {
+                groupedByAssignee[assigneeName].forEach((task, taskIndexInGroup) => {
+                    // Create a new object for each task within the assignee group
+                    assigneeChartData.push({
+                        ...task,
+                        name: assigneeName, // Y-axis label is now assignee name
+                        index: assigneeIndex, // Y-axis position based on assignee group
+                        tooltip: `Assignee: ${assigneeName} | ${task.tooltip}`, // Prepend assignee to tooltip
+                        // Add a sub-index or identifier if needed to distinguish tasks for the same assignee visually
+                        // For now, they might overlap if on the same dates, which is expected in assignee view
+                    });
+                });
+            });
+            return assigneeChartData;
+        } else {
+            // 'task' view (default) - use processedTasks as is
+            return processedTasks;
+        }
+
+  }, [tasks, sprintStartDate, sprintEndDate, clientNow, memberHolidayMap, members, viewMode]); // Added viewMode
 
 
    const weekendIndices = useMemo(() => {
@@ -326,32 +376,34 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
            const dayIndex = differenceInDays(date, start);
            let holidayForDay: { name: string; color: string; calendarName: string } | null = null;
 
-           // Iterate through tasks to find assignees with holidays on this day
-           for (const taskData of chartData) {
-             const assigneeName = taskData.assignee;
-             const memberData = assigneeName ? memberHolidayMap.get(assigneeName) : undefined;
-             if (memberData?.holidays.has(dateStr)) {
-               const calendarId = memberData.calendarId;
-               if (calendarId) {
-                 const calendar = holidayCalendars.find(cal => cal.id === calendarId);
-                 if (calendar) {
-                    // Assign color if not already assigned
-                   if (!calendarColors.has(calendarId)) {
-                     calendarColors.set(calendarId, holidayColorBase[colorIndex % holidayColorBase.length]);
-                     colorIndex++;
-                   }
-                   const color = calendarColors.get(calendarId)!;
-                   const holiday = calendar.holidays.find(hol => hol.date === dateStr);
-                   holidayForDay = {
-                     name: holiday?.name ?? 'Public Holiday',
-                     color: color,
-                     calendarName: calendar.name || 'Unknown Calendar',
-                   };
-                   break; // Found a relevant holiday for this day, no need to check other assignees
-                 }
-               }
-             }
+           // Find *any* assigned member who has a holiday on this day
+           const memberWithHoliday = members.find(member => {
+                const memberData = member.name ? memberHolidayMap.get(member.name) : undefined;
+                return memberData?.holidays.has(dateStr);
+           });
+
+           if (memberWithHoliday) {
+               const memberData = memberHolidayMap.get(memberWithHoliday.name);
+               const calendarId = memberData?.calendarId;
+                if (calendarId) {
+                    const calendar = holidayCalendars.find(cal => cal.id === calendarId);
+                    if (calendar) {
+                        // Assign color if not already assigned
+                       if (!calendarColors.has(calendarId)) {
+                         calendarColors.set(calendarId, holidayColorBase[colorIndex % holidayColorBase.length]);
+                         colorIndex++;
+                       }
+                       const color = calendarColors.get(calendarId)!;
+                       const holiday = calendar.holidays.find(hol => hol.date === dateStr);
+                       holidayForDay = {
+                         name: holiday?.name ?? 'Public Holiday',
+                         color: color,
+                         calendarName: calendar.name || 'Unknown Calendar',
+                       };
+                    }
+                }
            }
+
            if (holidayForDay) {
              map.set(dayIndex, holidayForDay);
            }
@@ -361,7 +413,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
          return new Map();
        }
        return map;
-   }, [sprintStartDate, sprintEndDate, chartData, memberHolidayMap, holidayCalendars]); // Added holidayCalendars
+   }, [sprintStartDate, sprintEndDate, members, memberHolidayMap, holidayCalendars]); // Added holidayCalendars
 
    // Generate Chart Config dynamically based on used calendars
    const chartConfig = useMemo(() => {
@@ -379,6 +431,25 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
        });
        return config;
    }, [assignedHolidayMap]);
+
+   // Determine Y-axis dataKey and formatter based on viewMode
+   const yAxisDataKey = viewMode === 'assignee' ? 'index' : 'index'; // Use 'index' which is assignee index or task index
+   const yAxisTickFormatter = (value: number) => {
+        // Ensure chartData[value] exists before accessing properties
+        const dataPoint = chartData[value];
+        if (!dataPoint) return ''; // Return empty string if data point doesn't exist
+        return dataPoint.name ?? ''; // Use task name or assignee name
+   };
+
+
+   // Determine unique Y-axis domain values (assignee names or task names)
+    const yDomainValues = useMemo(() => {
+        return [...new Set(chartData.map(d => d.name))];
+    }, [chartData]);
+
+   // Calculate dynamic height based on the number of unique Y-axis values
+   const rowHeight = 30; // Adjust as needed for spacing
+   const chartHeight = Math.max(250, yDomainValues.length * rowHeight + 100); // Min height 250px, plus header/margins
 
 
   if (!clientNow) {
@@ -410,10 +481,6 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
        return '';
    });
 
-  // Calculate dynamic height based on number of tasks
-  const rowHeight = 30; // Adjust as needed for spacing
-  const chartHeight = Math.max(250, chartData.length * rowHeight + 100); // Min height 250px, plus header/margins
-
 
   // Custom Legend Component
     const CustomLegend = () => (
@@ -434,8 +501,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
           layout="vertical"
           data={chartData}
           margin={{ top: 5, right: 20, left: 100, bottom: 20 }}
-          barCategoryGap="30%" // Adjust gap between tasks
-          barGap={2} // Adjust gap between bars within the same task
+          barCategoryGap="30%" // Adjust gap between tasks/assignees
+          barGap={2} // Adjust gap between bars within the same task/assignee
         >
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
           <XAxis
@@ -464,7 +531,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                          x1={index} // Start at the beginning of the day index
                          x2={index + 1} // End at the start of the next day index
                          y1={-0.5} // Start slightly above first bar
-                         y2={chartData.length - 0.5} // Extend slightly below last bar
+                         y2={yDomainValues.length - 0.5} // Extend slightly below last bar/assignee
                          ifOverflow="visible" // Allow overflow slightly for visual continuity
                          fill={fillColor}
                          fillOpacity={1} // Make weekend/holiday fully opaque
@@ -477,15 +544,16 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
            })}
 
           <YAxis
-            dataKey="taskIndex" // Use the index of the task in the chartData array
-            type="number" // Treat Y axis as categorical based on index
-            domain={[-0.5, chartData.length - 0.5]} // Domain covers indices
-            tickFormatter={(index) => chartData[index]?.name ?? ''} // Format tick using task name
+            dataKey={yAxisDataKey} // Use calculated dataKey
+            type="number" // Treat Y axis as numerical index
+            domain={[-0.5, yDomainValues.length - 0.5]} // Domain based on unique assignees/tasks
+            ticks={yDomainValues.map((_, i) => i)} // Ticks based on index
+            tickFormatter={yAxisTickFormatter} // Format tick using name
             tick={{ fontSize: 10, width: 90, textAnchor: 'end' }}
             axisLine={false}
             tickLine={false}
-            interval={0} // Show tick for every task
-            reversed={true} // Display tasks from top to bottom
+            interval={0} // Show tick for every assignee/task
+            reversed={true} // Display from top to bottom
             yAxisId={0} // Explicitly set Y-axis ID
             />
            <Tooltip
@@ -514,3 +582,5 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     </ChartContainer>
   );
 }
+
+    

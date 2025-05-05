@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -10,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info, PackagePlus, CheckCircle, Undo } from 'lucide-react'; // Added Undo
+import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info, PackagePlus, CheckCircle, Undo, View, User, Users } from 'lucide-react'; // Added View, User, Users
 import type { Sprint, SprintPlanning, Task, Member, SprintStatus, HolidayCalendar, Team } from '@/types/sprint-data'; // Added HolidayCalendar, Team
 import { initialSprintPlanning, taskStatuses, predefinedRoles, taskPriorities } from '@/types/sprint-data'; // Added taskPriorities
 import { useToast } from "@/hooks/use-toast";
@@ -164,6 +165,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
   const [newSprintForm, setNewSprintForm] = useState<NewSprintFormState>({ sprintNumber: '', startDate: undefined, duration: '' });
   const [isBacklogDialogOpen, setIsBacklogDialogOpen] = useState(false); // State for backlog dialog
   const [selectedBacklogIds, setSelectedBacklogIds] = useState<Set<string>>(new Set()); // State for selected backlog item IDs
+  const [timelineViewMode, setTimelineViewMode] = useState<'task' | 'assignee'>('task'); // State for timeline view
   const { toast } = useToast();
 
   const selectedSprint = useMemo(() => sprints.find(s => s.sprintNumber === selectedSprintNumber), [sprints, selectedSprintNumber]);
@@ -1044,7 +1046,17 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
 
         <Card>
            <CardHeader>
-               <CardTitle className="flex items-center gap-2"><GanttChartSquare className="h-5 w-5 text-muted-foreground" /> Sprint Timeline</CardTitle>
+               <div className="flex justify-between items-center">
+                 <CardTitle className="flex items-center gap-2"><GanttChartSquare className="h-5 w-5 text-muted-foreground" /> Sprint Timeline</CardTitle>
+                 <div className="flex items-center gap-2">
+                    <Button variant={timelineViewMode === 'task' ? "secondary" : "ghost"} size="icon" onClick={() => setTimelineViewMode('task')} title="View by Task">
+                       <GanttChartSquare className="h-4 w-4" />
+                    </Button>
+                    <Button variant={timelineViewMode === 'assignee' ? "secondary" : "ghost"} size="icon" onClick={() => setTimelineViewMode('assignee')} title="View by Assignee">
+                       <Users className="h-4 w-4" />
+                    </Button>
+                 </div>
+               </div>
                <CardDescription>Visualization of planned tasks based on estimates. Add start dates and estimates to see tasks here.</CardDescription>
            </CardHeader>
            <CardContent className="overflow-x-auto"> {/* Added overflow for horizontal scroll if needed */}
@@ -1055,6 +1067,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                        sprintEndDate={currentSprintEndDate}
                        members={members}
                        holidayCalendars={holidayCalendars} // Pass holiday calendars
+                       viewMode={timelineViewMode} // Pass view mode
                     />
                 ) : (
                     <div className="flex items-center justify-center text-muted-foreground h-full p-4 text-center min-h-[200px]"> {/* Ensure min height */}
@@ -1303,3 +1316,5 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
     </div>
   );
 }
+
+    
