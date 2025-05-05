@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -27,6 +28,7 @@ interface EditableCalendar extends HolidayCalendar {
   _internalId: string; // For React key management
   holidays: EditableHoliday[];
   isCountryBased?: boolean; // Flag to indicate if holidays are auto-populated
+  isLoading?: boolean; // Flag to indicate holidays are being fetched
 }
 
 interface EditableHoliday extends PublicHoliday {
@@ -34,18 +36,16 @@ interface EditableHoliday extends PublicHoliday {
   dateObj?: Date | undefined; // For date picker state
 }
 
-// Simplified list of countries for the dropdown
+// Updated list of countries for the dropdown
 const countryOptions = [
     { code: 'US', name: 'United States' },
     { code: 'GB', name: 'United Kingdom' },
     { code: 'CA', name: 'Canada' },
     { code: 'AU', name: 'Australia' },
     { code: 'DE', name: 'Germany' },
-    { code: 'FR', name: 'France' },
-    { code: 'IN', name: 'India' },
+    { code: 'SG', name: 'Singapore' }, // Added Singapore
     { code: 'JP', name: 'Japan' },
-    { code: 'BR', name: 'Brazil' },
-    // Add more countries as needed
+    // Removed Brazil, France, India
 ];
 
 const createEmptyCalendar = (): EditableCalendar => ({
@@ -55,6 +55,7 @@ const createEmptyCalendar = (): EditableCalendar => ({
   countryCode: '', // Initialize country code as empty string
   holidays: [createEmptyHoliday()],
   isCountryBased: false,
+  isLoading: false,
 });
 
 const createEmptyHoliday = (): EditableHoliday => ({
@@ -80,29 +81,40 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
   const [calendars, setCalendars] = useState<EditableCalendar[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const { toast } = useToast();
-  const currentYear = getYear(new Date()); // Get current year for simulated holidays
+  const currentYear = getYear(new Date()); // Get current year for holiday fetching
 
   // --- New function to fetch holidays from the Nager.Date API ---
   const fetchNagerHolidays = useCallback(async (countryCode: string, year: number): Promise<PublicHoliday[]> => {
+    if (!countryCode) return []; // Don't fetch if no country code
+
     try {
       const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${countryCode}`);
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Attempt to parse error response body for more details
+        let errorBody = '';
+        try {
+            errorBody = await response.text();
+        } catch {
+            // Ignore if can't read body
+        }
+        console.error(`HTTP error fetching holidays for ${countryCode}: ${response.status} ${response.statusText}`, errorBody);
+        throw new Error(`HTTP error! status: ${response.status} - Failed to fetch holidays for ${countryCode}`);
       }
       const data = await response.json();
       // Map the API response to the PublicHoliday type
       const holidays: PublicHoliday[] = data.map((item: any, index: number) => ({
-        id: `nager_${countryCode}_${year}_${index}`, // Generate a unique ID
+        id: `nager_${countryCode}_${year}_${item.date}_${index}`, // Generate a unique ID using date
         name: item.name,
         date: item.date, // Already in YYYY-MM-DD format
       }));
+       console.log(`Fetched ${holidays.length} holidays for ${countryCode} in ${year}`);
       return holidays;
     } catch (error: any) {
-      console.error("Failed to fetch holidays from Nager.Date API:", error.message);
+      console.error(`Failed to fetch holidays from Nager.Date API for ${countryCode}:`, error.message);
       toast({
         variant: "destructive",
         title: "Error Fetching Holidays",
-        description: "Could not retrieve holidays from the API.",
+        description: `Could not retrieve holidays for ${countryCode}. ${error.message}`,
       });
       return [];
     }
@@ -110,51 +122,28 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
 
 
   // Initialize or update calendars based on initial prop
-  useEffect(() => {
-    const mappedCalendars = initialCalendars.map((cal, calIndex) => {
-        const isCountryBased = !!cal.countryCode; // Consider country-based if code exists
-        let holidaysToMap = cal.holidays || [];
+   useEffect(() => {
+     console.log("Initializing calendars from props:", initialCalendars);
+     const mappedCalendars = initialCalendars.map((cal, calIndex) => ({
+         ...cal,
+         countryCode: cal.countryCode || '',
+         _internalId: cal.id || `initial_cal_${calIndex}_${Date.now()}`,
+         isCountryBased: !!cal.countryCode,
+         isLoading: false, // Initialize isLoading flag
+         holidays: (cal.holidays || []).map((holiday, holIndex) => ({
+             ...holiday,
+             _internalId: holiday.id || `initial_hol_${calIndex}_${holIndex}_${Date.now()}`,
+             dateObj: parseDateString(holiday.date),
+         })),
+     }));
+     setCalendars(mappedCalendars);
+     // Add one empty calendar if none exist initially
+     if (mappedCalendars.length === 0) {
+         setCalendars([createEmptyCalendar()]);
+     }
+     setHasUnsavedChanges(false);
+   }, [initialCalendars, projectId]); // Only depend on initial data and project ID
 
-        // If country-based, potentially fetch/simulate (only if not already populated appropriately)
-        // This logic might need refinement based on how fetched data is stored/identified
-        if (isCountryBased && cal.countryCode) { // Use same conditional as the function
-            // If initial data has country code but no holidays, fetch
-            fetchNagerHolidays(cal.countryCode, currentYear)
-            .then(fetchedHolidays => {
-               const mappedEditableHolidays = fetchedHolidays.map((hol, index) => ({
-                    ...hol,
-                    _internalId: hol.id || `fetched_${cal._internalId}_${index}_${Date.now()}`,
-                    dateObj: parseDateString(hol.date),
-                 }));
-                 setCalendars(prev =>
-                    prev.map(pCal =>
-                      pCal._internalId === cal._internalId
-                        ? { ...pCal, holidays: mappedEditableHolidays, isCountryBased: true }
-                        : pCal
-                    )
-                 );
-            });
-        }
-
-        return {
-            ...cal,
-            countryCode: cal.countryCode || '',
-            _internalId: cal.id || `initial_cal_${calIndex}_${Date.now()}`,
-            isCountryBased, // Set the flag
-            holidays: holidaysToMap.map((holiday, holIndex) => ({
-                ...holiday,
-                _internalId: holiday.id || `initial_hol_${calIndex}_${holIndex}_${Date.now()}`,
-                dateObj: parseDateString(holiday.date),
-            })),
-        };
-    });
-    setCalendars(mappedCalendars);
-    // Add one empty calendar if none exist initially
-    if (mappedCalendars.length === 0) {
-        setCalendars([createEmptyCalendar()]);
-    }
-    setHasUnsavedChanges(false);
-  }, [initialCalendars, projectId, currentYear, fetchNagerHolidays]); // Add fetchHolidays to dependencies
 
   // Track unsaved changes
   useEffect(() => {
@@ -162,7 +151,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
            cals.map(({ id, holidays, ...rest }) => ({
                ...rest,
                name: rest.name.trim(),
-               countryCode: rest.countryCode?.trim() || '',
+               countryCode: rest.countryCode?.trim() || undefined, // Store as undefined if empty
                holidays: (holidays || []).map(({ id: hId, ...hRest }) => ({
                    ...hRest,
                    name: hRest.name.trim(),
@@ -173,7 +162,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
        const originalCalendarsString = JSON.stringify(cleanCalendars(initialCalendars));
        const currentCalendarsString = JSON.stringify(
            cleanCalendars(
-               calendars.filter(cal => cal.name.trim() || cal.holidays.some(h => h.name.trim() || h.date.trim())) // Filter empty before comparing
+               calendars.filter(cal => cal.name.trim() || cal.holidays.some(h => h.name.trim() || h.date.trim()) || cal.countryCode) // Filter empty before comparing
            )
        );
        setHasUnsavedChanges(originalCalendarsString !== currentCalendarsString);
@@ -181,6 +170,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
 
   const handleAddCalendar = () => {
     setCalendars(prev => [...prev, createEmptyCalendar()]);
+    setHasUnsavedChanges(true);
   };
 
   const handleRemoveCalendar = (internalId: string) => {
@@ -189,6 +179,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
         // Ensure at least one (potentially empty) calendar remains
         return newCalendars.length > 0 ? newCalendars : [createEmptyCalendar()];
     });
+     setHasUnsavedChanges(true);
   };
 
   const handleCalendarInputChange = (internalId: string, field: keyof Omit<HolidayCalendar, 'id' | 'holidays' | 'countryCode'>, value: string) => {
@@ -197,6 +188,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
         cal._internalId === internalId ? { ...cal, [field]: value } : cal
       )
     );
+     setHasUnsavedChanges(true);
   };
 
   // Handler specifically for country code change from Select
@@ -204,30 +196,64 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
       const countryCode = value === 'none' ? '' : value;
       const isNowCountryBased = !!countryCode;
 
-      // Fetch holidays and then update state
-      fetchNagerHolidays(countryCode, currentYear)
-      .then(fetchedHolidays => {
-        // Map fetched holidays to EditableHoliday format
-        const mappedEditableHolidays = fetchedHolidays.map((hol, index) => ({
-            ...hol,
-            _internalId: hol.id || `fetched_${internalId}_${index}_${Date.now()}`,
-            dateObj: parseDateString(hol.date),
-         }));
+       // Set loading state for the specific calendar
+       setCalendars(prev =>
+         prev.map(cal =>
+           cal._internalId === internalId ? { ...cal, isLoading: isNowCountryBased } : cal
+         )
+       );
+       setHasUnsavedChanges(true); // Mark as changed immediately
 
-         setCalendars(prev =>
-           prev.map(cal => {
-               if (cal._internalId === internalId) {
-                   return {
-                       ...cal,
-                       countryCode: countryCode,
-                       isCountryBased: isNowCountryBased,
-                       holidays: mappedEditableHolidays,
-                   };
-               }
-               return cal;
+       if (isNowCountryBased) {
+           fetchNagerHolidays(countryCode, currentYear)
+           .then(fetchedHolidays => {
+               // Map fetched holidays to EditableHoliday format
+               const mappedEditableHolidays = fetchedHolidays.map((hol, index) => ({
+                   ...hol,
+                   _internalId: hol.id || `fetched_${internalId}_${index}_${Date.now()}`,
+                   dateObj: parseDateString(hol.date),
+                }));
+
+                setCalendars(prev =>
+                  prev.map(cal => {
+                      if (cal._internalId === internalId) {
+                          return {
+                              ...cal,
+                              countryCode: countryCode,
+                              isCountryBased: true,
+                              holidays: mappedEditableHolidays,
+                              isLoading: false, // Turn off loading
+                          };
+                      }
+                      return cal;
+                  })
+                );
            })
-         );
-      });
+           .catch(() => {
+               // If fetch fails, reset loading state
+               setCalendars(prev =>
+                 prev.map(cal =>
+                   cal._internalId === internalId ? { ...cal, isLoading: false } : cal
+                 )
+               );
+           });
+       } else {
+           // If switching to custom, clear holidays and reset flags
+            setCalendars(prev =>
+                prev.map(cal => {
+                    if (cal._internalId === internalId) {
+                        return {
+                            ...cal,
+                            countryCode: '',
+                            isCountryBased: false,
+                            holidays: [createEmptyHoliday()], // Start with one empty row for custom
+                            isLoading: false, // Ensure loading is off
+                        };
+                    }
+                    return cal;
+                })
+            );
+       }
   };
 
   const handleAddHoliday = (calendarInternalId: string) => {
@@ -244,6 +270,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
           : cal
       )
     );
+     setHasUnsavedChanges(true);
   };
 
   const handleRemoveHoliday = (calendarInternalId: string, holidayInternalId: string) => {
@@ -266,6 +293,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
         return cal;
       })
     );
+     setHasUnsavedChanges(true);
   };
 
   const handleHolidayInputChange = (
@@ -290,6 +318,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
           : cal
       )
     );
+     setHasUnsavedChanges(true);
   };
 
    const handleHolidayDateChange = (
@@ -319,6 +348,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
                     : cal
             )
         );
+         setHasUnsavedChanges(true);
     };
 
     const renderDatePicker = (
@@ -392,10 +422,14 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
         const holidayDate = hol.date.trim();
 
         let holidayErrors: string[] = [];
-        if (!holidayName) holidayErrors.push("Holiday name required");
-        if (!holidayDate || !/^\d{4}-\d{2}-\d{2}$/.test(holidayDate) || !isValid(parseISO(holidayDate))) {
-            holidayErrors.push("Invalid Date (use YYYY-MM-DD)");
+        // Only validate name/date if it's NOT country-based, OR if country-based and the data is missing (shouldn't happen)
+        if (!cal.isCountryBased || (cal.isCountryBased && (!holidayName || !holidayDate))) {
+            if (!holidayName) holidayErrors.push("Holiday name required");
+             if (!holidayDate || !/^\d{4}-\d{2}-\d{2}$/.test(holidayDate) || !isValid(parseISO(holidayDate))) {
+                 holidayErrors.push("Invalid Date (use YYYY-MM-DD)");
+             }
         }
+
 
         const nameDateKey = `${holidayName.toLowerCase()}|${holidayDate}`;
         if (holidayName && holidayDate && holidayNamesDates.has(nameDateKey)) {
@@ -421,10 +455,12 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
         });
       });
 
-       // If it was country-based and now has no holidays (e.g., country removed), report error?
+       // If it was country-based and now has no holidays (e.g., country removed or API failed), report error?
         if (cal.isCountryBased && finalHolidays.length === 0) {
-           // This scenario shouldn't happen with current logic, but good to consider
-           toast({ variant: "warning", title: `Warning for Calendar ${calIndex + 1}`, description: "Country-based calendar has no holidays." });
+           // This might happen if the API call failed initially or during save
+           toast({ variant: "warning", title: `Warning for Calendar '${calendarName}'`, description: "Country-based calendar has no holidays. Ensure the country code is valid." });
+           // Optionally prevent saving this calendar or save it as custom?
+           // For now, we save it as is (potentially empty)
        }
 
 
@@ -454,6 +490,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
         _internalId: cal.id || `saved_cal_${calIndex}_${Date.now()}`,
         countryCode: cal.countryCode || '', // Ensure string for state
          isCountryBased: !!cal.countryCode, // Recalculate flag based on saved data
+         isLoading: false, // Ensure loading is off
         holidays: cal.holidays.map((hol, holIndex) => ({
             ...hol,
             _internalId: hol.id || `saved_hol_${cal.id}_${holIndex}_${Date.now()}`,
@@ -471,7 +508,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
         <div className="flex justify-between items-center">
            <div>
               <CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /> Holiday Calendars: {projectName}</CardTitle>
-               <CardDescription>Manage public holiday calendars. Select a country to auto-populate standard holidays, or choose 'None' for a custom calendar.</CardDescription>
+               <CardDescription>Manage public holiday calendars. Select a country to auto-populate standard holidays for the current year, or choose 'None' for a custom calendar.</CardDescription>
            </div>
            <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
               <Save className="mr-2 h-4 w-4" /> Save Calendars
@@ -491,7 +528,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
                         placeholder="Calendar Name (e.g., US Holidays)"
                         className="h-8 text-base font-medium flex-1 mr-2 border-0 shadow-none focus-visible:ring-0 focus:bg-muted/50"
                      />
-                       <Select value={calendar.countryCode || 'none'} onValueChange={(value) => handleCountryChange(calendar._internalId, value)}>
+                       <Select value={calendar.countryCode || 'none'} onValueChange={(value) => handleCountryChange(calendar._internalId, value)} disabled={calendar.isLoading}>
                            <SelectTrigger
                                className="h-8 w-48 text-sm border-0 shadow-none focus-visible:ring-0 focus:bg-muted/50"
                            >
@@ -530,12 +567,18 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
 
               <AccordionContent className="px-4 pt-4 pb-2">
                  {/* Display Info message if country-based */}
-                 {calendar.isCountryBased && (
+                 {calendar.isLoading ? (
+                      <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-700 flex items-center gap-2">
+                         <Info className="h-4 w-4 animate-spin" /> {/* Add spinner for loading state */}
+                         Fetching holidays for {countryOptions.find(c=>c.code===calendar.countryCode)?.name}...
+                      </div>
+                  ) : calendar.isCountryBased ? (
                       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700 flex items-center gap-2">
                          <Info className="h-4 w-4" />
-                         Holidays are automatically populated based on the selected country ({countryOptions.find(c=>c.code===calendar.countryCode)?.name}). Manual editing is disabled.
+                         Holidays for {currentYear} automatically populated based on {countryOptions.find(c=>c.code===calendar.countryCode)?.name}. Manual editing is disabled.
                       </div>
-                  )}
+                  ) : null}
+
 
                 <div className="space-y-4">
                    {/* Holiday Header */}
@@ -545,45 +588,51 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
                     <div /> {/* Placeholder for delete */}
                   </div>
                   {/* Holiday Rows */}
-                  <div className="space-y-4 md:space-y-2">
-                     {calendar.holidays.map((holiday) => (
-                       <div key={holiday._internalId} className="grid grid-cols-2 md:grid-cols-[1fr_160px_40px] gap-x-3 gap-y-2 items-start">
-                         {/* Holiday Name */}
-                         <div className="md:col-span-1 col-span-2">
-                            <Label htmlFor={`holiday-name-${holiday._internalId}`} className="md:hidden text-xs font-medium">Holiday Name*</Label>
-                            <Input
-                                id={`holiday-name-${holiday._internalId}`}
-                                value={holiday.name}
-                                onChange={e => handleHolidayInputChange(calendar._internalId, holiday._internalId, 'name', e.target.value)}
-                                placeholder="Holiday Name"
-                                className="h-9"
-                                disabled={calendar.isCountryBased} // Disable if country-based
-                            />
+                   <div className="space-y-4 md:space-y-2 max-h-60 overflow-y-auto"> {/* Scrollable area for holidays */}
+                     {calendar.holidays.length === 0 && !calendar.isLoading ? (
+                         <p className="text-sm text-muted-foreground italic py-4 text-center">
+                             {calendar.isCountryBased ? `No holidays found for ${countryOptions.find(c=>c.code===calendar.countryCode)?.name} in ${currentYear}.` : 'No custom holidays added yet.'}
+                         </p>
+                     ) : (
+                       calendar.holidays.map((holiday) => (
+                         <div key={holiday._internalId} className="grid grid-cols-2 md:grid-cols-[1fr_160px_40px] gap-x-3 gap-y-2 items-start">
+                           {/* Holiday Name */}
+                           <div className="md:col-span-1 col-span-2">
+                              <Label htmlFor={`holiday-name-${holiday._internalId}`} className="md:hidden text-xs font-medium">Holiday Name*</Label>
+                              <Input
+                                  id={`holiday-name-${holiday._internalId}`}
+                                  value={holiday.name}
+                                  onChange={e => handleHolidayInputChange(calendar._internalId, holiday._internalId, 'name', e.target.value)}
+                                  placeholder="Holiday Name"
+                                  className="h-9"
+                                  disabled={calendar.isCountryBased || calendar.isLoading} // Disable if country-based or loading
+                              />
+                           </div>
+                           {/* Holiday Date */}
+                           <div className="md:col-span-1 col-span-1">
+                             <Label htmlFor={`holiday-date-${holiday._internalId}`} className="md:hidden text-xs font-medium">Date*</Label>
+                              {renderDatePicker(calendar._internalId, holiday._internalId, holiday.dateObj, calendar.isCountryBased || calendar.isLoading)}
+                           </div>
+                           {/* Delete Holiday Button */}
+                           <div className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
+                              <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleRemoveHoliday(calendar._internalId, holiday._internalId)}
+                                  className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                                  aria-label="Remove holiday row"
+                                  disabled={calendar.isCountryBased || calendar.isLoading} // Disable if country-based or loading
+                              >
+                                  <Trash2 className="h-4 w-4" />
+                              </Button>
+                           </div>
                          </div>
-                         {/* Holiday Date */}
-                         <div className="md:col-span-1 col-span-1">
-                           <Label htmlFor={`holiday-date-${holiday._internalId}`} className="md:hidden text-xs font-medium">Date*</Label>
-                            {renderDatePicker(calendar._internalId, holiday._internalId, holiday.dateObj, calendar.isCountryBased)}
-                         </div>
-                         {/* Delete Holiday Button */}
-                         <div className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleRemoveHoliday(calendar._internalId, holiday._internalId)}
-                                className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                                aria-label="Remove holiday row"
-                                disabled={calendar.isCountryBased} // Disable if country-based
-                            >
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                         </div>
-                       </div>
-                     ))}
-                  </div>
+                       ))
+                     )}
+                   </div>
                    {/* Only show Add Holiday button for custom calendars */}
-                   {!calendar.isCountryBased && (
+                   {!calendar.isCountryBased && !calendar.isLoading && (
                       <Button
                         type="button"
                         onClick={() => handleAddHoliday(calendar._internalId)}
@@ -614,4 +663,3 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
     </Card>
   );
 }
-
