@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -257,118 +256,104 @@ export default function Home() {
     return project;
   }, [projects, selectedProjectId]);
 
-  // Handler to save planning data AND potentially update sprint status (used by PlanningTab)
+ // Handler to save planning data AND potentially update sprint status (used by PlanningTab)
    const handleSavePlanningAndUpdateStatus = useCallback((sprintNumber: number, planningData: SprintPlanning, newStatus?: SprintStatus) => {
      if (!selectedProjectId) {
         toast({ variant: "destructive", title: "Error", description: "No project selected." });
         return;
      }
+
      let currentProjectName = 'N/A';
      let statusUpdateMessage = '';
+     let otherActiveSprintExists = false; // Moved declaration outside setProjects
 
      setProjects(prevProjects => {
-        const updatedProjects = prevProjects.map(p => {
-          if (p.id === selectedProjectId) {
-              currentProjectName = p.name; // Capture project name here
-              let tempSprints = [...(p.sprintData.sprints ?? [])]; // Create a mutable copy (handle null/undefined)
-              let otherActiveSprintExists = false; // Flag to check if another sprint is already active
+        const projectIndex = prevProjects.findIndex(p => p.id === selectedProjectId);
+        if (projectIndex === -1) return prevProjects; // Project not found
 
-              // Check if starting this sprint would violate the single active sprint rule
-              if (newStatus === 'Active') {
-                 otherActiveSprintExists = tempSprints.some(s => s.sprintNumber !== sprintNumber && s.status === 'Active');
-              }
+        const currentProject = prevProjects[projectIndex];
+        currentProjectName = currentProject.name; // Capture name
+        const tempSprints = [...(currentProject.sprintData.sprints ?? [])]; // Handle null/undefined
 
-              if (otherActiveSprintExists) {
-                  // Don't proceed with the update, show toast instead
-                  setTimeout(() => {
-                      toast({
-                          variant: "destructive",
-                          title: "Active Sprint Limit",
-                          description: `Only one sprint can be active at a time. Sprint ${tempSprints.find(s => s.status === 'Active')?.sprintNumber} is already active.`,
-                      });
-                  }, 0);
-                   return p; // Return the project unchanged
-              }
+         // Check if starting this sprint would violate the single active sprint rule
+         if (newStatus === 'Active') {
+             otherActiveSprintExists = tempSprints.some(s => s.sprintNumber !== sprintNumber && s.status === 'Active');
+             if (otherActiveSprintExists) {
+                  // This toast needs to be shown outside the setProjects call
+                 return prevProjects; // Return the project unchanged
+             }
+         }
 
-
-              // Deactivate other sprints only if the target is becoming active AND no other is already active
-              // This logic seems redundant if the check above passes, but kept for clarity
-              // if (newStatus === 'Active' && !otherActiveSprintExists) {
-              //     tempSprints = tempSprints.map(otherS =>
-              //         otherS.sprintNumber !== sprintNumber && otherS.status === 'Active'
-              //             ? { ...otherS, status: 'Planned' } // Change other active to Planned
-              //             : otherS
-              //     );
-              // } else if (newStatus === 'Completed') {
-                   // Logic to handle completion (e.g., calculate completed points, move unfinished tasks?) - currently just sets status
-              // }
-
-
-              // Update the target sprint's planning and status
-              const updatedSprints = tempSprints.map(s => {
-                  if (s.sprintNumber === sprintNumber) {
-                      let finalStatus = s.status;
-                       // Only update status if newStatus is provided and different
-                       if (newStatus && newStatus !== s.status) {
-                            finalStatus = newStatus;
-                            statusUpdateMessage = ` Sprint ${sprintNumber} status updated to ${newStatus}.`;
-                       } else if (!newStatus && s.status === 'Active' && clientNow && s.endDate && isValid(parseISO(s.endDate)) && isPast(parseISO(s.endDate))) {
-                             // Auto-complete if end date passed (only if status wasn't explicitly provided)
-                             // We might want to disable auto-complete or make it optional
-                             console.warn(`Auto-completing sprint ${sprintNumber} based on end date.`);
-                             // finalStatus = 'Completed';
-                             // statusUpdateMessage = ` Sprint ${sprintNumber} auto-completed based on end date.`;
-                       }
-
-
-                      // Ensure task IDs are present and correctly typed before saving
-                       const validatedPlanning: SprintPlanning = {
-                           ...planningData,
-                           newTasks: (planningData.newTasks || []).map(task => ({
-                              ...task,
-                              id: task.id || `task_save_new_${Date.now()}_${Math.random()}`,
-                              qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
-                              bufferTime: task.bufferTime ?? '1d', // Default Buffer time
-                              backlogId: task.backlogId ?? '', // Ensure backlogId
-                           })),
-                           spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
-                              ...task,
-                              id: task.id || `task_save_spill_${Date.now()}_${Math.random()}`,
-                              qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
-                              bufferTime: task.bufferTime ?? '1d', // Default buffer time
-                              backlogId: task.backlogId ?? '', // Ensure backlogId
-                           })),
-                      };
-                       // Calculate committed points based on saved tasks
-                       const committedPoints = [...(validatedPlanning.newTasks || []), ...(validatedPlanning.spilloverTasks || [])]
-                            .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
-
-
-                      return { ...s, planning: validatedPlanning, status: finalStatus, committedPoints: committedPoints };
+          // Proceed with the update if the rule is not violated
+          const updatedSprints = tempSprints.map(s => {
+              if (s.sprintNumber === sprintNumber) {
+                  let finalStatus = s.status;
+                  // Only update status if newStatus is provided and different
+                  if (newStatus && newStatus !== s.status) {
+                       finalStatus = newStatus;
+                       statusUpdateMessage = ` Sprint ${sprintNumber} status updated to ${newStatus}.`;
+                  } else if (!newStatus && s.status === 'Active' && clientNow && s.endDate && isValid(parseISO(s.endDate)) && isPast(parseISO(s.endDate))) {
+                       // Auto-complete logic (currently commented out)
+                       // console.warn(`Auto-completing sprint ${sprintNumber} based on end date.`);
+                       // finalStatus = 'Completed';
+                       // statusUpdateMessage = ` Sprint ${sprintNumber} auto-completed based on end date.`;
                   }
-                  return s;
-              });
 
-              return {
-                  ...p,
-                  sprintData: {
-                      ...(p.sprintData ?? initialSprintData), // Use initialSprintData if sprintData is null/undefined
-                      sprints: updatedSprints,
-                  },
-              };
-          }
-          return p;
-        });
-        // Trigger save effect by returning a new array reference
-        // Only show success toast if the operation wasn't blocked
-        if (!otherActiveSprintExists) {
-            setTimeout(() => { // Defer toast
-                 toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
-             }, 0);
-        }
-        return [...updatedProjects];
-     });
-     // toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
+                  // Ensure task IDs are present and correctly typed before saving
+                   const validatedPlanning: SprintPlanning = {
+                       ...planningData,
+                       newTasks: (planningData.newTasks || []).map(task => ({
+                          ...task,
+                          id: task.id || `task_save_new_${Date.now()}_${Math.random()}`,
+                          qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
+                          bufferTime: task.bufferTime ?? '1d', // Default Buffer time
+                          backlogId: task.backlogId ?? '', // Ensure backlogId
+                       })),
+                       spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
+                          ...task,
+                          id: task.id || `task_save_spill_${Date.now()}_${Math.random()}`,
+                          qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
+                          bufferTime: task.bufferTime ?? '1d', // Default buffer time
+                          backlogId: task.backlogId ?? '', // Ensure backlogId
+                       })),
+                   };
+
+                   // Calculate committed points based on saved tasks
+                   const committedPoints = [...(validatedPlanning.newTasks || []), ...(validatedPlanning.spilloverTasks || [])]
+                        .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+
+                   return { ...s, planning: validatedPlanning, status: finalStatus, committedPoints: committedPoints };
+              }
+              return s;
+          });
+
+          // Create a new project object with updated sprints
+          const updatedProject = {
+              ...currentProject,
+              sprintData: {
+                  ...(currentProject.sprintData ?? initialSprintData), // Use initialSprintData if sprintData is null/undefined
+                  sprints: updatedSprints,
+              },
+          };
+
+          // Create a new projects array with the updated project
+          const updatedProjects = [...prevProjects];
+          updatedProjects[projectIndex] = updatedProject;
+          return updatedProjects;
+      });
+
+     // Show toast *after* the setProjects update attempt
+     if (otherActiveSprintExists) {
+         // Show error toast if an active sprint already exists
+         toast({
+             variant: "destructive",
+             title: "Active Sprint Limit",
+             description: `Only one sprint can be active at a time. Another sprint is already active.`,
+         });
+     } else {
+         // Show success toast if the update was successful
+         toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
+     }
    }, [selectedProjectId, toast, clientNow]);
 
 
@@ -1152,7 +1137,7 @@ export default function Home() {
                      } else {
                          // Should not reach here if logic above is correct, but acts as a safeguard
                          console.error("Undo Error: Could not determine action type for item", taskId);
-                         showToast({ variant: "destructive", title: "Undo Failed", description: "Could not process the undo request." });
+                         showToast({ variant: "destructive", title: "Error", description: "Could not process the undo request." });
                          return p;
                      }
                  }
@@ -1611,6 +1596,7 @@ export default function Home() {
                      onSplitBacklogItem: handleSplitBacklogItem, // Pass split handler
                      onMergeBacklogItems: handleMergeBacklogItems, // Pass merge handler
                      onUndoBacklogAction: handleUndoBacklogAction, // Pass undo handler
+                     generateNextBacklogId: generateNextBacklogIdHelper, // Pass helper for merge dialog ID gen
                      allProjectBacklogItems: selectedProject.backlog ?? [], // Pass all items for uniqueness check
                  };
                 break;
