@@ -1,8 +1,9 @@
+
 "use client";
 
 import * as React from 'react'; // Import React
 import type { Task, Member, HolidayCalendar, PublicHoliday } from '@/types/sprint-data';
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine, ReferenceArea } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine, ReferenceArea, Rectangle } from 'recharts'; // Added Rectangle
 import { ChartConfig, ChartContainer } from "@/components/ui/chart"; // Removed ChartTooltipContent as we use custom tooltip
 import { Tooltip as UITooltip, TooltipContent as UITooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, parseISO, differenceInDays, addDays, isWithinInterval, getDay, eachDayOfInterval, isValid, isSameDay } from 'date-fns';
@@ -623,18 +624,20 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                  // Render Weekend Block (if weekend) - This covers the full height
                  const weekendArea = isWeekend ? (
-                     <ReferenceArea
-                         key={`weekend-area-${index}`}
-                         x1={index}
-                         x2={index + 1}
-                         y1={-0.5} // Full height
-                         y2={yDomainValues.length - 0.5} // Full height
-                         ifOverflow="hidden"
-                         fill={weekendColor}
-                         fillOpacity={1}
-                         yAxisId={0}
-                         strokeWidth={0}
-                     />
+                      <ReferenceArea
+                        key={`weekend-area-${index}`}
+                        x1={index}
+                        x2={index + 1}
+                        y1={-0.5} // Full height
+                        y2={yDomainValues.length - 0.5} // Full height
+                        ifOverflow="visible" // Changed to visible
+                        fill={weekendColor}
+                        fillOpacity={1} // Make weekend fully opaque
+                        yAxisId={0}
+                        strokeWidth={0}
+                        // Use Rectangle with zIndex to ensure it's behind tasks
+                        shape={<Rectangle style={{ zIndex: 1 }} radius={10} />}
+                      />
                  ) : null;
 
                  // Render Holiday Blocks per Assignee (if holidays exist)
@@ -644,38 +647,45 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                      let y1 = -0.5;
                      let y2 = yDomainValues.length - 0.5;
+                     let yIndex = -1; // Track the specific y-index for positioning
 
                      if (viewMode === 'assignee') {
                          const dataPointForAssignee = chartData.find(dp => dp.assigneeId === assigneeId);
-                         const assigneeYIndex = dataPointForAssignee?.index;
-                         if (assigneeYIndex !== undefined) {
-                             y1 = assigneeYIndex - 0.45;
-                             y2 = assigneeYIndex + 0.45;
-                         } else {
-                             return null; // Don't render if assignee index not found
-                         }
+                         yIndex = dataPointForAssignee?.index ?? -1;
                      } else { // Task view
-                         // Find the tasks for this assignee on this day's index (or any index)
                          const tasksForAssignee = chartData.filter(dp => dp.assigneeId === assigneeId);
-                          return tasksForAssignee.map(taskDataPoint => {
-                               y1 = taskDataPoint.index - 0.45;
-                               y2 = taskDataPoint.index + 0.45;
-                               return (
-                                  <ReferenceArea
-                                      key={`holiday-area-${index}-${assigneeId}-${taskDataPoint.index}`}
-                                      x1={index}
-                                      x2={index + 1}
-                                      y1={y1}
-                                      y2={y2}
-                                      ifOverflow="hidden"
-                                      fill={holidayInfo.color}
-                                      fillOpacity={1}
-                                      yAxisId={0}
-                                      strokeWidth={0}
-                                  />
-                               );
-                          });
+                         if (tasksForAssignee.length > 0) {
+                              // For task view, render holiday for each task row of the assignee
+                              return tasksForAssignee.map(taskDataPoint => {
+                                   const taskYIndex = taskDataPoint.index;
+                                   const taskY1 = taskYIndex - 0.45;
+                                   const taskY2 = taskYIndex + 0.45;
+                                   return (
+                                       <ReferenceArea
+                                            key={`holiday-area-${index}-${assigneeId}-${taskYIndex}`}
+                                            x1={index}
+                                            x2={index + 1}
+                                            y1={taskY1}
+                                            y2={taskY2}
+                                            ifOverflow="visible" // Changed to visible
+                                            fill={holidayInfo.color}
+                                            fillOpacity={1} // Make holiday fully opaque
+                                            yAxisId={0}
+                                            strokeWidth={0}
+                                            // Use Rectangle with zIndex to ensure it's behind tasks
+                                            shape={<Rectangle style={{ zIndex: 1 }} radius={10} />}
+                                        />
+                                   );
+                              });
+                         } else {
+                             return null; // No tasks for this assignee in task view data
+                         }
                      }
+
+                     if (yIndex === -1) return null; // Don't render if index not found
+
+                     y1 = yIndex - 0.45; // Slightly smaller height to avoid overlap?
+                     y2 = yIndex + 0.45;
 
                      // Render holiday area for assignee view
                      return (
@@ -685,11 +695,13 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                              x2={index + 1}
                              y1={y1}
                              y2={y2}
-                             ifOverflow="hidden"
+                             ifOverflow="visible" // Changed to visible
                              fill={holidayInfo.color}
-                             fillOpacity={1}
+                             fillOpacity={1} // Make holiday fully opaque
                              yAxisId={0}
                              strokeWidth={0}
+                             // Use Rectangle with zIndex to ensure it's behind tasks
+                             shape={<Rectangle style={{ zIndex: 1 }} radius={10}/>}
                          />
                      );
                  }).flat().filter(Boolean); // Flatten in case of task view returning arrays
@@ -716,3 +728,4 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     </ChartContainer>
   );
 }
+
