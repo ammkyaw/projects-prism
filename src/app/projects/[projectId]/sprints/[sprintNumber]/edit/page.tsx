@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -68,7 +67,7 @@ export default function EditSprintDetailsPage() {
           const currentSprint = currentProject.sprintData.sprints.find(s => s.sprintNumber === sprintNumber);
 
           if (currentSprint) {
-             // Check if sprint is completed
+             // Check if sprint is completed BEFORE setting state or doing anything else
              if (currentSprint.status === 'Completed') {
                  toast({
                      variant: "default",
@@ -76,7 +75,7 @@ export default function EditSprintDetailsPage() {
                      description: `Sprint ${sprintNumber} is completed and cannot be edited.`
                  });
                  router.push('/'); // Redirect if completed
-                 return;
+                 return; // Stop further processing
              }
 
             setSprint(currentSprint);
@@ -300,8 +299,10 @@ export default function EditSprintDetailsPage() {
     return <div className="flex justify-center items-center min-h-screen">Loading sprint details...</div>;
   }
 
-  if (!project || !sprint) {
-     return <div className="flex justify-center items-center min-h-screen">Error loading data. Please go back.</div>;
+  // This check handles the case where the sprint was completed and the user was redirected
+  if (!project || !sprint || sprint.status === 'Completed') {
+     // The user should have been redirected, but this is a fallback
+     return <div className="flex justify-center items-center min-h-screen">This sprint cannot be edited. Please go back.</div>;
   }
 
 
