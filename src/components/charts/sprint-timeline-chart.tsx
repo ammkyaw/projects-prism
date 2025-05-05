@@ -531,28 +531,36 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
 
   // Custom Legend Component
-    const CustomLegend = () => {
-        return (
-          <div className="flex justify-center items-center flex-wrap space-x-4 mt-4 text-xs">
-            {Object.entries(chartConfig).map(([key, value]) => {
-                 // Only show relevant legends based on viewMode
-                 if (viewMode === 'assignee' && (key === 'qa' || key === 'buffer')) {
-                    return null;
-                 }
-                 // Only show holiday legends if that calendar actually has holidays in the map
-                 if (key.startsWith('holiday-') && !Array.from(assignedHolidayMap.values())).some(map => Array.from(map.values()).some(h => h.calendarName === value.label))) {
-                     return null;
-                 }
-                 return (
-                   <div key={key} className="flex items-center space-x-1 mb-1">
-                     <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: value.color }}></span>
-                     <span>{value.label}</span>
-                   </div>
-                 );
-             })}
-          </div>
-        );
-    };
+   const CustomLegend = () => {
+     const renderLegendItem = (key: string, value: { label: React.ReactNode; color: string }) => (
+       <div key={key} className="flex items-center space-x-1 mb-1">
+         <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: value.color }}></span>
+         <span>{value.label}</span>
+       </div>
+     );
+
+     const legendItems = Object.entries(chartConfig).map(([key, value]) => {
+       if (viewMode === 'assignee' && (key === 'qa' || key === 'buffer')) {
+         return null;
+       }
+       if (
+         key.startsWith('holiday-') &&
+         !Array.from(assignedHolidayMap.values()).some((map) =>
+           Array.from(map.values()).some((h) => h.calendarName === value.label)
+         )
+       ) {
+         return null;
+       }
+       return renderLegendItem(key, value);
+     });
+
+     return (
+       <div className="flex justify-center items-center flex-wrap space-x-4 mt-4 text-xs">
+         {legendItems.filter(Boolean)}
+       </div>
+     );
+   };
+
 
   return (
     <ChartContainer config={chartConfig} className="w-full" style={{ height: `${chartHeight}px` }}> {/* Dynamic height */}
@@ -610,68 +618,85 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  const isWeekend = weekendIndices.includes(index);
                  const holidayDayMap = assignedHolidayMap.get(index);
 
-                 // Find the unique assignees present at this y-level (index) for assignee view
-                 const yLevelAssigneeIds = viewMode === 'assignee' ?
-                     new Set(chartData.filter(d => d.index === index).map(d => d.assigneeId))
-                     : new Set(chartData.map(d => d.assigneeId)); // Consider all assignees in task view
+                 // Get all unique assignee IDs present on this day index
+                 const assigneeIdsOnDay = holidayDayMap ? Array.from(holidayDayMap.keys()) : [];
 
-                 return Array.from(yLevelAssigneeIds).map(assigneeId => {
-                     const holidayInfo = holidayDayMap?.get(assigneeId);
-                     const fillColor = holidayInfo ? holidayInfo.color : (isWeekend ? weekendColor : undefined);
+                 // Render Weekend Block (if weekend) - This covers the full height
+                 const weekendArea = isWeekend ? (
+                     <ReferenceArea
+                         key={`weekend-area-${index}`}
+                         x1={index}
+                         x2={index + 1}
+                         y1={-0.5} // Full height
+                         y2={yDomainValues.length - 0.5} // Full height
+                         ifOverflow="hidden"
+                         fill={weekendColor}
+                         fillOpacity={1}
+                         yAxisId={0}
+                         strokeWidth={0}
+                     />
+                 ) : null;
 
-                     if (fillColor) {
-                         let y1 = -0.5;
-                         let y2 = yDomainValues.length - 0.5;
-                          // In assignee view, restrict the holiday block to the specific assignee's row
-                          if (viewMode === 'assignee' && holidayInfo) {
-                              // Find the y-index for this specific assignee
-                              const dataPointForAssignee = chartData.find(dp => dp.assigneeId === assigneeId);
-                              const assigneeYIndex = dataPointForAssignee?.index;
+                 // Render Holiday Blocks per Assignee (if holidays exist)
+                 const holidayAreas = assigneeIdsOnDay.map(assigneeId => {
+                     const holidayInfo = holidayDayMap!.get(assigneeId);
+                     if (!holidayInfo) return null;
 
-                              if (assigneeYIndex !== undefined) {
-                                   y1 = assigneeYIndex - 0.45; // Slightly less than half the row height
-                                   y2 = assigneeYIndex + 0.45; // Slightly less than half the row height
-                              } else {
-                                  // Assignee not found at this y-level, shouldn't happen if logic is correct
-                                  return null;
-                              }
-                          } else if (viewMode === 'task' && holidayInfo) {
-                               // In task view, find the specific task row index
-                               const taskDataPoint = chartData.find(dp => dp.assigneeId === assigneeId && dp.index === index);
-                               if (taskDataPoint) {
-                                     y1 = taskDataPoint.index - 0.45;
-                                     y2 = taskDataPoint.index + 0.45;
-                               } else {
-                                    // Task not found, might happen if no task for this assignee on this day index
-                                    // Default to full height for weekends in task view
-                                     if (!holidayInfo) { // Only apply full height for weekends
-                                         y1 = -0.5;
-                                         y2 = yDomainValues.length - 0.5;
-                                     } else {
-                                          return null; // Don't render holiday if task not found
-                                     }
-                               }
-                          }
+                     let y1 = -0.5;
+                     let y2 = yDomainValues.length - 0.5;
 
-
-                         return (
-                             <ReferenceArea
-                                 key={`nonwork-area-${index}-${assigneeId ?? 'weekend'}`}
-                                 x1={index}
-                                 x2={index + 1}
-                                 y1={y1} // Use calculated y1
-                                 y2={y2} // Use calculated y2
-                                 ifOverflow="hidden" // Clip to the Y-axis bounds
-                                 fill={fillColor}
-                                 fillOpacity={1} // Use full opacity
-                                 yAxisId={0}
-                                 strokeWidth={0}
-                             />
-                         );
+                     if (viewMode === 'assignee') {
+                         const dataPointForAssignee = chartData.find(dp => dp.assigneeId === assigneeId);
+                         const assigneeYIndex = dataPointForAssignee?.index;
+                         if (assigneeYIndex !== undefined) {
+                             y1 = assigneeYIndex - 0.45;
+                             y2 = assigneeYIndex + 0.45;
+                         } else {
+                             return null; // Don't render if assignee index not found
+                         }
+                     } else { // Task view
+                         // Find the tasks for this assignee on this day's index (or any index)
+                         const tasksForAssignee = chartData.filter(dp => dp.assigneeId === assigneeId);
+                          return tasksForAssignee.map(taskDataPoint => {
+                               y1 = taskDataPoint.index - 0.45;
+                               y2 = taskDataPoint.index + 0.45;
+                               return (
+                                  <ReferenceArea
+                                      key={`holiday-area-${index}-${assigneeId}-${taskDataPoint.index}`}
+                                      x1={index}
+                                      x2={index + 1}
+                                      y1={y1}
+                                      y2={y2}
+                                      ifOverflow="hidden"
+                                      fill={holidayInfo.color}
+                                      fillOpacity={1}
+                                      yAxisId={0}
+                                      strokeWidth={0}
+                                  />
+                               );
+                          });
                      }
-                     return null;
-                 }).filter(Boolean); // Remove nulls if assignee wasn't found
-            })}
+
+                     // Render holiday area for assignee view
+                     return (
+                         <ReferenceArea
+                             key={`holiday-area-${index}-${assigneeId}`}
+                             x1={index}
+                             x2={index + 1}
+                             y1={y1}
+                             y2={y2}
+                             ifOverflow="hidden"
+                             fill={holidayInfo.color}
+                             fillOpacity={1}
+                             yAxisId={0}
+                             strokeWidth={0}
+                         />
+                     );
+                 }).flat().filter(Boolean); // Flatten in case of task view returning arrays
+
+
+                 return [weekendArea, ...holidayAreas];
+            }).flat().filter(Boolean)}
 
 
            {/* Render bars for each phase - Rendered Last to overlay non-working days */}
