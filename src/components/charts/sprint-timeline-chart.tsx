@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from 'react'; // Import React
@@ -11,7 +10,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { cn } from "@/lib/utils";
 import { Info } from 'lucide-react';
 
-const weekendColor = 'hsl(0 0% 10%)'; // Black for weekend background
+const weekendColor = 'hsl(0 0% 0%)'; // Black for weekend background
 // Base colors for tasks
 const devTaskBarColor = 'hsl(var(--primary))';
 const qaTaskBarColor = 'hsl(var(--chart-2))';
@@ -174,9 +173,10 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                calendar.holidays.forEach(holiday => {
                    if (holiday.date) {
                        try {
-                           const parsedDate = parseISO(holiday.date);
+                           // Ensure date is parsed correctly, even if already in YYYY-MM-DD
+                           const parsedDate = parseISO(holiday.date + 'T00:00:00Z'); // Treat as UTC start of day
                            if (isValid(parsedDate)) {
-                               holidays.add(holiday.date); // Store in YYYY-MM-DD format
+                               holidays.add(format(parsedDate, 'yyyy-MM-dd')); // Store in YYYY-MM-DD format
                            } else {
                                console.warn(`Invalid date format for holiday '${holiday.name}' in calendar '${calendar.name}': ${holiday.date}`);
                            }
@@ -439,7 +439,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
            return new Map();
        }
        return map;
-   }, [sprintStartDate, sprintEndDate, memberHolidayMap, holidayCalendars, chartData]); // Removed members dependency, included chartData
+   }, [sprintStartDate, sprintEndDate, memberHolidayMap, holidayCalendars, chartData]); // Included chartData dependency
 
 
    // Generate Chart Config dynamically based on used calendars and weekend
@@ -540,7 +540,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                     return null;
                  }
                  // Only show holiday legends if that calendar actually has holidays in the map
-                 if (key.startsWith('holiday-') && !Array.from(assignedHolidayMap.values()).some(map => Array.from(map.values()).some(h => h.calendarName === value.label))) {
+                 if (key.startsWith('holiday-') && !Array.from(assignedHolidayMap.values())).some(map => Array.from(map.values()).some(h => h.calendarName === value.label))) {
                      return null;
                  }
                  return (
@@ -577,69 +577,6 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
              interval={0} // Show all calculated ticks
              allowDuplicatedCategory={true} // Allow sparse ticks
            />
-           {/* Weekend and Holiday Reference Areas */}
-            {sprintDayIndices.map((index) => {
-                const isWeekend = weekendIndices.includes(index);
-                 // In assignee view, get holidays ONLY for the assignee associated with this Y-axis index
-                const assigneeIndexForHoliday = viewMode === 'assignee'
-                     ? chartData.find(d => d.index === Math.round(index / chartHeight * yDomainValues.length))?.index ?? -1 // Heuristic to get assignee index
-                     : -1; // Not applicable in task view for filtering
-
-                 const holidayDayMap = assignedHolidayMap.get(index);
-                 let holidayInfo: AssigneeHolidayInfo | undefined = undefined;
-
-                 if (holidayDayMap) {
-                     if (viewMode === 'assignee') {
-                         // Find the data point corresponding to the Y-axis index to get the correct assigneeId
-                         const dataPointForYIndex = chartData.find(dp => dp.index === Math.round(index / chartHeight * yDomainValues.length)); // Adjust logic based on actual Y-axis mapping
-                         const assigneeIdForYIndex = dataPointForYIndex?.assigneeId;
-                         if (assigneeIdForYIndex) {
-                             holidayInfo = holidayDayMap.get(assigneeIdForYIndex);
-                         }
-                     } else {
-                         // In task view, show the first holiday found for that day (arbitrary)
-                         holidayInfo = Array.from(holidayDayMap.values())[0];
-                     }
-                 }
-
-
-                 const fillColor = holidayInfo ? holidayInfo.color : (isWeekend ? weekendColor : undefined);
-
-                 if (fillColor) {
-                    // Determine the Y range for this specific day/assignee
-                     let y1 = -0.5;
-                     let y2 = yDomainValues.length - 0.5;
-                      // In assignee view, restrict the holiday block to the specific assignee's row
-                      if (viewMode === 'assignee' && holidayInfo) {
-                         // Find the index corresponding to the assignee
-                          const assigneeYIndex = chartData.find(dp => dp.assigneeId === holidayInfo!.assigneeId)?.index;
-                          if (assigneeYIndex !== undefined) {
-                               y1 = assigneeYIndex - 0.45; // Slightly less than half the row height
-                               y2 = assigneeYIndex + 0.45; // Slightly less than half the row height
-                          } else {
-                              return null; // Don't render if assignee index not found (shouldn't happen)
-                          }
-                      }
-
-
-                     return (
-                         <ReferenceArea
-                             key={`nonwork-area-${index}-${holidayInfo?.assigneeId ?? 'weekend'}`}
-                             x1={index}
-                             x2={index + 1}
-                             y1={y1} // Use calculated y1
-                             y2={y2} // Use calculated y2
-                             ifOverflow="hidden" // Clip to the Y-axis bounds
-                             fill={fillColor}
-                             fillOpacity={1}
-                             yAxisId={0}
-                             strokeWidth={0}
-                         />
-                     );
-                 }
-                 return null;
-           })}
-
           <YAxis
             dataKey={yAxisDataKey} // Use calculated dataKey
             type="number" // Treat Y axis as numerical index
@@ -667,6 +604,76 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  return null;
               }}
              />
+
+            {/* Render Weekend and Holiday Reference Areas FIRST */}
+             {sprintDayIndices.map((index) => {
+                 const isWeekend = weekendIndices.includes(index);
+                 const holidayDayMap = assignedHolidayMap.get(index);
+
+                 // Find the unique assignees present at this y-level (index) for assignee view
+                 const yLevelAssigneeIds = viewMode === 'assignee' ?
+                     new Set(chartData.filter(d => d.index === index).map(d => d.assigneeId))
+                     : new Set(chartData.map(d => d.assigneeId)); // Consider all assignees in task view
+
+                 return Array.from(yLevelAssigneeIds).map(assigneeId => {
+                     const holidayInfo = holidayDayMap?.get(assigneeId);
+                     const fillColor = holidayInfo ? holidayInfo.color : (isWeekend ? weekendColor : undefined);
+
+                     if (fillColor) {
+                         let y1 = -0.5;
+                         let y2 = yDomainValues.length - 0.5;
+                          // In assignee view, restrict the holiday block to the specific assignee's row
+                          if (viewMode === 'assignee' && holidayInfo) {
+                              // Find the y-index for this specific assignee
+                              const dataPointForAssignee = chartData.find(dp => dp.assigneeId === assigneeId);
+                              const assigneeYIndex = dataPointForAssignee?.index;
+
+                              if (assigneeYIndex !== undefined) {
+                                   y1 = assigneeYIndex - 0.45; // Slightly less than half the row height
+                                   y2 = assigneeYIndex + 0.45; // Slightly less than half the row height
+                              } else {
+                                  // Assignee not found at this y-level, shouldn't happen if logic is correct
+                                  return null;
+                              }
+                          } else if (viewMode === 'task' && holidayInfo) {
+                               // In task view, find the specific task row index
+                               const taskDataPoint = chartData.find(dp => dp.assigneeId === assigneeId && dp.index === index);
+                               if (taskDataPoint) {
+                                     y1 = taskDataPoint.index - 0.45;
+                                     y2 = taskDataPoint.index + 0.45;
+                               } else {
+                                    // Task not found, might happen if no task for this assignee on this day index
+                                    // Default to full height for weekends in task view
+                                     if (!holidayInfo) { // Only apply full height for weekends
+                                         y1 = -0.5;
+                                         y2 = yDomainValues.length - 0.5;
+                                     } else {
+                                          return null; // Don't render holiday if task not found
+                                     }
+                               }
+                          }
+
+
+                         return (
+                             <ReferenceArea
+                                 key={`nonwork-area-${index}-${assigneeId ?? 'weekend'}`}
+                                 x1={index}
+                                 x2={index + 1}
+                                 y1={y1} // Use calculated y1
+                                 y2={y2} // Use calculated y2
+                                 ifOverflow="hidden" // Clip to the Y-axis bounds
+                                 fill={fillColor}
+                                 fillOpacity={1} // Use full opacity
+                                 yAxisId={0}
+                                 strokeWidth={0}
+                             />
+                         );
+                     }
+                     return null;
+                 }).filter(Boolean); // Remove nulls if assignee wasn't found
+            })}
+
+
            {/* Render bars for each phase - Rendered Last to overlay non-working days */}
            <Bar dataKey="devRange" radius={2} barSize={10} fill={chartConfig.dev.color} name="Development" yAxisId={0} />
            {/* Conditionally render QA and Buffer based on viewMode */}
