@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from 'react'; // Import React
@@ -164,6 +163,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
    const getSprintDays = () => {
      if (!sprintStart || !sprintEnd || !isValid(sprintStart) || !isValid(sprintEnd)) return 0;
+     // Need to use the correct differenceInDays function
      return differenceInDays(sprintEnd, sprintStart) + 1;
    };
 
@@ -188,7 +188,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                            // Ensure date is parsed correctly, even if already in YYYY-MM-DD
                            const parsedDate = parseISO(holiday.date + 'T00:00:00Z'); // Treat as UTC start of day
                            if (isValid(parsedDate)) {
-                               holidays.add(format(parsedDate, 'yyyy-MM-dd')); // Store in YYYY-MM-DD format
+                               holidays.add(format(parsedDate, 'yyyy-MM-dd')); // Store in YYYY-MM-dd format
                            } else {
                                console.warn(`Invalid date format for holiday '${holiday.name}' in calendar '${calendar.name}': ${holiday.date}`);
                            }
@@ -616,7 +616,12 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
               }}
              />
 
-            {/* Render Weekend and Holiday Reference Areas FIRST */}
+           {/* Render bars for each phase FIRST - These will be in the background */}
+           <Bar dataKey="devRange" radius={2} barSize={10} fill={chartConfig.dev.color} name="Development" yAxisId={0} />
+           <Bar dataKey="qaRange" radius={2} barSize={10} fill={chartConfig.qa.color} name="QA" yAxisId={0} />
+           <Bar dataKey="bufferRange" radius={2} barSize={10} fill={chartConfig.buffer.color} name="Buffer" yAxisId={0} />
+
+            {/* Render Weekend and Holiday Reference Areas LAST - These will be in the foreground */}
              {sprintDayIndices.map((index) => {
                  const isWeekend = weekendIndices.includes(index);
                  const holidayDayMap = assignedHolidayMap.get(index);
@@ -637,7 +642,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                         fillOpacity={1} // Make weekend fully opaque
                         yAxisId={0}
                         strokeWidth={0}
-                        shape={<Rectangle style={{ zIndex: 1 }} radius={0} />} // Use zIndex to ensure it's behind tasks, no radius
+                        shape={<Rectangle radius={0} />} // No radius
                       />
                  ) : null;
 
@@ -686,7 +691,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                              fillOpacity={1} // Make holiday fully opaque
                              yAxisId={0}
                              strokeWidth={0}
-                             shape={<Rectangle style={{ zIndex: 1 }} radius={0} />} // Use zIndex, no radius
+                             shape={<Rectangle radius={0} />} // No radius
                          />
                      );
                  }).flat().filter(Boolean); // Flatten in case of task view returning arrays
@@ -696,10 +701,6 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             }).flat().filter(Boolean)}
 
 
-           {/* Render bars for each phase - Rendered Last to overlay non-working days */}
-            <Bar dataKey="devRange" radius={2} barSize={10} fill={chartConfig.dev.color} name="Development" yAxisId={0} />
-            <Bar dataKey="qaRange" radius={2} barSize={10} fill={chartConfig.qa.color} name="QA" yAxisId={0} />
-            <Bar dataKey="bufferRange" radius={2} barSize={10} fill={chartConfig.buffer.color} name="Buffer" yAxisId={0} />
 
 
           {/* Use the custom legend */}
