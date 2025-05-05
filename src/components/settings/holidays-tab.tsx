@@ -57,46 +57,46 @@ const getSimulatedHolidays = (countryCode: string, year: number): PublicHoliday[
         case 'US':
             holidays.push(
                 { name: 'New Year\'s Day', date: `${year}-01-01` },
-                { name: 'Martin Luther King, Jr. Day', date: `${year}-01-15` }, // Example fixed date, actual varies
-                { name: 'Memorial Day', date: `${year}-05-27` }, // Example fixed date, actual varies
+                { name: 'Martin Luther King, Jr. Day', date: `${year}-01-20` }, // Example fixed date, actual varies
+                { name: 'Memorial Day', date: `${year}-05-26` }, // Example fixed date, actual varies
                 { name: 'Independence Day', date: `${year}-07-04` },
-                { name: 'Labor Day', date: `${year}-09-02` }, // Example fixed date, actual varies
-                { name: 'Thanksgiving Day', date: `${year}-11-28` }, // Example fixed date, actual varies
+                { name: 'Labor Day', date: `${year}-09-01` }, // Example fixed date, actual varies
+                { name: 'Thanksgiving Day', date: `${year}-11-27` }, // Example fixed date, actual varies
                 { name: 'Christmas Day', date: `${year}-12-25` }
             );
             break;
         case 'GB':
             holidays.push(
                  { name: 'New Year\'s Day', date: `${year}-01-01` },
-                 { name: 'Good Friday', date: `${year}-03-29` }, // Example fixed date, actual varies
-                 { name: 'Easter Monday', date: `${year}-04-01` }, // Example fixed date, actual varies
-                 { name: 'Early May Bank Holiday', date: `${year}-05-06` }, // Example fixed date, actual varies
-                 { name: 'Spring Bank Holiday', date: `${year}-05-27` }, // Example fixed date, actual varies
-                 { name: 'Summer Bank Holiday', date: `${year}-08-26` }, // Example fixed date, actual varies
+                 { name: 'Good Friday', date: `${year}-04-18` }, // Example fixed date, actual varies
+                 { name: 'Easter Monday', date: `${year}-04-21` }, // Example fixed date, actual varies
+                 { name: 'Early May Bank Holiday', date: `${year}-05-05` }, // Example fixed date, actual varies
+                 { name: 'Spring Bank Holiday', date: `${year}-05-26` }, // Example fixed date, actual varies
+                 { name: 'Summer Bank Holiday', date: `${year}-08-25` }, // Example fixed date, actual varies
                  { name: 'Christmas Day', date: `${year}-12-25` },
                  { name: 'Boxing Day', date: `${year}-12-26` }
             );
             break;
         case 'JP': // Added Japan
-             holidays.push(
+            holidays.push(
                 { name: "New Year's Day", date: `${year}-01-01` },
-                { name: "Coming of Age Day", date: `${year}-01-08` }, // Example fixed date, actual varies (2nd Mon in Jan)
+                { name: "Coming of Age Day", date: `${year}-01-13` },
                 { name: "Foundation Day", date: `${year}-02-11` },
                 { name: "Emperor's Birthday", date: `${year}-02-23` },
-                { name: "Vernal Equinox Day", date: `${year}-03-20` }, // Example fixed date, actual varies
+                { name: "Vernal Equinox Day", date: `${year}-03-20` },
                 { name: "Showa Day", date: `${year}-04-29` },
                 { name: "Constitution Memorial Day", date: `${year}-05-03` },
                 { name: "Greenery Day", date: `${year}-05-04` },
                 { name: "Children's Day", date: `${year}-05-05` },
-                { name: "Marine Day", date: `${year}-07-15` }, // Example fixed date, actual varies (3rd Mon in Jul)
+                { name: "Marine Day", date: `${year}-07-21` },
                 { name: "Mountain Day", date: `${year}-08-11` },
-                { name: "Respect for the Aged Day", date: `${year}-09-16` }, // Example fixed date, actual varies (3rd Mon in Sep)
-                { name: "Autumnal Equinox Day", date: `${year}-09-22` }, // Example fixed date, actual varies
-                { name: "Health and Sports Day", date: `${year}-10-14` }, // Example fixed date, actual varies (2nd Mon in Oct)
+                { name: "Respect for the Aged Day", date: `${year}-09-15` },
+                { name: "Autumnal Equinox Day", date: `${year}-09-23` },
+                { name: "Health and Sports Day", date: `${year}-10-13` },
                 { name: "Culture Day", date: `${year}-11-03` },
                 { name: "Labor Thanksgiving Day", date: `${year}-11-23` }
-             );
-             break;
+            );
+            break;
         // Add other countries as needed
     }
     // Assign unique IDs (simulation)
@@ -515,7 +515,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
                      />
                        <Select value={calendar.countryCode || 'none'} onValueChange={(value) => handleCountryChange(calendar._internalId, value)}>
                            <SelectTrigger
-                               className="h-8 w-40 text-sm border-0 shadow-none focus-visible:ring-0 focus:bg-muted/50"
+                               className="h-8 w-48 text-sm border-0 shadow-none focus-visible:ring-0 focus:bg-muted/50"
                            >
                                <Globe className="mr-2 h-4 w-4 text-muted-foreground" />
                                <SelectValue placeholder="Select Country" />
@@ -588,7 +588,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
                             {renderDatePicker(calendar._internalId, holiday._internalId, holiday.dateObj, calendar.isCountryBased)}
                          </div>
                          {/* Delete Holiday Button */}
-                         <div className="flex items-center justify-end md:col-span-1 col-span-1 md:self-center md:mt-0 mt-1">
+                         <div className="flex items-center justify-end md:col-span-1 col-span-2 md:self-center md:mt-0 mt-1">
                             <Button
                                 type="button"
                                 variant="ghost"
@@ -636,3 +636,4 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
     </Card>
   );
 }
+
