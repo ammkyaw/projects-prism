@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -304,34 +303,26 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
     }
   };
 
-  const removeTaskRow = (type: 'new' | 'spillover', internalId: string) => {
-    if (isFormDisabled && !isCreatingNewSprint) return; // Use unified disable check
-    const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
+ const removeTaskRow = (type: 'new' | 'spillover', internalId: string) => {
+     if (isFormDisabled && !isCreatingNewSprint) return; // Use unified disable check
+     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
+     const taskToRemove = (type === 'new' ? newTasks : spilloverTasks).find(row => row._internalId === internalId);
 
-    // Use a callback function for state update to ensure it happens after the timeout
-    const updateState = () => {
-        updater(prevRows => {
-             const newRows = prevRows.filter(row => row._internalId !== internalId);
-             return newRows;
-         });
-    }
-
-
-    const taskToRemove = (type === 'new' ? newTasks : spilloverTasks).find(row => row._internalId === internalId);
-
-    // Check if it's a 'new' task and has a backlogId, meaning it came from the backlog
-    if (type === 'new' && taskToRemove && taskToRemove.backlogId && selectedSprintNumber) {
-         // Call the revert function passed from parent (wrapped in setTimeout if necessary)
+     // Check if it's a 'new' task and has a backlogId, meaning it came from the backlog
+     if (type === 'new' && taskToRemove && taskToRemove.backlogId && selectedSprintNumber) {
+          // Use a callback in setTimeout to ensure state update happens after potential parent update
           setTimeout(() => {
+             // Pass the correct taskId and backlogId to the revert function
              onRevertTask(selectedSprintNumber, taskToRemove.id, taskToRemove.backlogId);
-             // Now update the local state AFTER the parent state update is likely processed
-             updateState();
-         }, 0);
-    } else {
-        // If not reverting, just update the local state immediately
-        updateState();
-    }
-};
+              // Remove from local state AFTER calling the parent function
+             updater(prevRows => prevRows.filter(row => row._internalId !== internalId));
+          }, 0);
+     } else {
+         // If not reverting, just update the local state immediately
+         updater(prevRows => prevRows.filter(row => row._internalId !== internalId));
+     }
+ };
+
 
  // Function to find the team lead for a given member
  const findTeamLead = useCallback((memberName: string | undefined): string | undefined => {
@@ -437,6 +428,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
          storyPoints: task.storyPoints?.toString() ?? '', // Ensure string
          qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Apply defaults if missing
          bufferTime: task.bufferTime ?? '1d',
+         backlogId: task.backlogId ?? '', // Ensure backlogId is carried over
        }));
 
      setNewTasks(prev => {

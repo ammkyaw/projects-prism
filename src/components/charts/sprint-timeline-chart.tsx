@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Task, Member, HolidayCalendar, PublicHoliday } from '@/types/sprint-data'; // Added HolidayCalendar, PublicHoliday
@@ -161,8 +160,10 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
     const processedTasks = tasks
         .map((task, index) => {
-             const assigneeId = members.find(m => m.name === task.assignee)?.id; // Find assignee ID
-             const memberHolidays = assigneeId ? (memberHolidayMap.get(assigneeId) ?? new Set<string>()) : new Set<string>(); // Get holidays for assignee ID or empty set
+             // Get assignee's member ID and specific holidays
+             const assigneeMember = members.find(m => m.name === task.assignee);
+             const assigneeId = assigneeMember?.id;
+             const memberHolidays = assigneeId ? (memberHolidayMap.get(assigneeId) ?? new Set<string>()) : new Set<string>(); // Use assignee-specific holidays
 
             if (!task.startDate || !isValid(parseISO(task.startDate))) {
                 console.warn(`Task ${index + 1} (${task.ticketNumber}): Invalid or missing start date.`); // Use ticketNumber
@@ -177,93 +178,87 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  return null;
              }
 
-            let lastPhaseEndDateObj = taskStartObj; // Tracks the end date of the last valid phase for dependency
+            let currentPhaseStartObj = taskStartObj;
 
-             // Ensure the effective start date of the *first* phase is a working day
-             while (isNonWorkingDay(taskStartObj, memberHolidays)) {
-               taskStartObj = addDays(taskStartObj, 1);
-             }
-             lastPhaseEndDateObj = taskStartObj; // Reset lastPhaseEnd to the adjusted task start
+            // Ensure the effective start date of the *first* phase is a working day for the assignee
+            while (isNonWorkingDay(currentPhaseStartObj, memberHolidays)) {
+                currentPhaseStartObj = addDays(currentPhaseStartObj, 1);
+            }
 
             // --- Development Phase ---
             const devWorkingDays = parseEstimatedTimeToDays(task.devEstimatedTime);
-            let devStartDateObj = taskStartObj; // Start from adjusted task start date
-            let devEndDateObj = devStartDateObj; // Initialize end date
+            let devStartDateObj = currentPhaseStartObj; // Start from adjusted start
+            let devEndDateObj = devStartDateObj;
             let devStartDayIndex = -1;
-            let devEndDayIndex = -1; // This will be the index of the *last* day of the phase
+            let devEndDayIndex = -1;
             let devPhaseValid = false;
 
-            if (devWorkingDays !== null && devWorkingDays >= 0) { // Check >= 0
+            if (devWorkingDays !== null && devWorkingDays >= 0) {
                  devEndDateObj = calculateEndDateSkippingNonWorkingDays(devStartDateObj, devWorkingDays, memberHolidays);
                  devStartDayIndex = differenceInDays(devStartDateObj, sprintStartObj);
                  devEndDayIndex = differenceInDays(devEndDateObj, sprintStartObj);
-
-                 // Clamp indices
-                 devStartDayIndex = Math.max(0, devStartDayIndex);
-                 devEndDayIndex = Math.max(devStartDayIndex, devEndDayIndex); // Ensure end is not before start
-                 devEndDayIndex = Math.min(sprintLengthDays - 1, devEndDayIndex); // Ensure end is within sprint bounds (index is 0-based)
-
-                 if (devWorkingDays > 0) {
-                      lastPhaseEndDateObj = devEndDateObj;
-                 }
                  devPhaseValid = true;
+                 currentPhaseStartObj = devWorkingDays > 0 ? getNextWorkingDay(devEndDateObj, memberHolidays) : devStartDateObj; // Set start for next phase
              } else {
                   console.warn(`Task ${task.ticketNumber}: Invalid Dev Est. Time ${task.devEstimatedTime}`);
+                  currentPhaseStartObj = devStartDateObj; // Use original adjusted start if dev invalid
              }
 
 
             // --- QA Phase ---
             const qaWorkingDays = parseEstimatedTimeToDays(task.qaEstimatedTime);
-            let qaStartDateObj = devWorkingDays === 0 ? devStartDateObj : getNextWorkingDay(lastPhaseEndDateObj, memberHolidays); // Start immediately if dev is 0, else next working day
+            let qaStartDateObj = currentPhaseStartObj; // Start from where Dev left off (or original start if dev was 0/invalid)
             let qaEndDateObj = qaStartDateObj;
             let qaStartDayIndex = -1;
             let qaEndDayIndex = -1;
             let qaPhaseValid = false;
 
-             if (qaWorkingDays !== null && qaWorkingDays >= 0) { // Check >= 0
+             if (qaWorkingDays !== null && qaWorkingDays >= 0) {
+                  // Adjust QA start date if it falls on a non-working day
+                  while (isNonWorkingDay(qaStartDateObj, memberHolidays)) {
+                     qaStartDateObj = addDays(qaStartDateObj, 1);
+                  }
                  qaEndDateObj = calculateEndDateSkippingNonWorkingDays(qaStartDateObj, qaWorkingDays, memberHolidays);
-
                  qaStartDayIndex = differenceInDays(qaStartDateObj, sprintStartObj);
                  qaEndDayIndex = differenceInDays(qaEndDateObj, sprintStartObj);
-
-                  // Clamp indices
-                 qaStartDayIndex = Math.max(0, qaStartDayIndex);
-                 qaEndDayIndex = Math.max(qaStartDayIndex, qaEndDayIndex); // Ensure end is not before start
-                 qaEndDayIndex = Math.min(sprintLengthDays - 1, qaEndDayIndex);
-
-                 if (qaWorkingDays > 0) {
-                     lastPhaseEndDateObj = qaEndDateObj; // Update the end date for the next phase dependency
-                 }
                  qaPhaseValid = true;
+                 currentPhaseStartObj = qaWorkingDays > 0 ? getNextWorkingDay(qaEndDateObj, memberHolidays) : qaStartDateObj; // Set start for next phase
              } else {
                   console.warn(`Task ${task.ticketNumber}: Invalid QA Est. Time ${task.qaEstimatedTime}`);
+                  currentPhaseStartObj = qaStartDateObj; // Use previous phase end if QA invalid
              }
 
 
             // --- Buffer Phase ---
             const bufferWorkingDays = parseEstimatedTimeToDays(task.bufferTime);
-            let bufferStartDateObj = qaWorkingDays === 0 ? qaStartDateObj : getNextWorkingDay(lastPhaseEndDateObj, memberHolidays); // Start immediately if QA is 0, else next working day
+            let bufferStartDateObj = currentPhaseStartObj; // Start from where QA left off
             let bufferEndDateObj = bufferStartDateObj;
             let bufferStartDayIndex = -1;
             let bufferEndDayIndex = -1;
             let bufferPhaseValid = false;
 
-            if (bufferWorkingDays !== null && bufferWorkingDays >= 0) { // Check >= 0
+            if (bufferWorkingDays !== null && bufferWorkingDays >= 0) {
+                 // Adjust Buffer start date if it falls on a non-working day
+                 while (isNonWorkingDay(bufferStartDateObj, memberHolidays)) {
+                    bufferStartDateObj = addDays(bufferStartDateObj, 1);
+                 }
                 bufferEndDateObj = calculateEndDateSkippingNonWorkingDays(bufferStartDateObj, bufferWorkingDays, memberHolidays);
-
                 bufferStartDayIndex = differenceInDays(bufferStartDateObj, sprintStartObj);
                 bufferEndDayIndex = differenceInDays(bufferEndDateObj, sprintStartObj);
-
-                // Clamp indices
-                bufferStartDayIndex = Math.max(0, bufferStartDayIndex);
-                bufferEndDayIndex = Math.max(bufferStartDayIndex, bufferEndDayIndex); // Ensure end is not before start
-                bufferEndDayIndex = Math.min(sprintLengthDays - 1, bufferEndDayIndex);
-
                 bufferPhaseValid = true;
             } else {
                  console.warn(`Task ${task.ticketNumber}: Invalid Buffer Time ${task.bufferTime}`);
             }
 
+            // Clamp indices to be within sprint bounds [0, sprintLengthDays - 1]
+            const clampIndex = (index: number) => Math.max(0, Math.min(sprintLengthDays - 1, index));
+
+            const clampedDevStart = clampIndex(devStartDayIndex);
+            const clampedDevEnd = clampIndex(devEndDayIndex);
+            const clampedQaStart = clampIndex(qaStartDayIndex);
+            const clampedQaEnd = clampIndex(qaEndDayIndex);
+            const clampedBufferStart = clampIndex(bufferStartDayIndex);
+            const clampedBufferEnd = clampIndex(bufferEndDayIndex);
 
              // Tooltip to show more details
              const tooltipContent = [
@@ -281,10 +276,10 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 taskIndex: index,
                 // Recharts bar needs [start, end] where end is EXCLUSIVE for length calculation.
                 // Since our indices represent the days, the range should be [startIndex, endIndex + 1]
-                // to cover the full duration of the end day.
-                devRange: devPhaseValid && devEndDayIndex >= devStartDayIndex ? [devStartDayIndex, devEndDayIndex + 1] : undefined,
-                qaRange: qaPhaseValid && qaEndDayIndex >= qaStartDayIndex ? [qaStartDayIndex, qaEndDayIndex + 1] : undefined,
-                bufferRange: bufferPhaseValid && bufferEndDayIndex >= bufferStartDayIndex ? [bufferStartDayIndex, bufferEndDayIndex + 1] : undefined,
+                // to cover the full duration of the end day. Ensure start <= end.
+                devRange: devPhaseValid && clampedDevEnd >= clampedDevStart ? [clampedDevStart, clampedDevEnd + 1] : undefined,
+                qaRange: qaPhaseValid && clampedQaEnd >= clampedQaStart ? [clampedQaStart, clampedQaEnd + 1] : undefined,
+                bufferRange: bufferPhaseValid && clampedBufferEnd >= clampedBufferStart ? [clampedBufferStart, clampedBufferEnd + 1] : undefined,
                 tooltip: tooltipContent,
                 assignee: task.assignee, // Pass assignee for potential holiday highlighting
                 assigneeId: assigneeId, // Pass assignee ID for holiday mapping
@@ -316,8 +311,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
        return indices;
    }, [sprintStartDate, sprintEndDate]);
 
-    // Calculate holiday indices and names for the entire sprint duration
-    const holidayMap = useMemo(() => {
+    // Calculate holiday indices and names relevant ONLY to the assignees of the TASKS IN THE CHART
+    const assigneeHolidayMap = useMemo(() => {
         const map = new Map<number, Set<string>>(); // Map day index to Set of holiday names
         if (!sprintStartDate || !sprintEndDate || !isValid(parseISO(sprintStartDate)) || !isValid(parseISO(sprintEndDate))) return map;
         const start = parseISO(sprintStartDate);
@@ -329,27 +324,27 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 const dayIndex = differenceInDays(date, start);
                 let holidayNamesForDay: Set<string> | undefined;
 
-                // Check all member-specific holidays for this date
-                members.forEach(member => {
-                    const memberHolidays = memberHolidayMap.get(member.id);
-                    if (memberHolidays?.has(dateStr)) {
-                        if (!holidayNamesForDay) {
-                             holidayNamesForDay = new Set<string>();
-                             map.set(dayIndex, holidayNamesForDay);
-                        }
-                         // Find the holiday name from the calendar definition
-                         const calendar = holidayCalendars.find(cal => cal.id === member.holidayCalendarId);
-                         const holiday = calendar?.holidays.find(hol => hol.date === dateStr);
-                         holidayNamesForDay.add(holiday?.name ?? 'Public Holiday');
-                    }
-                });
+                 // Check if this date is a holiday for ANY assignee of the tasks being displayed
+                 chartData.forEach(taskData => {
+                     const memberHolidays = taskData.assigneeId ? memberHolidayMap.get(taskData.assigneeId) : undefined;
+                     if (memberHolidays?.has(dateStr)) {
+                         if (!holidayNamesForDay) {
+                              holidayNamesForDay = new Set<string>();
+                              map.set(dayIndex, holidayNamesForDay);
+                         }
+                          // Find the holiday name from the calendar definition
+                          const calendar = holidayCalendars.find(cal => cal.id === members.find(m => m.id === taskData.assigneeId)?.holidayCalendarId);
+                          const holiday = calendar?.holidays.find(hol => hol.date === dateStr);
+                          holidayNamesForDay.add(holiday?.name ?? 'Public Holiday');
+                     }
+                 });
             });
         } catch (e) {
-            console.error("Error calculating holiday map:", e);
+            console.error("Error calculating assignee holiday map:", e);
             return new Map();
         }
         return map;
-    }, [sprintStartDate, sprintEndDate, members, memberHolidayMap, holidayCalendars]);
+    }, [sprintStartDate, sprintEndDate, chartData, members, memberHolidayMap, holidayCalendars]);
 
 
   if (!clientNow) {
@@ -417,50 +412,48 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
              interval={0} // Show all calculated ticks
              allowDuplicatedCategory={true} // Allow sparse ticks
            />
-           {/* Weekend Reference Areas - Rendered First */}
-           {weekendIndices.map((index) => (
-                <ReferenceArea
-                    key={`weekend-area-${index}`}
-                    x1={index} // Start of the weekend day index
-                    x2={index + 1} // End of the weekend day index (exclusive for full day coverage)
-                    ifOverflow="extendDomain" // Extend beyond chart bounds if needed
-                    fill={weekendColor} // Use the defined black weekend color
-                    fillOpacity={1} // Use 100% opacity
-                    yAxisId={0} // Specify the Y-axis ID if needed (usually 0 for default)
-                    label={null} // Hide label text but keep the area
-                    style={{ pointerEvents: 'none' }} // Prevent interaction
-                />
-           ))}
-            {/* Holiday Reference Areas - Rendered Second */}
-            {Array.from(holidayMap.entries()).map(([index, holidayNames]) => (
-                 <ReferenceArea
-                    key={`holiday-area-${index}`}
-                    x1={index} // Start of the holiday day index
-                    x2={index + 1} // End of the holiday day index (exclusive)
-                    ifOverflow="extendDomain"
-                    fill={holidayColor} // Use the defined dark red holiday color
-                    fillOpacity={1} // Use 100% opacity
-                    yAxisId={0} // Specify the Y-axis ID
-                    label={(props) => {
-                        const holidayNamesString = Array.from(holidayNames).join(', ');
-                        return (
-                            <TooltipProvider>
-                                <UITooltip>
-                                    <TooltipTrigger asChild>
-                                         <g> {/* Wrap in <g> if needed */}
-                                            {/* Transparent rect for tooltip trigger area - might be tricky */}
-                                         </g>
-                                    </TooltipTrigger>
-                                    <UITooltipContent className="text-xs">
-                                        Public Holiday: {holidayNamesString}
-                                    </UITooltipContent>
-                                </UITooltip>
-                            </TooltipProvider>
-                        );
-                    }}
-                    style={{ pointerEvents: 'auto', cursor: 'help' }} // Make area interactive for tooltip
-                />
-             ))}
+            {/* Render Weekend and Holiday areas first */}
+           {sprintDayIndices.map((index) => {
+             const isWeekend = weekendIndices.includes(index);
+             const holidayNames = assigneeHolidayMap.get(index); // Use assignee-specific holidays
+             const fillColor = isWeekend ? weekendColor : (holidayNames ? holidayColor : undefined);
+             const tooltipText = holidayNames ? `Holiday: ${Array.from(holidayNames).join(', ')}` : (isWeekend ? 'Weekend' : '');
+
+             if (fillColor) {
+                 return (
+                     <ReferenceArea
+                         key={`nonwork-area-${index}`}
+                         x1={index}
+                         x2={index + 1}
+                         ifOverflow="extendDomain"
+                         fill={fillColor}
+                         fillOpacity={1} // Make fully opaque
+                         yAxisId={0}
+                         label={
+                           tooltipText ? (
+                               <TooltipProvider>
+                                   <UITooltip>
+                                       <TooltipTrigger asChild>
+                                           {/* Transparent rect for tooltip trigger area */}
+                                           {/* Note: Recharts label prop rendering complex components can be tricky. */}
+                                           {/* This might require a different approach like custom tooltips or overlays if it doesn't work well. */}
+                                           <g>
+                                               {/* Placeholder for trigger area, actual rect rendered by Recharts */}
+                                            </g>
+                                       </TooltipTrigger>
+                                       <UITooltipContent className="text-xs">
+                                           {tooltipText}
+                                       </UITooltipContent>
+                                   </UITooltip>
+                               </TooltipProvider>
+                           ) : null
+                         }
+                         style={{ pointerEvents: 'auto', cursor: tooltipText ? 'help' : 'default' }}
+                     />
+                 );
+             }
+             return null;
+           })}
 
           <YAxis
             dataKey="taskIndex" // Use the index of the task in the chartData array
@@ -499,6 +492,3 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     </ChartContainer>
   );
 }
-
-
-    
