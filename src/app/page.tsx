@@ -47,7 +47,7 @@ import { ModeToggle } from '@/components/mode-toggle'; // Import ModeToggle
 
 
 // Helper function to generate the next backlog ID based on *all* items (including historical and unsaved)
-const generateNextBacklogId = (allProjectBacklogItems: Task[]): string => {
+const generateNextBacklogIdHelper = (allProjectBacklogItems: Task[]): string => {
    const currentYear = getYear(new Date()).toString().slice(-2); // Get last two digits of the year
    const prefix = `BL-${currentYear}`;
    let maxNum = 0;
@@ -1551,7 +1551,7 @@ export default function Home() {
                     members: selectedProject.members ?? [],
                     sprints: selectedProject.sprintData.sprints ?? [],
                     onMoveToSprint: handleMoveToSprint,
-                    generateNextBacklogId: generateNextBacklogId, // Pass the helper
+                    generateNextBacklogId: generateNextBacklogIdHelper, // Pass the helper
                  };
                 break;
             case 'backlog/grooming':
