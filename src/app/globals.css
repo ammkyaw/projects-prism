@@ -50,8 +50,8 @@ body {
     --card-foreground: 0 0% 98%;
     --popover: 240 10% 3.9%;
     --popover-foreground: 0 0% 98%;
-    --primary: 210 100% 70%; /* Lighter Blue for dark mode */
-    --primary-foreground: 210 20% 10%; /* Darker foreground for light blue */
+    --primary: 220 100% 30%; /* Dark Blue (#003399) */
+    --primary-foreground: 0 0% 98%; /* Almost white for good contrast */
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
     --muted: 240 3.7% 15.9%;
@@ -62,20 +62,20 @@ body {
     --destructive-foreground: 0 0% 98%;
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
-    --ring: 210 100% 70%; /* Lighter Blue for focus rings */
-    --chart-1: 210 100% 70%; /* Lighter Blue for charts */
+    --ring: 220 100% 30%; /* Dark Blue for focus rings */
+    --chart-1: 220 100% 30%; /* Dark Blue for charts */
     --chart-2: 51 100% 60%;
     --chart-3: 210 50% 60%;
     --chart-4: 30 90% 70%;
     --chart-5: 120 50% 65%;
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 210 100% 70%; /* Lighter Blue for sidebar primary */
-    --sidebar-primary-foreground: 210 20% 10%; /* Darker foreground for sidebar primary */
+    --sidebar-primary: 220 100% 30%; /* Dark Blue for sidebar primary */
+    --sidebar-primary-foreground: 0 0% 98%; /* White for sidebar primary foreground */
     --sidebar-accent: 240 3.7% 15.9%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 210 100% 70%; /* Lighter Blue for sidebar focus rings */
+    --sidebar-ring: 220 100% 30%; /* Dark Blue for sidebar focus rings */
   }
 }
 
@@ -87,6 +87,7 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
 
 
 
