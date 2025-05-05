@@ -137,6 +137,21 @@ const createEmptyTaskRow = (): TaskRow => ({
   status: 'To Do',
   startDate: undefined,
   startDateObj: undefined,
+  // Ensure other fields possibly used by TaskRow are initialized
+  title: '',
+  description: '',
+  acceptanceCriteria: '',
+  priority: 'Medium',
+  dependsOn: [],
+  taskType: 'New Feature',
+  createdDate: '',
+  initiator: '',
+  needsGrooming: false,
+  readyForSprint: false,
+  movedToSprint: undefined,
+  historyStatus: undefined,
+  splitFromId: undefined,
+  mergeEventId: undefined,
 });
 
 
@@ -221,7 +236,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
         setPlanningData(loadedPlanning);
 
          const mapTaskToRow = (task: Task, index: number, type: 'new' | 'spill'): TaskRow => ({
-            ...task,
+            ...createEmptyTaskRow(), // Start with default empty row to ensure all fields exist
+            ...task, // Overwrite with loaded task data
             ticketNumber: task.ticketNumber ?? '', // Use ticketNumber
             backlogId: task.backlogId ?? '', // Ensure backlogId exists
             storyPoints: task.storyPoints?.toString() ?? '',
@@ -318,7 +334,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
              updater(prevRows => prevRows.filter(row => row._internalId !== internalId));
           }, 0);
      } else {
-         // If not reverting, just update the local state immediately
+         // If not reverting (or it's a spillover task), just update the local state immediately
          updater(prevRows => prevRows.filter(row => row._internalId !== internalId));
      }
  };
@@ -420,7 +436,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
      const itemsToAdd = backlog
        .filter(task => selectedBacklogIds.has(task.id))
        .map((task): TaskRow => ({ // Convert Task to TaskRow
-         ...task,
+         ...createEmptyTaskRow(), // Start with defaults
+         ...task, // Overwrite with backlog data
          _internalId: `backlog_added_${task.id}_${Date.now()}`,
          status: 'To Do', // Set status to 'To Do' when moved from backlog
          startDate: undefined, // Clear start date, needs planning
@@ -429,6 +446,18 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
          qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Apply defaults if missing
          bufferTime: task.bufferTime ?? '1d',
          backlogId: task.backlogId ?? '', // Ensure backlogId is carried over
+         // Ensure other relevant fields are carried over
+          ticketNumber: task.ticketNumber ?? task.backlogId ?? '', // Use ticket or backlog ID
+          title: task.title ?? '',
+          description: task.description ?? '',
+          acceptanceCriteria: task.acceptanceCriteria ?? '',
+          priority: task.priority ?? 'Medium',
+          dependsOn: task.dependsOn ?? [],
+          taskType: task.taskType ?? 'New Feature',
+          createdDate: task.createdDate ?? '',
+          initiator: task.initiator ?? '',
+          needsGrooming: task.needsGrooming ?? false,
+          readyForSprint: task.readyForSprint ?? false,
        }));
 
      setNewTasks(prev => {
@@ -509,6 +538,18 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
               status: status,
               startDate: startDate,
               priority: priority,
+              // Include other potential fields from Task interface, ensuring they are undefined if not set
+              acceptanceCriteria: row.acceptanceCriteria,
+              dependsOn: row.dependsOn,
+              taskType: row.taskType,
+              createdDate: row.createdDate,
+              initiator: row.initiator,
+              needsGrooming: row.needsGrooming,
+              readyForSprint: row.readyForSprint,
+              movedToSprint: row.movedToSprint,
+              historyStatus: row.historyStatus,
+              splitFromId: row.splitFromId,
+              mergeEventId: row.mergeEventId,
           });
       });
       return { tasks: finalTasks, errors };
@@ -714,7 +755,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                         <Label htmlFor={`ticket-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Ticket #*</Label>
                         <Input
                             id={`ticket-${type}-${row._internalId}`}
-                            value={row.ticketNumber}
+                            value={row.ticketNumber ?? ''} // Ensure string value
                             onChange={e => handleTaskInputChange(type, row._internalId, 'ticketNumber', e.target.value)}
                             placeholder="e.g., 12345"
                             className="h-9 w-full" // Ensure width is handled by grid
@@ -727,7 +768,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                         <Label htmlFor={`backlogid-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Backlog ID</Label>
                         <Input
                             id={`backlogid-${type}-${row._internalId}`}
-                            value={row.backlogId ?? ''}
+                            value={row.backlogId ?? ''} // Ensure string value
                             readOnly
                             className="h-9 w-full bg-muted/50 cursor-default"
                             title={row.backlogId} // Show full ID on hover
@@ -739,7 +780,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                         <Input
                             id={`sp-${type}-${row._internalId}`}
                             type="number"
-                            value={row.storyPoints}
+                            value={row.storyPoints ?? ''} // Ensure string value
                             onChange={e => handleTaskInputChange(type, row._internalId, 'storyPoints', e.target.value)}
                             placeholder="Pts"
                             className="h-9 text-right w-full"
@@ -752,7 +793,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                         <Label htmlFor={`devEstTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Dev Est</Label>
                         <Input
                             id={`devEstTime-${type}-${row._internalId}`}
-                            value={row.devEstimatedTime}
+                            value={row.devEstimatedTime ?? ''} // Ensure string value
                             onChange={e => handleTaskInputChange(type, row._internalId, 'devEstimatedTime', e.target.value)}
                             placeholder="e.g., 2d"
                             className="h-9 text-right w-full"
@@ -764,7 +805,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                         <Label htmlFor={`qaEstTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">QA Est</Label>
                         <Input
                             id={`qaEstTime-${type}-${row._internalId}`}
-                            value={row.qaEstimatedTime}
+                            value={row.qaEstimatedTime ?? ''} // Ensure string value
                             onChange={e => handleTaskInputChange(type, row._internalId, 'qaEstimatedTime', e.target.value)}
                             placeholder="e.g., 2d"
                             className="h-9 text-right w-full"
@@ -776,7 +817,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                         <Label htmlFor={`bufferTime-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Buffer</Label>
                         <Input
                             id={`bufferTime-${type}-${row._internalId}`}
-                            value={row.bufferTime}
+                            value={row.bufferTime ?? ''} // Ensure string value
                             onChange={e => handleTaskInputChange(type, row._internalId, 'bufferTime', e.target.value)}
                             placeholder="e.g., 1d"
                             className="h-9 text-right w-full"
@@ -787,7 +828,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                      <div className="md:col-span-1 col-span-1">
                         <Label htmlFor={`assignee-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Assignee</Label>
                          <Select
-                             value={row.assignee ?? ''}
+                             value={row.assignee ?? ''} // Ensure string value
                              onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'assignee', value === 'unassigned' ? undefined : value)}
                              disabled={disabled || members.length === 0}
                          >
@@ -807,7 +848,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                     <div className="md:col-span-1 col-span-1">
                        <Label htmlFor={`reviewer-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Reviewer</Label>
                         <Select
-                            value={row.reviewer ?? ''}
+                            value={row.reviewer ?? ''} // Ensure string value
                             onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'reviewer', value === 'unassigned' ? undefined : value)}
                             disabled={disabled || members.length === 0}
                         >
@@ -827,7 +868,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                     <div className="md:col-span-1 col-span-1">
                         <Label htmlFor={`status-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Status</Label>
                          <Select
-                           value={row.status}
+                           value={row.status ?? 'To Do'} // Ensure string value
                            onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'status', value)}
                             disabled={disabled}
                          >
