@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Task, Member, HolidayCalendar, PublicHoliday } from '@/types/sprint-data';
@@ -102,6 +101,10 @@ const calculateEndDateSkippingNonWorkingDays = (startDate: Date, workingDays: nu
      // Only advance the date if we haven't finished counting
      if (workingDaysCounted < workingDays) {
          currentDate = addDays(currentDate, 1);
+          // Skip subsequent non-working days while advancing
+         while (isNonWorkingDay(currentDate, memberHolidays)) {
+             currentDate = addDays(currentDate, 1);
+         }
      }
   }
 
@@ -138,7 +141,7 @@ interface ChartDataPoint {
     bufferRange?: [number, number];
     tooltip: string;
     assignee?: string;
-    assigneeId?: string | null; // Calendar ID for holiday lookup
+    assigneeId?: string | null; // Store assignee MEMBER ID for holiday lookup
     originalTask?: Task; // Include original task for assignee view tooltip
 }
 
@@ -150,9 +153,9 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
      setClientNow(new Date());
    }, []);
 
-   // Pre-compute holiday sets for each member
+   // Pre-compute holiday sets for each member based on assigned calendar
    const memberHolidayMap = useMemo(() => {
-       const map = new Map<string, { holidays: Set<string>, calendarId: string | null }>(); // Map member name to holiday set and calendar ID
+       const map = new Map<string, { holidays: Set<string>, calendarId: string | null }>(); // Map member NAME to holiday set and calendar ID
        members.forEach(member => {
            const calendarId = member.holidayCalendarId;
            const calendar = holidayCalendars.find(cal => cal.id === calendarId);
@@ -173,7 +176,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                    }
                });
            }
-           map.set(member.name, { holidays, calendarId }); // Store set and calendar ID
+           map.set(member.name, { holidays, calendarId }); // Store set and calendar ID using member NAME as key
        });
        return map;
    }, [members, holidayCalendars]);
@@ -191,9 +194,10 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     const processedTasks = tasks
         .map((task, index) => {
             const assigneeName = task.assignee;
+            // Get member holiday data using ASSIGNEE NAME as key
             const memberHolidayData = assigneeName ? memberHolidayMap.get(assigneeName) : undefined;
             const memberHolidays = memberHolidayData?.holidays ?? new Set<string>();
-            const assigneeMember = members.find(m => m.name === assigneeName); // Find member object
+            const assigneeMember = members.find(m => m.name === assigneeName); // Find member object by name
 
             if (!task.startDate || !isValid(parseISO(task.startDate))) {
                 console.warn(`Task ${task.ticketNumber}: Invalid or missing start date.`);
@@ -208,7 +212,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 return null;
             }
 
-             // Ensure taskStartObj is a working day before proceeding
+             // Adjust the initial start date forward if it falls on a non-working day
              let currentPhaseStartDate = new Date(taskStartObj);
              while (isNonWorkingDay(currentPhaseStartDate, memberHolidays)) {
                  currentPhaseStartDate = addDays(currentPhaseStartDate, 1);
@@ -231,7 +235,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 currentPhaseStartDate = getNextWorkingDay(devEndDateObj, memberHolidays); // Set start for next phase
             } else {
                 console.warn(`Task ${task.ticketNumber}: Invalid Dev Est. Time ${task.devEstimatedTime}`);
-                currentPhaseStartDate = getNextWorkingDay(devStartDateObj, memberHolidays); // Start next phase after adjusted task start
+                 // If dev time is invalid, next phase starts after the adjusted task start day
+                currentPhaseStartDate = getNextWorkingDay(devStartDateObj, memberHolidays);
             }
 
             // --- QA Phase ---
@@ -250,7 +255,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  currentPhaseStartDate = getNextWorkingDay(qaEndDateObj, memberHolidays); // Set start for next phase
              } else {
                   console.warn(`Task ${task.ticketNumber}: Invalid QA Est. Time ${task.qaEstimatedTime}`);
-                 currentPhaseStartDate = getNextWorkingDay(qaStartDateObj, memberHolidays); // Start next phase after QA start
+                  // If QA time is invalid, next phase starts after the QA phase start day
+                 currentPhaseStartDate = getNextWorkingDay(qaStartDateObj, memberHolidays);
              }
 
             // --- Buffer Phase ---
@@ -271,10 +277,11 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  console.warn(`Task ${task.ticketNumber}: Invalid Buffer Time ${task.bufferTime}`);
             }
 
-            const clampIndex = (index: number) => Math.max(0, Math.min(sprintLengthDays, index)); // Use sprintLengthDays directly
+            const clampIndex = (index: number) => Math.max(0, Math.min(sprintLengthDays -1 , index)); // Clamp between 0 and sprintLengthDays-1
 
+            // Apply clamping AFTER calculating the difference
             const clampedDevStart = clampIndex(devStartDayIndex);
-            const clampedDevEnd = clampIndex(devEndDayIndex);
+            const clampedDevEnd = clampIndex(devEndDayIndex); // End day index is inclusive
             const clampedQaStart = clampIndex(qaStartDayIndex);
             const clampedQaEnd = clampIndex(qaEndDayIndex);
             const clampedBufferStart = clampIndex(bufferStartDayIndex);
@@ -289,17 +296,18 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                  task.reviewer ? `Reviewer: ${task.reviewer}` : '',
              ].filter(Boolean).join(' | ');
 
-            const result: ChartDataPoint = {
-                name: task.ticketNumber || `Task ${task.id}`, // Use ticket number for default view
-                index: index, // Default index for task view
-                devRange: devPhaseValid && clampedDevEnd >= clampedDevStart ? [clampedDevStart, clampedDevEnd + 1] : undefined,
-                qaRange: qaPhaseValid && clampedQaEnd >= clampedQaStart ? [clampedQaStart, clampedQaEnd + 1] : undefined,
-                bufferRange: bufferPhaseValid && clampedBufferEnd >= clampedBufferStart ? [clampedBufferStart, clampedBufferEnd + 1] : undefined,
-                tooltip: tooltipContent,
-                assignee: task.assignee,
-                assigneeId: memberHolidayData?.calendarId, // Pass calendar ID for holiday lookups
-                originalTask: task, // Keep original task data
-            };
+             // Add +1 to end indices for Recharts bar range (exclusive end)
+             const result: ChartDataPoint = {
+                 name: task.ticketNumber || `Task ${task.id}`, // Use ticket number for default view
+                 index: index, // Default index for task view
+                 devRange: devPhaseValid && clampedDevEnd >= clampedDevStart ? [clampedDevStart, clampedDevEnd + 1] : undefined,
+                 qaRange: qaPhaseValid && clampedQaEnd >= clampedQaStart ? [clampedQaStart, clampedQaEnd + 1] : undefined,
+                 bufferRange: bufferPhaseValid && clampedBufferEnd >= clampedBufferStart ? [clampedBufferStart, clampedBufferEnd + 1] : undefined,
+                 tooltip: tooltipContent,
+                 assignee: task.assignee, // Pass assignee for potential holiday highlighting
+                 assigneeId: assigneeMember?.id, // Pass assignee MEMBER ID for holiday mapping
+                 originalTask: task, // Keep original task data
+             };
              // Include if *any* range is valid
              return result.devRange || result.qaRange || result.bufferRange ? result : null;
         }).filter(item => item !== null) as ChartDataPoint[]; // Assert type after filtering nulls
@@ -317,16 +325,17 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
             });
 
             const assigneeChartData: ChartDataPoint[] = [];
-            Object.keys(groupedByAssignee).forEach((assigneeName, assigneeIndex) => {
-                groupedByAssignee[assigneeName].forEach((task, taskIndexInGroup) => {
+            Object.keys(groupedByAssignee).sort().forEach((assigneeName, assigneeIndex) => { // Sort assignees alphabetically
+                groupedByAssignee[assigneeName].forEach((task) => {
                     // Create a new object for each task within the assignee group
                     assigneeChartData.push({
                         ...task,
+                        // In assignee view, only show dev range
+                        qaRange: undefined,
+                        bufferRange: undefined,
                         name: assigneeName, // Y-axis label is now assignee name
                         index: assigneeIndex, // Y-axis position based on assignee group
-                        tooltip: `Assignee: ${assigneeName} | ${task.tooltip}`, // Prepend assignee to tooltip
-                        // Add a sub-index or identifier if needed to distinguish tasks for the same assignee visually
-                        // For now, they might overlap if on the same dates, which is expected in assignee view
+                        tooltip: `Assignee: ${assigneeName} | Ticket: ${task.originalTask?.ticketNumber || 'N/A'} | Dev: ${task.originalTask?.devEstimatedTime || '0d'}`, // Simplified tooltip for assignee view
                     });
                 });
             });
@@ -377,23 +386,27 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
            let holidayForDay: { name: string; color: string; calendarName: string } | null = null;
 
            // Find *any* assigned member who has a holiday on this day
-           const memberWithHoliday = members.find(member => {
-                const memberData = member.name ? memberHolidayMap.get(member.name) : undefined;
-                return memberData?.holidays.has(dateStr);
-           });
+           // Use the MEMBER ID stored in ChartDataPoint's assigneeId for lookup
+           const membersWithHolidayOnDay = chartData
+             .filter(dp => dp.assigneeId && memberHolidayMap.get(dp.assignee!)?.holidays.has(dateStr)) // Filter by assignee name to get holiday set
+             .map(dp => dp.assigneeId); // Get MEMBER IDs of members with holiday on this day
 
-           if (memberWithHoliday) {
-               const memberData = memberHolidayMap.get(memberWithHoliday.name);
-               const calendarId = memberData?.calendarId;
-                if (calendarId) {
-                    const calendar = holidayCalendars.find(cal => cal.id === calendarId);
+            // Now find the CALENDAR ID for these members
+            const calendarIdsForDay = membersWithHolidayOnDay.map(memberId => members.find(m => m.id === memberId)?.holidayCalendarId).filter(Boolean);
+
+
+           if (calendarIdsForDay.length > 0) {
+               // Prioritize showing one holiday, maybe the first one found?
+               const firstCalendarIdWithHoliday = calendarIdsForDay[0];
+                if (firstCalendarIdWithHoliday) {
+                    const calendar = holidayCalendars.find(cal => cal.id === firstCalendarIdWithHoliday);
                     if (calendar) {
                         // Assign color if not already assigned
-                       if (!calendarColors.has(calendarId)) {
-                         calendarColors.set(calendarId, holidayColorBase[colorIndex % holidayColorBase.length]);
+                       if (!calendarColors.has(firstCalendarIdWithHoliday)) {
+                         calendarColors.set(firstCalendarIdWithHoliday, holidayColorBase[colorIndex % holidayColorBase.length]);
                          colorIndex++;
                        }
-                       const color = calendarColors.get(calendarId)!;
+                       const color = calendarColors.get(firstCalendarIdWithHoliday)!;
                        const holiday = calendar.holidays.find(hol => hol.date === dateStr);
                        holidayForDay = {
                          name: holiday?.name ?? 'Public Holiday',
@@ -413,7 +426,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
          return new Map();
        }
        return map;
-   }, [sprintStartDate, sprintEndDate, members, memberHolidayMap, holidayCalendars]); // Added holidayCalendars
+   }, [sprintStartDate, sprintEndDate, memberHolidayMap, holidayCalendars, chartData, members]); // Added members dependency
 
    // Generate Chart Config dynamically based on used calendars
    const chartConfig = useMemo(() => {
@@ -424,7 +437,8 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
            weekend: { label: 'Weekend', color: weekendColor },
        };
        assignedHolidayMap.forEach((holidayInfo, dayIndex) => {
-           const key = `holiday-${holidayInfo.calendarName.replace(/\s+/g, '-')}`;
+           // Create a unique key based on calendar name and day index to handle multiple holidays from same calendar
+           const key = `holiday-${holidayInfo.calendarName.replace(/[^a-zA-Z0-9]/g, '-')}-${dayIndex}`;
            if (!config[key]) {
                config[key] = { label: holidayInfo.calendarName, color: holidayInfo.color };
            }
@@ -433,19 +447,25 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
    }, [assignedHolidayMap]);
 
    // Determine Y-axis dataKey and formatter based on viewMode
-   const yAxisDataKey = viewMode === 'assignee' ? 'index' : 'index'; // Use 'index' which is assignee index or task index
-   const yAxisTickFormatter = (value: number) => {
-        // Ensure chartData[value] exists before accessing properties
-        const dataPoint = chartData[value];
-        if (!dataPoint) return ''; // Return empty string if data point doesn't exist
-        return dataPoint.name ?? ''; // Use task name or assignee name
+   const yAxisDataKey = 'index'; // Always use index now
+   const yAxisTickFormatter = (value: number, index: number): string => {
+       if (viewMode === 'assignee') {
+           // Find the first data point with this index to get the assignee name
+           const dataPoint = chartData.find(d => d.index === value);
+           return dataPoint?.name ?? `Assignee ${value + 1}`; // Fallback if name not found
+       } else {
+           // Task view: find the data point by index
+           const dataPoint = chartData[value];
+           return dataPoint?.name ?? `Task ${value + 1}`; // Fallback if name not found
+       }
    };
 
 
    // Determine unique Y-axis domain values (assignee names or task names)
     const yDomainValues = useMemo(() => {
+        // Get unique names based on the current view mode
         return [...new Set(chartData.map(d => d.name))];
-    }, [chartData]);
+    }, [chartData]); // Recalculate when chartData changes
 
    // Calculate dynamic height based on the number of unique Y-axis values
    const rowHeight = 30; // Adjust as needed for spacing
@@ -483,16 +503,28 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
 
   // Custom Legend Component
-    const CustomLegend = () => (
-      <div className="flex justify-center items-center flex-wrap space-x-4 mt-4 text-xs">
-        {Object.entries(chartConfig).map(([key, value]) => (
-          <div key={key} className="flex items-center space-x-1 mb-1">
-            <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: value.color }}></span>
-            <span>{value.label}</span>
+    const CustomLegend = () => {
+        return (
+          <div className="flex justify-center items-center flex-wrap space-x-4 mt-4 text-xs">
+            {Object.entries(chartConfig).map(([key, value]) => {
+                 // Only show relevant legends based on viewMode
+                 if (viewMode === 'assignee' && (key === 'qa' || key === 'buffer')) {
+                    return null;
+                 }
+                 // Only show holiday legends if that calendar actually has holidays in the map
+                 if (key.startsWith('holiday-') && !Array.from(assignedHolidayMap.values()).some(h => h.calendarName === value.label)) {
+                     return null;
+                 }
+                 return (
+                   <div key={key} className="flex items-center space-x-1 mb-1">
+                     <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: value.color }}></span>
+                     <span>{value.label}</span>
+                   </div>
+                 );
+             })}
           </div>
-        ))}
-      </div>
-    );
+        );
+    };
 
   return (
     <ChartContainer config={chartConfig} className="w-full" style={{ height: `${chartHeight}px` }}> {/* Dynamic height */}
@@ -560,7 +592,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
               cursor={{ fill: 'hsl(var(--muted) / 0.3)' }}
               content={({ payload }) => {
                  if (payload && payload.length > 0 && payload[0].payload) {
-                     const data = payload[0].payload;
+                     const data = payload[0].payload as ChartDataPoint; // Type assertion
                      return (
                          <div className="text-xs bg-background border rounded px-2 py-1 shadow-sm max-w-md">
                              <p className="font-semibold break-words">{data.tooltip}</p>
@@ -572,8 +604,13 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
              />
            {/* Render bars for each phase - Rendered Last to overlay non-working days */}
            <Bar dataKey="devRange" radius={2} barSize={10} fill={chartConfig.dev.color} name="Development" yAxisId={0} />
-           <Bar dataKey="qaRange" radius={2} barSize={10} fill={chartConfig.qa.color} name="QA" yAxisId={0} />
-           <Bar dataKey="bufferRange" radius={2} barSize={10} fill={chartConfig.buffer.color} name="Buffer" yAxisId={0} />
+           {/* Conditionally render QA and Buffer based on viewMode */}
+           {viewMode === 'task' && (
+                <>
+                    <Bar dataKey="qaRange" radius={2} barSize={10} fill={chartConfig.qa.color} name="QA" yAxisId={0} />
+                    <Bar dataKey="bufferRange" radius={2} barSize={10} fill={chartConfig.buffer.color} name="Buffer" yAxisId={0} />
+                </>
+           )}
 
           {/* Use the custom legend */}
           <Legend content={<CustomLegend />} verticalAlign="bottom" wrapperStyle={{ bottom: 0 }}/>
@@ -582,5 +619,3 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     </ChartContainer>
   );
 }
-
-    
