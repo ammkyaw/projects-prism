@@ -74,8 +74,8 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
 
    // Track unsaved changes by comparing current state with initial props
    useEffect(() => {
-        const cleanBacklog = (tasks: Task[]): Omit<Task, 'id' | 'status' | 'movedToSprint' | 'historyStatus'>[] =>
-           (tasks || []).map(({ id, status, movedToSprint, historyStatus, ...rest }: any) => ({ // Add null check, exclude historyStatus
+        const cleanBacklog = (tasks: Task[]): Omit<Task, 'id' | 'status' | 'movedToSprint' | 'historyStatus' | 'splitFromId' | 'mergeEventId'>[] => // Excluded history related fields
+           (tasks || []).map(({ id, status, movedToSprint, historyStatus, splitFromId, mergeEventId, ...rest }: any) => ({ // Add null check, exclude historyStatus
                backlogId: rest.backlogId?.trim() || '',
                title: rest.title?.trim() || '',
                description: rest.description?.trim() || '',
@@ -230,6 +230,8 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
              // Ensure historical fields are preserved if they somehow exist (though they shouldn't be in itemsToSave)
             historyStatus: item.historyStatus,
             movedToSprint: item.movedToSprint,
+            splitFromId: item.splitFromId,
+            mergeEventId: item.mergeEventId,
         });
     });
 
@@ -268,57 +270,40 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                  <CardDescription>Refine items marked 'Needs Grooming'. Add details, estimate, mark as ready, split, or merge stories.</CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                  <TooltipProvider>
-                      {/* View DoR */}
-                       <Tooltip>
-                          <TooltipTrigger asChild>
-                              <Dialog>
-                                  <DialogTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                                          <BookOpenCheck className="h-4 w-4" />
-                                      </Button>
-                                  </DialogTrigger>
-                                  <DialogContent className="sm:max-w-md">
-                                      <DialogHeader>
-                                          <DialogTitle>Definition of Ready (DoR)</DialogTitle>
-                                      </DialogHeader>
-                                      <DialogDescription asChild>
-                                         <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground py-4">
-                                             <li>Well-defined and clear acceptance criteria</li>
-                                             <li>Small enough to be completed within one sprint</li>
-                                             <li>No blockers or unresolved dependencies</li>
-                                             <li>Prioritized by the Project Manager/ Product Owner</li>
-                                          </ul>
-                                      </DialogDescription>
-                                      <DialogFooter>
-                                          <DialogClose asChild>
-                                              <Button type="button" variant="secondary">Close</Button>
-                                          </DialogClose>
-                                      </DialogFooter>
-                                  </DialogContent>
-                              </Dialog>
-                          </TooltipTrigger>
-                          <TooltipContent><p>View Definition of Ready</p></TooltipContent>
-                       </Tooltip>
-                       {/* Merge Items */}
-                       <Tooltip>
-                           <TooltipTrigger asChild>
-                               <Button variant="ghost" size="icon" onClick={handleOpenMergeDialog} disabled={mergeCandidates.length < 2} className="h-8 w-8">
-                                   <GitMerge className="h-4 w-4" />
-                               </Button>
-                           </TooltipTrigger>
-                           <TooltipContent><p>Merge Items</p></TooltipContent>
-                       </Tooltip>
-                      {/* Save All */}
-                      <Tooltip>
-                          <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" onClick={handleSaveAll} disabled={!hasUnsavedChanges} className="h-8 w-8">
-                                  <Save className="h-4 w-4" />
-                              </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>Save All Changes</p></TooltipContent>
-                      </Tooltip>
-                  </TooltipProvider>
+                    {/* View DoR */}
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                                <BookOpenCheck className="mr-2 h-4 w-4" /> View DoR
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                                <DialogTitle>Definition of Ready (DoR)</DialogTitle>
+                            </DialogHeader>
+                            <DialogDescription asChild>
+                                <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground py-4">
+                                    <li>Well-defined and clear acceptance criteria</li>
+                                    <li>Small enough to be completed within one sprint</li>
+                                    <li>No blockers or unresolved dependencies</li>
+                                    <li>Prioritized by the Project Manager/ Product Owner</li>
+                                </ul>
+                            </DialogDescription>
+                            <DialogFooter>
+                                <DialogClose asChild>
+                                    <Button type="button" variant="secondary">Close</Button>
+                                </DialogClose>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                    {/* Merge Items */}
+                    <Button variant="outline" size="sm" onClick={handleOpenMergeDialog} disabled={mergeCandidates.length < 2}>
+                        <GitMerge className="mr-2 h-4 w-4" /> Merge Items
+                    </Button>
+                    {/* Save All */}
+                    <Button onClick={handleSaveAll} disabled={!hasUnsavedChanges} size="sm">
+                        <Save className="mr-2 h-4 w-4" /> Save All Changes
+                    </Button>
               </div>
           </div>
         </CardHeader>
@@ -488,7 +473,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
              onOpenChange={setIsMergeDialogOpen}
              availableBacklogItems={mergeCandidates} // Pass only non-historical items
              onConfirmMerge={handleConfirmMerge}
-             generateNextBacklogId={generateNextBacklogId} // Pass helper
+             // generateNextBacklogId={generateNextBacklogId} // Removed prop
              allProjectBacklogItems={allProjectBacklogItems} // Pass all items for ID check
          />
     </>
