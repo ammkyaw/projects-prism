@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { SprintData, Sprint } from '@/types/sprint-data'; // Import Sprint type
@@ -84,20 +85,23 @@ export default function SprintSummaryTab({ sprintData, projectName, projectId, o
                            href={`/projects/${projectId}/sprints/${sprint.sprintNumber}/edit`}
                            passHref
                            legacyBehavior
-                           aria-disabled={sprint.status === 'Completed'}
+                           aria-disabled={sprint.status === 'Completed'} // Use aria-disabled
                            tabIndex={sprint.status === 'Completed' ? -1 : undefined}
-                           onClick={(e) => { if (sprint.status === 'Completed') e.preventDefault(); }}
+                           onClick={(e) => { if (sprint.status === 'Completed') e.preventDefault(); }} // Prevent navigation
                          >
                            <Button
-                              asChild
+                              asChild // Use asChild so the Button acts like the Link
                               variant="ghost"
                               size="icon"
                               aria-label={`Edit Legacy Details for Sprint ${sprint.sprintNumber}`}
                               title={sprint.status === 'Completed' ? 'Completed sprint details are read-only' : 'Edit Legacy Details'}
-                              disabled={sprint.status === 'Completed'}
-                              className={cn("h-8 w-8", sprint.status === 'Completed' && "cursor-not-allowed opacity-50")} // Smaller icon button & disable styles
+                              disabled={sprint.status === 'Completed'} // Add disabled attribute
+                              className={cn(
+                                 "h-8 w-8",
+                                 sprint.status === 'Completed' && "cursor-not-allowed opacity-50" // Apply disabled styles
+                              )}
                            >
-                             <a><Edit className="h-4 w-4" /></a>
+                              <a><Edit className="h-4 w-4" /></a>
                            </Button>
                          </Link>
                          {/* Delete Button with Confirmation */}
