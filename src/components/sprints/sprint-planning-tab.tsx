@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -129,6 +128,7 @@ const createEmptyTaskRow = (): TaskRow => ({
   _internalId: `task_${Date.now()}_${Math.random()}`,
   id: '',
   ticketNumber: '', // Changed from description
+  backlogId: '', // Initialize backlogId
   storyPoints: '',
   devEstimatedTime: '', // Renamed
   qaEstimatedTime: '2d', // Default QA time
@@ -224,6 +224,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
          const mapTaskToRow = (task: Task, index: number, type: 'new' | 'spill'): TaskRow => ({
             ...task,
             ticketNumber: task.ticketNumber ?? '', // Use ticketNumber
+            backlogId: task.backlogId ?? '', // Ensure backlogId exists
             storyPoints: task.storyPoints?.toString() ?? '',
             devEstimatedTime: task.devEstimatedTime ?? '', // Use new field
             qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
@@ -697,11 +698,11 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
 
    const renderTaskTable = (type: 'new' | 'spillover', taskRows: TaskRow[], disabled: boolean) => (
       <div className="overflow-x-auto"> {/* Add horizontal scroll */}
-         {/* Adjusted grid layout for narrower Ticket # and other fields */}
-         <div className="min-w-[1150px] space-y-4"> {/* Adjusted min-width */}
-             {/* Grid column definitions */}
-            <div className="hidden md:grid grid-cols-[100px_70px_100px_100px_100px_150px_150px_120px_100px_40px] gap-x-2 items-center pb-2 border-b"> {/* Reduced Ticket # width */}
+         {/* Grid layout with added Backlog ID */}
+         <div className="min-w-[1250px] space-y-4"> {/* Adjusted min-width */}
+            <div className="hidden md:grid grid-cols-[100px_100px_70px_100px_100px_100px_150px_150px_120px_100px_40px] gap-x-2 items-center pb-2 border-b"> {/* Added Backlog ID */}
                 <Label className="text-xs font-medium text-muted-foreground">Ticket #*</Label>
+                <Label className="text-xs font-medium text-muted-foreground">Backlog ID</Label> {/* New Header */}
                 <Label className="text-xs font-medium text-muted-foreground text-right">Story Pts</Label>
                 <Label className="text-xs font-medium text-muted-foreground text-right">Dev Est</Label>
                 <Label className="text-xs font-medium text-muted-foreground text-right">QA Est</Label>
@@ -715,9 +716,9 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
             <div className="space-y-4 md:space-y-2">
                 {taskRows.map((row) => (
                 // Match the grid column definition here
-                <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[100px_70px_100px_100px_100px_150px_150px_120px_100px_40px] gap-x-2 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0"> {/* Reduced Ticket # width */}
+                <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[100px_100px_70px_100px_100px_100px_150px_150px_120px_100px_40px] gap-x-2 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0"> {/* Added Backlog ID */}
                      {/* Ticket Number */}
-                    <div className="md:col-span-1 col-span-2">
+                    <div className="md:col-span-1 col-span-1"> {/* Adjusted span */}
                         <Label htmlFor={`ticket-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Ticket #*</Label>
                         <Input
                             id={`ticket-${type}-${row._internalId}`}
@@ -727,6 +728,17 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                             className="h-9 w-full" // Ensure width is handled by grid
                             disabled={disabled}
                             required
+                        />
+                    </div>
+                     {/* Backlog ID (Read-only for now) */}
+                     <div className="md:col-span-1 col-span-1"> {/* Adjusted span */}
+                        <Label htmlFor={`backlogid-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Backlog ID</Label>
+                        <Input
+                            id={`backlogid-${type}-${row._internalId}`}
+                            value={row.backlogId ?? ''}
+                            readOnly
+                            className="h-9 w-full bg-muted/50 cursor-default"
+                            title={row.backlogId} // Show full ID on hover
                         />
                     </div>
                      {/* Story Points */}
@@ -1258,4 +1270,3 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
     </div>
   );
 }
-
