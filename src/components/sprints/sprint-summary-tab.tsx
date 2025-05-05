@@ -7,8 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge" // Import Badge
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Import AlertDialog components
-import { Info, Edit, Circle, Trash2, Eye } from 'lucide-react'; // Added Eye icon
-import Link from 'next/link'; // Import Link
+import { Info, Circle, Trash2, Eye } from 'lucide-react'; // Removed Edit icon
 import { cn } from '@/lib/utils'; // Import cn
 
 interface SprintSummaryTabProps {
@@ -44,7 +43,7 @@ export default function SprintSummaryTab({ sprintData, projectName, projectId, o
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Eye className="h-5 w-5 text-primary" /> Sprint Summary: {projectName}</CardTitle>
         <CardDescription>
-          Overview of all sprints for the project. Edit legacy details or delete sprints. For planning new sprints, use the 'Planning' sub-tab.
+          Overview of all sprints for the project. Delete sprints if needed. For planning new sprints, use the 'Planning' sub-tab.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -60,7 +59,7 @@ export default function SprintSummaryTab({ sprintData, projectName, projectId, o
                     <TableHead>Status</TableHead>{/* Add Status Header */}
                     <TableHead className="text-right">Commitment</TableHead>
                     <TableHead className="text-right">Delivered</TableHead>
-                    <TableHead className="w-[100px] text-center">Actions</TableHead>{/* Adjusted width for two icons */}
+                    <TableHead className="w-[50px] text-center">Actions</TableHead>{/* Adjusted width for delete only */}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -79,31 +78,7 @@ export default function SprintSummaryTab({ sprintData, projectName, projectId, o
                        </TableCell>
                       <TableCell className="text-right">{sprint.committedPoints}</TableCell>
                       <TableCell className="text-right">{sprint.completedPoints}</TableCell>
-                       <TableCell className="text-center space-x-1">
-                         {/* Edit Button (Legacy Details) */}
-                         <Link
-                           href={`/projects/${projectId}/sprints/${sprint.sprintNumber}/edit`}
-                           passHref
-                           legacyBehavior
-                           aria-disabled={sprint.status === 'Completed'} // Use aria-disabled
-                           tabIndex={sprint.status === 'Completed' ? -1 : undefined}
-                           onClick={(e) => { if (sprint.status === 'Completed') e.preventDefault(); }} // Prevent navigation
-                         >
-                           <Button
-                              asChild // Use asChild so the Button acts like the Link
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Edit Legacy Details for Sprint ${sprint.sprintNumber}`}
-                              title={sprint.status === 'Completed' ? 'Completed sprint details are read-only' : 'Edit Legacy Details'}
-                              disabled={sprint.status === 'Completed'} // Add disabled attribute
-                              className={cn(
-                                 "h-8 w-8",
-                                 sprint.status === 'Completed' && "cursor-not-allowed opacity-50" // Apply disabled styles
-                              )}
-                           >
-                              <a><Edit className="h-4 w-4" /></a>
-                           </Button>
-                         </Link>
+                       <TableCell className="text-center">
                          {/* Delete Button with Confirmation */}
                          <AlertDialog>
                            <AlertDialogTrigger asChild>
