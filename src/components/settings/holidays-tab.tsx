@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -49,64 +48,6 @@ const countryOptions = [
     // Add more countries as needed
 ];
 
-// --- Simulated Holiday Data ---
-// In a real app, fetch this from an API or library
-const getSimulatedHolidays = (countryCode: string, year: number): PublicHoliday[] => {
-    const holidays: Omit<PublicHoliday, 'id'>[] = [];
-    switch (countryCode) {
-        case 'US':
-            holidays.push(
-                { name: 'New Year\'s Day', date: `${year}-01-01` },
-                { name: 'Martin Luther King, Jr. Day', date: `${year}-01-20` }, // Example fixed date, actual varies
-                { name: 'Memorial Day', date: `${year}-05-26` }, // Example fixed date, actual varies
-                { name: 'Independence Day', date: `${year}-07-04` },
-                { name: 'Labor Day', date: `${year}-09-01` }, // Example fixed date, actual varies
-                { name: 'Thanksgiving Day', date: `${year}-11-27` }, // Example fixed date, actual varies
-                { name: 'Christmas Day', date: `${year}-12-25` }
-            );
-            break;
-        case 'GB':
-            holidays.push(
-                 { name: 'New Year\'s Day', date: `${year}-01-01` },
-                 { name: 'Good Friday', date: `${year}-04-18` }, // Example fixed date, actual varies
-                 { name: 'Easter Monday', date: `${year}-04-21` }, // Example fixed date, actual varies
-                 { name: 'Early May Bank Holiday', date: `${year}-05-05` }, // Example fixed date, actual varies
-                 { name: 'Spring Bank Holiday', date: `${year}-05-26` }, // Example fixed date, actual varies
-                 { name: 'Summer Bank Holiday', date: `${year}-08-25` }, // Example fixed date, actual varies
-                 { name: 'Christmas Day', date: `${year}-12-25` },
-                 { name: 'Boxing Day', date: `${year}-12-26` }
-            );
-            break;
-        case 'JP': // Added Japan
-            holidays.push(
-                { name: "New Year's Day", date: `${year}-01-01` },
-                { name: "Coming of Age Day", date: `${year}-01-13` },
-                { name: "Foundation Day", date: `${year}-02-11` },
-                { name: "Emperor's Birthday", date: `${year}-02-23` },
-                { name: "Vernal Equinox Day", date: `${year}-03-20` },
-                { name: "Showa Day", date: `${year}-04-29` },
-                { name: "Constitution Memorial Day", date: `${year}-05-03` },
-                { name: "Greenery Day", date: `${year}-05-04` },
-                { name: "Children's Day", date: `${year}-05-05` },
-                { name: "Marine Day", date: `${year}-07-21` },
-                { name: "Mountain Day", date: `${year}-08-11` },
-                { name: "Respect for the Aged Day", date: `${year}-09-15` },
-                { name: "Autumnal Equinox Day", date: `${year}-09-23` },
-                { name: "Health and Sports Day", date: `${year}-10-13` },
-                { name: "Culture Day", date: `${year}-11-03` },
-                { name: "Labor Thanksgiving Day", date: `${year}-11-23` }
-            );
-            break;
-        // Add other countries as needed
-    }
-    // Assign unique IDs (simulation)
-    return holidays.map((hol, index) => ({
-        ...hol,
-        id: `sim_${countryCode}_${year}_${index}`
-    }));
-};
-// --- End Simulated Holiday Data ---
-
 const createEmptyCalendar = (): EditableCalendar => ({
   _internalId: `cal_${Date.now()}_${Math.random()}`,
   id: '', // Will be assigned on save
@@ -141,6 +82,33 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
   const { toast } = useToast();
   const currentYear = getYear(new Date()); // Get current year for simulated holidays
 
+  // --- New function to fetch holidays from the Nager.Date API ---
+  const fetchNagerHolidays = useCallback(async (countryCode: string, year: number): Promise<PublicHoliday[]> => {
+    try {
+      const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${countryCode}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      // Map the API response to the PublicHoliday type
+      const holidays: PublicHoliday[] = data.map((item: any, index: number) => ({
+        id: `nager_${countryCode}_${year}_${index}`, // Generate a unique ID
+        name: item.name,
+        date: item.date, // Already in YYYY-MM-DD format
+      }));
+      return holidays;
+    } catch (error: any) {
+      console.error("Failed to fetch holidays from Nager.Date API:", error.message);
+      toast({
+        variant: "destructive",
+        title: "Error Fetching Holidays",
+        description: "Could not retrieve holidays from the API.",
+      });
+      return [];
+    }
+  }, [toast]);
+
+
   // Initialize or update calendars based on initial prop
   useEffect(() => {
     const mappedCalendars = initialCalendars.map((cal, calIndex) => {
@@ -149,9 +117,23 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
 
         // If country-based, potentially fetch/simulate (only if not already populated appropriately)
         // This logic might need refinement based on how fetched data is stored/identified
-        if (isCountryBased && holidaysToMap.length === 0) {
-           // If initial data has country code but no holidays, simulate fetch
-           holidaysToMap = getSimulatedHolidays(cal.countryCode!, currentYear);
+        if (isCountryBased && cal.countryCode) { // Use same conditional as the function
+            // If initial data has country code but no holidays, fetch
+            fetchNagerHolidays(cal.countryCode, currentYear)
+            .then(fetchedHolidays => {
+               const mappedEditableHolidays = fetchedHolidays.map((hol, index) => ({
+                    ...hol,
+                    _internalId: hol.id || `fetched_${cal._internalId}_${index}_${Date.now()}`,
+                    dateObj: parseDateString(hol.date),
+                 }));
+                 setCalendars(prev =>
+                    prev.map(pCal =>
+                      pCal._internalId === cal._internalId
+                        ? { ...pCal, holidays: mappedEditableHolidays, isCountryBased: true }
+                        : pCal
+                    )
+                 );
+            });
         }
 
         return {
@@ -172,7 +154,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
         setCalendars([createEmptyCalendar()]);
     }
     setHasUnsavedChanges(false);
-  }, [initialCalendars, projectId, currentYear]); // Add currentYear dependency
+  }, [initialCalendars, projectId, currentYear, fetchNagerHolidays]); // Add fetchHolidays to dependencies
 
   // Track unsaved changes
   useEffect(() => {
@@ -221,35 +203,31 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
   const handleCountryChange = (internalId: string, value: string) => {
       const countryCode = value === 'none' ? '' : value;
       const isNowCountryBased = !!countryCode;
-      let updatedHolidays: PublicHoliday[] = [];
 
-      if (isNowCountryBased) {
-         updatedHolidays = getSimulatedHolidays(countryCode, currentYear);
-         toast({ title: "Holidays Populated", description: `Standard holidays for ${countryOptions.find(c=>c.code===countryCode)?.name} (${currentYear}) added. Save to confirm.` });
-      }
+      // Fetch holidays and then update state
+      fetchNagerHolidays(countryCode, currentYear)
+      .then(fetchedHolidays => {
+        // Map fetched holidays to EditableHoliday format
+        const mappedEditableHolidays = fetchedHolidays.map((hol, index) => ({
+            ...hol,
+            _internalId: hol.id || `fetched_${internalId}_${index}_${Date.now()}`,
+            dateObj: parseDateString(hol.date),
+         }));
 
-      setCalendars(prev =>
-          prev.map(cal => {
-              if (cal._internalId === internalId) {
-                 // Map fetched/simulated holidays to EditableHoliday format
-                 const mappedEditableHolidays = updatedHolidays.length > 0
-                    ? updatedHolidays.map((hol, index) => ({
-                         ...hol,
-                         _internalId: hol.id || `fetched_${internalId}_${index}_${Date.now()}`,
-                         dateObj: parseDateString(hol.date),
-                      }))
-                    : [createEmptyHoliday()]; // Reset to one empty if 'none' is selected
-
-                  return {
-                      ...cal,
-                      countryCode: countryCode,
-                      isCountryBased: isNowCountryBased,
-                      holidays: mappedEditableHolidays,
-                  };
-              }
-              return cal;
-          })
-      );
+         setCalendars(prev =>
+           prev.map(cal => {
+               if (cal._internalId === internalId) {
+                   return {
+                       ...cal,
+                       countryCode: countryCode,
+                       isCountryBased: isNowCountryBased,
+                       holidays: mappedEditableHolidays,
+                   };
+               }
+               return cal;
+           })
+         );
+      });
   };
 
   const handleAddHoliday = (calendarInternalId: string) => {
@@ -493,7 +471,7 @@ export default function HolidaysTab({ projectId, projectName, initialCalendars, 
         <div className="flex justify-between items-center">
            <div>
               <CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /> Holiday Calendars: {projectName}</CardTitle>
-               <CardDescription>Manage public holiday calendars. Select a country to auto-populate standard holidays (read-only), or choose 'None' for a custom calendar.</CardDescription>
+               <CardDescription>Manage public holiday calendars. Select a country to auto-populate standard holidays, or choose 'None' for a custom calendar.</CardDescription>
            </div>
            <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
               <Save className="mr-2 h-4 w-4" /> Save Calendars
