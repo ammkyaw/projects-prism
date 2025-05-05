@@ -36,7 +36,7 @@ const parseEstimatedTimeToDays = (timeString: string | undefined): number | null
   if (weekPart) {
     const weeks = parseInt(weekPart.replace('w', ''), 10);
     if (!isNaN(weeks)) {
-      totalDays += weeks * 5;
+      totalDays += weeks * 5; // Assuming 5 working days per week
     }
   }
 
@@ -62,6 +62,10 @@ const isNonWorkingDay = (date: Date, memberHolidays: Set<string>): boolean => {
   const dayOfWeek = getDay(date);
   if (dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
     return true;
+  }
+  // Check if the date exists in the member's holiday set
+  if (!memberHolidays || memberHolidays.size === 0) {
+      return false; // No holidays to check
   }
   const dateString = format(date, 'yyyy-MM-dd');
   return memberHolidays.has(dateString);
@@ -131,7 +135,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
    // Pre-compute holiday sets for each member
    const memberHolidayMap = useMemo(() => {
-       const map = new Map<string, Set<string>>(); // Map member ID to set of holiday date strings
+       const map = new Map<string, Set<string>>(); // Map member name to set of holiday date strings
        members.forEach(member => {
            const calendarId = member.holidayCalendarId;
            const calendar = holidayCalendars.find(cal => cal.id === calendarId);
@@ -143,7 +147,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                    }
                });
            }
-           map.set(member.name, holidays);
+           map.set(member.name, holidays); // Use member.name as key
        });
        return map;
    }, [members, holidayCalendars]);
@@ -161,25 +165,21 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     const processedTasks = tasks
         .map((task, index) => {
              // Get assignee's member ID and specific holidays
-             const assigneeMember = members.find(m => m.name === task.assignee);
-             const assigneeId = assigneeMember?.id;
-             const memberHolidays = task.assignee ? (memberHolidayMap.get(task.assignee) ?? new Set<string>()) : new Set<string>(); // Use assignee-specific holidays
-             //const memberHolidays = assigneeId ? (memberHolidayMap.get(assigneeId) ?? new Set<string>()) : new Set<string>();
+             const assigneeName = task.assignee; // Use assignee name
+             const memberHolidays = assigneeName ? (memberHolidayMap.get(assigneeName) ?? new Set<string>()) : new Set<string>(); // Use assignee-specific holidays
 
             if (!task.startDate || !isValid(parseISO(task.startDate))) {
                 console.warn(`Task ${index + 1} (${task.ticketNumber}): Invalid or missing start date.`); // Use ticketNumber
                 return null;
             }
 
-            let taskStartObj: Date;
+            let currentPhaseStartObj: Date;
              try {
-                 taskStartObj = parseISO(task.startDate!);
+                 currentPhaseStartObj = parseISO(task.startDate!);
              } catch (e) {
                  console.error(`Task ${index + 1} (${task.ticketNumber}): Error parsing start date: ${task.startDate}`, e);
                  return null;
              }
-
-            let currentPhaseStartObj = taskStartObj;
 
             // Ensure the effective start date of the *first* phase is a working day for the assignee
             while (isNonWorkingDay(currentPhaseStartObj, memberHolidays)) {
@@ -283,7 +283,6 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
                 bufferRange: bufferPhaseValid && clampedBufferEnd >= clampedBufferStart ? [clampedBufferStart, clampedBufferEnd + 1] : undefined,
                 tooltip: tooltipContent,
                 assignee: task.assignee, // Pass assignee for potential holiday highlighting
-                assigneeId: assigneeMember?.id ?? null, // Pass assignee ID for holiday mapping
             };
              // Include if *any* range is valid
              return result.devRange || result.qaRange || result.bufferRange ? result : null;
@@ -291,7 +290,7 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
       return processedTasks as any[]; // Cast to any[] because TS struggles with the filtering type inference
 
-  }, [tasks, sprintStartDate, sprintEndDate, clientNow, memberHolidayMap, members]); // Add members dependency
+  }, [tasks, sprintStartDate, sprintEndDate, clientNow, memberHolidayMap]); // Remove members dependency here, use assigneeName instead
 
    const weekendIndices = useMemo(() => {
        if (!sprintStartDate || !sprintEndDate || !isValid(parseISO(sprintStartDate)) || !isValid(parseISO(sprintEndDate))) return [];
@@ -327,14 +326,16 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
 
                  // Check if this date is a holiday for ANY assignee of the tasks being displayed
                  chartData.forEach(taskData => {
-                     const memberHolidays = taskData.assignee ? memberHolidayMap.get(taskData.assignee) : undefined;
+                     const assigneeName = taskData.assignee; // Use assignee name from chart data
+                     const memberHolidays = assigneeName ? memberHolidayMap.get(assigneeName) : undefined;
                      if (memberHolidays?.has(dateStr)) {
                          if (!holidayNamesForDay) {
                               holidayNamesForDay = new Set<string>();
                               map.set(dayIndex, holidayNamesForDay);
                          }
                           // Find the holiday name from the calendar definition
-                          const calendar = holidayCalendars.find(cal => cal.id === members.find(m => m.name === taskData.assignee)?.holidayCalendarId);
+                           const member = members.find(m => m.name === assigneeName);
+                          const calendar = holidayCalendars.find(cal => cal.id === member?.holidayCalendarId);
                           const holiday = calendar?.holidays.find(hol => hol.date === dateStr);
                           holidayNamesForDay.add(holiday?.name ?? 'Public Holiday');
                      }
@@ -493,4 +494,3 @@ export default function SprintTimelineChart({ tasks, sprintStartDate, sprintEndD
     </ChartContainer>
   );
 }
-
