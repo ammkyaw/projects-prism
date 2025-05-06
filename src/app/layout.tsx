@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google'; // Using Inter for a clean, modern fon
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster'; // Import Toaster
 import { ThemeProvider } from "@/components/theme-provider"; // Import ThemeProvider
+import QueryProvider from '@/components/query-provider'; // Import the new QueryProvider
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -20,19 +21,21 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>{/* suppressHydrationWarning for next-themes */}
       <body className={`${inter.className} antialiased flex flex-col min-h-screen`}>
-        <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-        >
-          {/* Header can be part of the page or a shared component */}
-          <main className="flex-1"> {/* Wrap main content */}
-            {children}
-          </main>
-          {/* Footer can be part of the page or a shared component */}
-          <Toaster /> {/* Add Toaster component */}
-        </ThemeProvider>
+        <QueryProvider> {/* Wrap with QueryProvider */}
+          <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+          >
+            {/* Header can be part of the page or a shared component */}
+            <main className="flex-1"> {/* Wrap main content */}
+              {children}
+            </main>
+            {/* Footer can be part of the page or a shared component */}
+            <Toaster /> {/* Add Toaster component */}
+          </ThemeProvider>
+        </QueryProvider>
       </body>
     </html>
   );

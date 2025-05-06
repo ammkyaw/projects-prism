@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -43,7 +44,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isPast, isValid, getYear } from 'date-fns'; // Added getYear
 import { ModeToggle } from '@/components/mode-toggle'; // Import ModeToggle
-
+import { useProjects, useUpdateProject, useDeleteProject } from '@/hooks/use-projects'; // Import React Query hooks
 
 // Helper function to generate the next backlog ID based on *all* items (including historical and unsaved)
 const generateNextBacklogIdHelper = (allProjectBacklogItems: Task[]): string => {
@@ -73,25 +74,47 @@ const generateNextBacklogIdHelper = (allProjectBacklogItems: Task[]): string => 
 
 
 export default function Home() {
-  const [projects, setProjects] = useState<AppData>([]); // State for all projects
+  // Local UI state
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  // Combined state for active main and sub tab. Format: "main/sub" or just "main"
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [newProjectName, setNewProjectName] = useState<string>('');
-  const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState<boolean>(false); // Set default to false
+  const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState<boolean>(false);
   const [isAddMembersDialogOpen, setIsAddMembersDialogOpen] = useState<boolean>(false);
-  const [newlyCreatedProjectId, setNewlyCreatedProjectId] = useState<string | null>(null); // Track ID for Add Members dialog
+  const [newlyCreatedProjectId, setNewlyCreatedProjectId] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false);
+  const [projectToDeleteId, setProjectToDeleteId] = useState<string | null>(null);
+  const [confirmProjectName, setConfirmProjectName] = useState<string>('');
+  const [clientNow, setClientNow] = useState<Date | null>(null);
   const { toast } = useToast();
-  const [clientNow, setClientNow] = useState<Date | null>(null); // For client-side date comparison
-  const [isLoading, setIsLoading] = useState(true); // Add loading state
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState<boolean>(false); // State for delete project dialog
-  const [projectToDeleteId, setProjectToDeleteId] = useState<string | null>(null); // Track ID for deletion
-  const [confirmProjectName, setConfirmProjectName] = useState<string>(''); // Input for delete confirmation
+
+  // React Query hooks for data management
+  const { data: projects = [], isLoading: isLoadingProjects, error: projectsError } = useProjects();
+  const updateProjectMutation = useUpdateProject();
+  const deleteProjectMutation = useDeleteProject();
 
   // Get current date on client mount to avoid hydration issues
   useEffect(() => {
      setClientNow(new Date());
   }, []);
+
+   // Effect to select the first project when data loads or changes, if none selected
+   useEffect(() => {
+     if (!isLoadingProjects && projects.length > 0 && !selectedProjectId) {
+       setSelectedProjectId(projects[0].id);
+       console.log("No project selected, defaulting to first project:", projects[0].id);
+     } else if (!isLoadingProjects && projects.length === 0) {
+        setSelectedProjectId(null); // Clear selection if no projects exist
+     }
+     // Do NOT reset selectedProjectId if it already exists and is valid within the loaded projects
+   }, [isLoadingProjects, projects, selectedProjectId]);
+
+
+  // Find the currently selected project object
+  const selectedProject = useMemo(() => {
+    const project = projects.find(p => p.id === selectedProjectId) ?? null;
+    console.log("Selected project determined:", project?.name ?? 'None');
+    return project;
+  }, [projects, selectedProjectId]);
 
   // Define default sub-tabs for each main tab
   const defaultSubTabs: Record<string, string> = {
@@ -108,255 +131,111 @@ export default function Home() {
          setActiveTab(mainTabKey);
       } else {
          const defaultSub = defaultSubTabs[mainTabKey] || ''; // Fallback to empty string if no default
-         setActiveTab(`${mainTabKey}/${defaultSub}`);
+         setActiveTab(`${mainKey}/${defaultSub}`);
       }
   };
 
   // Get the active main tab key from the combined state
   const activeMainTab = useMemo(() => activeTab.split('/')[0], [activeTab]);
 
+   // Helper function to update project data via mutation
+   const updateProjectData = useCallback((updatedProject: Project) => {
+        if (!updatedProject.id) {
+            toast({ variant: "destructive", title: "Error", description: "Project ID missing, cannot update." });
+            return;
+        }
+        updateProjectMutation.mutate(updatedProject, {
+            onError: (error) => {
+                toast({ variant: "destructive", title: "Save Error", description: `Failed to save changes: ${error.message}` });
+            }
+            // onSuccess is handled in the hook to invalidate query
+        });
+   }, [updateProjectMutation, toast]);
 
- // Effect to load data from localStorage on mount
- useEffect(() => {
-     console.log("Attempting to load data from localStorage...");
-     setIsLoading(true);
-     try {
-         const savedData = localStorage.getItem('appData');
-         const savedProjectId = localStorage.getItem('selectedProjectId');
-         console.log("Retrieved 'appData' from localStorage:", savedData ? savedData.substring(0, 100) + '...' : 'null'); // Log truncated data or null
-         console.log("Retrieved 'selectedProjectId' from localStorage:", savedProjectId);
-
-         if (savedData) {
-             const parsedData: AppData = JSON.parse(savedData);
-              if (Array.isArray(parsedData)) { // Basic validation
-                 // Validate and potentially migrate data here if needed
-                 const validatedProjects = parsedData.map(project => ({
-                     ...project,
-                     sprintData: project.sprintData ?? initialSprintData,
-                     members: project.members ?? [],
-                     holidayCalendars: project.holidayCalendars ?? [],
-                     teams: project.teams ?? [],
-                     backlog: (project.backlog ?? []).map(task => ({
-                          ...task,
-                           priority: taskPriorities.includes(task.priority as any) ? task.priority : 'Medium',
-                           // Ensure backlogId exists during validation
-                           backlogId: task.backlogId ?? `BL-LEGACY-${task.id}`, // Provide a fallback if missing
-                           needsGrooming: task.needsGrooming ?? false, // Default to false if missing
-                           readyForSprint: task.readyForSprint ?? false, // Default to false if missing
-                           splitFromId: task.splitFromId, // Preserve if exists
-                           mergeEventId: task.mergeEventId, // Preserve if exists
-                     })).sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
-                     sprintData: {
-                         ...project.sprintData,
-                         sprints: (project.sprintData?.sprints ?? []).sort((a, b) => a.sprintNumber - b.sprintNumber)
-                     }
-                 }));
-
-                 setProjects(validatedProjects);
-                 console.log("Successfully loaded and validated project data from localStorage.");
-
-                 // Restore selected project ID if it exists and is valid
-                 if (savedProjectId && validatedProjects.some(p => p.id === savedProjectId)) {
-                     setSelectedProjectId(savedProjectId);
-                     console.log(`Restored selected project ID: ${savedProjectId}`);
-                 } else {
-                     // If saved ID is invalid or no projects, select the first project or null
-                     setSelectedProjectId(validatedProjects.length > 0 ? validatedProjects[0].id : null);
-                     console.log("Selected project ID not found or invalid, selecting first project or null.");
-                     // Clean up invalid saved ID
-                     if (savedProjectId) {
-                          localStorage.removeItem('selectedProjectId');
-                     }
-                 }
-             } else {
-                 throw new Error("Stored 'appData' is not an array.");
-             }
-         } else {
-             console.log("No 'appData' found in localStorage. Initializing with empty state.");
-             setProjects([]); // Initialize with empty array if no data found
-             setSelectedProjectId(null);
-         }
-     } catch (error: any) {
-         console.error("CRITICAL: Failed to parse or validate project data from localStorage. Error:", error.message, error.stack);
-         toast({
-             variant: "destructive",
-             title: "Data Load Error",
-             description: "Could not load project data. Resetting to empty state. Please report this issue if it persists.",
-         });
-         // Reset to a known good state
-         setProjects([]);
-         setSelectedProjectId(null);
-         // Attempt to clear potentially corrupted data
-         try {
-              localStorage.removeItem('appData');
-              localStorage.removeItem('selectedProjectId');
-         } catch (clearError) {
-             console.error("Failed to clear corrupted data from localStorage:", clearError);
-         }
-     } finally {
-         setIsLoading(false);
-         console.log("Finished loading data attempt.");
-     }
- }, [toast]); // Rerun this effect only on mount (and if toast changes, which is unlikely)
-
-
-     // Effect to save data to localStorage whenever projects change (now empty on first load)
-     useEffect(() => {
-         // Only run save logic after initial load is complete
-         if (!isLoading) {
-             console.log("Projects state changed, attempting to save to localStorage...");
-             try {
-                 const dataToSave = JSON.stringify(projects);
-                 console.log("Stringified data to save:", dataToSave.substring(0, 500) + '...'); // Log truncated data
-                 localStorage.setItem('appData', dataToSave);
-                 console.log("Successfully saved project data to localStorage.");
-             } catch (error: any) {
-                 console.error("CRITICAL: Failed to save project data to localStorage. Error:", error.message, error.stack);
-                 toast({
-                     variant: "destructive",
-                     title: "Save Error",
-                     description: "Could not save project data locally. Data might be too large or storage is unavailable.",
-                 });
-             }
-         } else {
-             console.log("Skipping save to localStorage during initial loading.");
-         }
-     }, [projects, isLoading, toast]); // Add isLoading dependency
-
-     // Effect to save the selected project ID
-     useEffect(() => {
-         if (!isLoading) { // Only save after initial load
-             try {
-                 if (selectedProjectId) {
-                     console.log(`Saving selected project ID to localStorage: ${selectedProjectId}`);
-                     localStorage.setItem('selectedProjectId', selectedProjectId);
-                 } else {
-                     console.log("No project selected, removing selectedProjectId from localStorage.");
-                     // Remove if no project is selected to avoid stale references
-                     localStorage.removeItem('selectedProjectId');
-                 }
-             } catch (err) {
-                 console.error("Error accessing localStorage for selectedProjectId:", err);
-                  toast({
-                    variant: "destructive",
-                    title: "Storage Error",
-                    description: "Could not save selected project.",
-                  });
-             }
-         } else {
-             console.log("Skipping saving selected project ID during initial loading.");
-         }
-     }, [selectedProjectId, isLoading, toast]);
-
-
-  // Find the currently selected project object
-  const selectedProject = useMemo(() => {
-    const project = projects.find(p => p.id === selectedProjectId) ?? null;
-    console.log("Selected project determined:", project?.name ?? 'None');
-    return project;
-  }, [projects, selectedProjectId]);
 
  // Handler to save planning data AND potentially update sprint status (used by PlanningTab)
    const handleSavePlanningAndUpdateStatus = useCallback((sprintNumber: number, planningData: SprintPlanning, newStatus?: SprintStatus) => {
-     if (!selectedProjectId) {
-        toast({ variant: "destructive", title: "Error", description: "No project selected." });
-        return;
-     }
+       if (!selectedProject) {
+           toast({ variant: "destructive", title: "Error", description: "No project selected." });
+           return;
+       }
 
-     let currentProjectName = 'N/A';
-     let statusUpdateMessage = '';
-     let otherActiveSprintExists = false; // Moved declaration outside setProjects
+       const currentProjectName = selectedProject.name; // Capture name
+       let statusUpdateMessage = '';
+       let otherActiveSprintExists = false;
 
-     setProjects(prevProjects => {
-        const projectIndex = prevProjects.findIndex(p => p.id === selectedProjectId);
-        if (projectIndex === -1) return prevProjects; // Project not found
+       const tempSprints = [...(selectedProject.sprintData.sprints ?? [])]; // Handle null/undefined
 
-        const currentProject = prevProjects[projectIndex];
-        currentProjectName = currentProject.name; // Capture name
-        const tempSprints = [...(currentProject.sprintData.sprints ?? [])]; // Handle null/undefined
+       // Check if starting this sprint would violate the single active sprint rule
+       if (newStatus === 'Active') {
+           otherActiveSprintExists = tempSprints.some(s => s.sprintNumber !== sprintNumber && s.status === 'Active');
+           if (otherActiveSprintExists) {
+               toast({
+                   variant: "destructive",
+                   title: "Active Sprint Limit",
+                   description: `Only one sprint can be active at a time. Another sprint is already active.`,
+               });
+               return; // Prevent update
+           }
+       }
 
-         // Check if starting this sprint would violate the single active sprint rule
-         if (newStatus === 'Active') {
-             otherActiveSprintExists = tempSprints.some(s => s.sprintNumber !== sprintNumber && s.status === 'Active');
-             if (otherActiveSprintExists) {
-                  // This toast needs to be shown outside the setProjects call
-                 return prevProjects; // Return the project unchanged
-             }
-         }
+       const updatedSprints = tempSprints.map(s => {
+           if (s.sprintNumber === sprintNumber) {
+               let finalStatus = s.status;
+               // Only update status if newStatus is provided and different
+               if (newStatus && newStatus !== s.status) {
+                    finalStatus = newStatus;
+                    statusUpdateMessage = ` Sprint ${sprintNumber} status updated to ${newStatus}.`;
+               } else if (!newStatus && s.status === 'Active' && clientNow && s.endDate && isValid(parseISO(s.endDate)) && isPast(parseISO(s.endDate))) {
+                  // Auto-complete logic (optional)
+               }
 
-          // Proceed with the update if the rule is not violated
-          const updatedSprints = tempSprints.map(s => {
-              if (s.sprintNumber === sprintNumber) {
-                  let finalStatus = s.status;
-                  // Only update status if newStatus is provided and different
-                  if (newStatus && newStatus !== s.status) {
-                       finalStatus = newStatus;
-                       statusUpdateMessage = ` Sprint ${sprintNumber} status updated to ${newStatus}.`;
-                  } else if (!newStatus && s.status === 'Active' && clientNow && s.endDate && isValid(parseISO(s.endDate)) && isPast(parseISO(s.endDate))) {
-                       // Auto-complete logic (currently commented out)
-                       // console.warn(`Auto-completing sprint ${sprintNumber} based on end date.`);
-                       // finalStatus = 'Completed';
-                       // statusUpdateMessage = ` Sprint ${sprintNumber} auto-completed based on end date.`;
-                  }
+                // Ensure task IDs are present and correctly typed before saving
+                const validatedPlanning: SprintPlanning = {
+                    ...planningData,
+                    newTasks: (planningData.newTasks || []).map(task => ({
+                       ...task,
+                       id: task.id || `task_save_new_${Date.now()}_${Math.random()}`,
+                       qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
+                       bufferTime: task.bufferTime ?? '1d', // Default Buffer time
+                       backlogId: task.backlogId ?? '', // Ensure backlogId
+                    })),
+                    spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
+                       ...task,
+                       id: task.id || `task_save_spill_${Date.now()}_${Math.random()}`,
+                       qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
+                       bufferTime: task.bufferTime ?? '1d', // Default buffer time
+                       backlogId: task.backlogId ?? '', // Ensure backlogId
+                    })),
+                };
 
-                  // Ensure task IDs are present and correctly typed before saving
-                   const validatedPlanning: SprintPlanning = {
-                       ...planningData,
-                       newTasks: (planningData.newTasks || []).map(task => ({
-                          ...task,
-                          id: task.id || `task_save_new_${Date.now()}_${Math.random()}`,
-                          qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
-                          bufferTime: task.bufferTime ?? '1d', // Default Buffer time
-                          backlogId: task.backlogId ?? '', // Ensure backlogId
-                       })),
-                       spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
-                          ...task,
-                          id: task.id || `task_save_spill_${Date.now()}_${Math.random()}`,
-                          qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
-                          bufferTime: task.bufferTime ?? '1d', // Default buffer time
-                          backlogId: task.backlogId ?? '', // Ensure backlogId
-                       })),
-                   };
+                // Calculate committed points based on saved tasks
+                const committedPoints = [...(validatedPlanning.newTasks || []), ...(validatedPlanning.spilloverTasks || [])]
+                     .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
 
-                   // Calculate committed points based on saved tasks
-                   const committedPoints = [...(validatedPlanning.newTasks || []), ...(validatedPlanning.spilloverTasks || [])]
-                        .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+                return { ...s, planning: validatedPlanning, status: finalStatus, committedPoints: committedPoints };
+           }
+           return s;
+       });
 
-                   return { ...s, planning: validatedPlanning, status: finalStatus, committedPoints: committedPoints };
-              }
-              return s;
-          });
+       const updatedProject: Project = {
+           ...selectedProject,
+           sprintData: {
+               ...(selectedProject.sprintData ?? initialSprintData),
+               sprints: updatedSprints,
+           },
+       };
 
-          // Create a new project object with updated sprints
-          const updatedProject = {
-              ...currentProject,
-              sprintData: {
-                  ...(currentProject.sprintData ?? initialSprintData), // Use initialSprintData if sprintData is null/undefined
-                  sprints: updatedSprints,
-              },
-          };
+       updateProjectData(updatedProject); // Update via mutation hook
 
-          // Create a new projects array with the updated project
-          const updatedProjects = [...prevProjects];
-          updatedProjects[projectIndex] = updatedProject;
-          return updatedProjects;
-      });
+       // Show success toast if update was successful (mutation handles its own error toasts)
+       if (!otherActiveSprintExists) {
+            setTimeout(() => {
+                toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
+            }, 50); // Slight delay
+       }
 
-     // Show toast *after* the setProjects update attempt
-     if (otherActiveSprintExists) {
-         // Show error toast if an active sprint already exists
-         toast({
-             variant: "destructive",
-             title: "Active Sprint Limit",
-             description: `Only one sprint can be active at a time. Another sprint is already active.`,
-         });
-     } else {
-         // Show success toast if the update was successful
-         setTimeout(() => { // Defer toast
-              toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
-         }, 0);
-     }
-   }, [selectedProjectId, toast, clientNow]);
+   }, [selectedProject, updateProjectData, toast, clientNow]);
 
 
   // Handler to create a new sprint and save its initial planning data (used by PlanningTab)
@@ -364,496 +243,405 @@ export default function Home() {
     sprintDetails: Omit<Sprint, 'details' | 'planning' | 'status' | 'committedPoints' | 'completedPoints'>,
     planningData: SprintPlanning
   ) => {
-    if (!selectedProjectId) {
+    if (!selectedProject) {
        toast({ variant: "destructive", title: "Error", description: "No project selected." });
        return;
     }
-    let projectNameForToast = 'N/A';
-    let projectWasUpdated = false;
 
-    // Check sprint limits BEFORE attempting to create
-     const currentSprints = projects.find(p => p.id === selectedProjectId)?.sprintData.sprints ?? [];
-     const numPlanned = currentSprints.filter(s => s.status === 'Planned').length;
-     const numActive = currentSprints.filter(s => s.status === 'Active').length;
+    const projectNameForToast = selectedProject.name;
+    const currentSprints = selectedProject.sprintData.sprints ?? [];
+    const numPlanned = currentSprints.filter(s => s.status === 'Planned').length;
+    const numActive = currentSprints.filter(s => s.status === 'Active').length;
 
-     if ((numPlanned >= 2) || (numPlanned >= 1 && numActive >= 1)) {
-        toast({
-            variant: "destructive",
-            title: "Sprint Limit Reached",
-            description: "Cannot plan new sprint. Limit is 2 Planned or 1 Planned + 1 Active.",
-        });
-         return; // Prevent creation
-     }
+    if ((numPlanned >= 2) || (numPlanned >= 1 && numActive >= 1)) {
+       toast({
+           variant: "destructive",
+           title: "Sprint Limit Reached",
+           description: "Cannot plan new sprint. Limit is 2 Planned or 1 Planned + 1 Active.",
+       });
+        return; // Prevent creation
+    }
 
-    setProjects(prevProjects => {
-       const updatedProjects = prevProjects.map(p => {
-        if (p.id === selectedProjectId) {
-            projectNameForToast = p.name;
-            if ((p.sprintData.sprints ?? []).some(s => s.sprintNumber === sprintDetails.sprintNumber)) { // Handle null/undefined
-                console.error(`Sprint number ${sprintDetails.sprintNumber} already exists for project ${p.name}.`);
-                 // Error handled by returning original 'p'
-                return p;
-            }
+    if (currentSprints.some(s => s.sprintNumber === sprintDetails.sprintNumber)) {
+       toast({ variant: "destructive", title: "Error", description: `Sprint number ${sprintDetails.sprintNumber} already exists in project '${projectNameForToast}'.` });
+       return;
+    }
 
-             // Validate planning data before creating
-             const validatedPlanning: SprintPlanning = {
-                ...planningData,
-                 newTasks: (planningData.newTasks || []).map(task => ({
-                    ...task,
-                    id: task.id || `task_create_new_${Date.now()}_${Math.random()}`,
-                    qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
-                    bufferTime: task.bufferTime ?? '1d', // Default buffer time
-                    backlogId: task.backlogId ?? '', // Ensure backlogId
-                 })),
-                 spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
-                    ...task,
-                    id: task.id || `task_create_spill_${Date.now()}_${Math.random()}`,
-                    qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
-                    bufferTime: task.bufferTime ?? '1d', // Default buffer time
-                    backlogId: task.backlogId ?? '', // Ensure backlogId
-                 })),
-             };
+    // Validate planning data before creating
+    const validatedPlanning: SprintPlanning = {
+       ...planningData,
+        newTasks: (planningData.newTasks || []).map(task => ({
+           ...task,
+           id: task.id || `task_create_new_${Date.now()}_${Math.random()}`,
+           qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
+           bufferTime: task.bufferTime ?? '1d', // Default buffer time
+           backlogId: task.backlogId ?? '', // Ensure backlogId
+        })),
+        spilloverTasks: (planningData.spilloverTasks || []).map(task => ({
+           ...task,
+           id: task.id || `task_create_spill_${Date.now()}_${Math.random()}`,
+           qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Default QA time
+           bufferTime: task.bufferTime ?? '1d', // Default buffer time
+           backlogId: task.backlogId ?? '', // Ensure backlogId
+        })),
+    };
 
-             // Calculate committed points for the new sprint
-             const committedPoints = [...(validatedPlanning.newTasks || []), ...(validatedPlanning.spilloverTasks || [])]
-                .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+    // Calculate committed points for the new sprint
+    const committedPoints = [...(validatedPlanning.newTasks || []), ...(validatedPlanning.spilloverTasks || [])]
+       .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
 
-            const newSprint: Sprint = {
-                ...sprintDetails,
-                committedPoints: committedPoints, // Set calculated committed points
-                completedPoints: 0, // Initialize completed points
-                status: 'Planned',
-                details: [],
-                planning: validatedPlanning,
-            };
+    const newSprint: Sprint = {
+        ...sprintDetails,
+        committedPoints: committedPoints, // Set calculated committed points
+        completedPoints: 0, // Initialize completed points
+        status: 'Planned',
+        details: [], // Keep empty
+        planning: validatedPlanning,
+    };
 
-            const updatedSprints = [...(p.sprintData.sprints ?? []), newSprint]; // Handle null/undefined
-            updatedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber);
-            projectWasUpdated = true; // Mark that an update occurred
+    const updatedSprints = [...currentSprints, newSprint];
+    updatedSprints.sort((a, b) => a.sprintNumber - b.sprintNumber);
 
-            return {
-                ...p,
-                sprintData: {
-                    ...(p.sprintData ?? initialSprintData), // Use initialSprintData if sprintData is null/undefined
-                    sprints: updatedSprints,
-                    daysInSprint: Math.max(p.sprintData?.daysInSprint || 0, newSprint.totalDays), // Handle null/undefined
-                },
-            };
-        }
-        return p;
-      });
+     const updatedProject: Project = {
+        ...selectedProject,
+        sprintData: {
+            ...(selectedProject.sprintData ?? initialSprintData),
+            sprints: updatedSprints,
+            daysInSprint: Math.max(selectedProject.sprintData?.daysInSprint || 0, newSprint.totalDays),
+        },
+     };
 
-      // If no update happened (e.g., sprint number existed), return the previous state
-      if (!projectWasUpdated) {
-         // Using setTimeout to ensure toast doesn't interfere with rendering updates
-         setTimeout(() => {
-            toast({ variant: "destructive", title: "Error", description: `Sprint number ${sprintDetails.sprintNumber} already exists in project '${projectNameForToast}'.` });
-         }, 0);
-          return prevProjects;
-      }
+     updateProjectData(updatedProject); // Update via mutation
 
-       // Return the updated projects array
-       return updatedProjects;
-    });
+     // Show success toast (mutation handles errors)
+     setTimeout(() => {
+       toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
+     }, 50);
 
-     // Show toast *after* setProjects has potentially completed its update cycle
-     if (projectWasUpdated) {
-         // Using setTimeout to ensure toast doesn't interfere with rendering updates
-         setTimeout(() => {
-              toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
-         }, 50); // Increased timeout
-     }
-
-  }, [selectedProjectId, toast, projects]); // Added projects dependency for limit check
+  }, [selectedProject, updateProjectData, toast]);
 
   // Handler to complete a sprint
   const handleCompleteSprint = useCallback((sprintNumber: number) => {
-      if (!selectedProjectId) {
+      if (!selectedProject) {
           toast({ variant: "destructive", title: "Error", description: "No project selected." });
           return;
       }
-      let currentProjectName = 'N/A';
+      const currentProjectName = selectedProject.name;
 
-      setProjects(prevProjects => {
-          const updatedProjects = prevProjects.map(p => {
-              if (p.id === selectedProjectId) {
-                   currentProjectName = p.name;
-                   const updatedSprints = p.sprintData.sprints.map(s => {
-                       if (s.sprintNumber === sprintNumber && s.status === 'Active') {
-                           // Calculate completed points based on 'Done' tasks in the current planning state
-                           const completedPoints = [...(s.planning?.newTasks || []), ...(s.planning?.spilloverTasks || [])]
-                               .filter(task => task.status === 'Done')
-                               .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+      const updatedSprints = selectedProject.sprintData.sprints.map(s => {
+          if (s.sprintNumber === sprintNumber && s.status === 'Active') {
+              // Calculate completed points based on 'Done' tasks in the current planning state
+              const completedPoints = [...(s.planning?.newTasks || []), ...(s.planning?.spilloverTasks || [])]
+                  .filter(task => task.status === 'Done')
+                  .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
 
-                            // Move unfinished tasks back to backlog? (Optional - requires more complex logic)
-                           // For now, just update status and points
-
-                           return { ...s, status: 'Completed' as SprintStatus, completedPoints: completedPoints };
-                       }
-                       return s;
-                   });
-                   return {
-                       ...p,
-                       sprintData: {
-                           ...p.sprintData,
-                           sprints: updatedSprints,
-                       },
-                   };
-              }
-              return p;
-          });
-          return updatedProjects;
+               return { ...s, status: 'Completed' as SprintStatus, completedPoints: completedPoints };
+          }
+          return s;
       });
+
+      const updatedProject: Project = {
+        ...selectedProject,
+        sprintData: {
+            ...selectedProject.sprintData,
+            sprints: updatedSprints,
+        },
+      };
+
+      updateProjectData(updatedProject);
       toast({ title: "Success", description: `Sprint ${sprintNumber} marked as Completed in project '${currentProjectName}'.` });
-       // Optionally switch tab or select next planned sprint
-       setActiveTab('sprints/summary');
-  }, [selectedProjectId, toast, setActiveTab]);
+      setActiveTab('sprints/summary');
+  }, [selectedProject, updateProjectData, toast, setActiveTab]);
 
 
   // Handler to save members for the *selected* project
   const handleSaveMembers = useCallback((updatedMembers: Member[]) => {
-    if (!selectedProjectId) {
+    if (!selectedProject) {
       toast({ variant: "destructive", title: "Error", description: "No project selected." });
       return;
     }
-    let currentProjectName = 'N/A';
-    setProjects(prevProjects => {
-      const updatedProjects = prevProjects.map(p => {
-        if (p.id === selectedProjectId) {
-          currentProjectName = p.name; // Capture name
-          return { ...p, members: updatedMembers };
-        }
-        return p;
-      });
-      return updatedProjects;
-    });
-    toast({ title: "Success", description: `Members updated for project '${currentProjectName}'.` });
-  }, [selectedProjectId, toast]);
+    const updatedProject: Project = { ...selectedProject, members: updatedMembers };
+    updateProjectData(updatedProject);
+    toast({ title: "Success", description: `Members updated for project '${selectedProject.name}'.` });
+  }, [selectedProject, updateProjectData, toast]);
 
    // Handler to save holiday calendars for the *selected* project
    const handleSaveHolidayCalendars = useCallback((updatedCalendars: HolidayCalendar[]) => {
-     if (!selectedProjectId) {
-         toast({ variant: "destructive", title: "Error", description: "No project selected." });
-         return;
-     }
+       if (!selectedProject) {
+           toast({ variant: "destructive", title: "Error", description: "No project selected." });
+           return;
+       }
 
-     let currentProjectName = 'N/A';
-     let membersToUpdate: Member[] = [];
+       const currentProjectName = selectedProject.name;
+       let membersToUpdate: Member[] = [];
 
-     setProjects(prevProjects => {
-         const updatedProjects = prevProjects.map(p => {
-             if (p.id === selectedProjectId) {
-                 currentProjectName = p.name; // Capture name
-                 // Keep track of members whose calendars might change
-                 membersToUpdate = (p.members || []).map(member => {
-                     if (member.holidayCalendarId && !updatedCalendars.some(cal => cal.id === member.holidayCalendarId)) {
-                         return { ...member, holidayCalendarId: null }; // Mark for update
-                     }
-                     return member;
-                 }).filter((m, index) => m.holidayCalendarId !== (p.members || [])[index].holidayCalendarId); // Only keep those that changed
+       // Check which members might lose their assigned calendar
+       const updatedMembers = (selectedProject.members || []).map(member => {
+           const calendarExists = updatedCalendars.some(cal => cal.id === member.holidayCalendarId);
+           if (member.holidayCalendarId && !calendarExists) {
+               membersToUpdate.push(member); // Track members whose calendar was removed
+               return { ...member, holidayCalendarId: null }; // Unassign calendar
+           }
+           return member;
+       });
 
-                 const updatedMembers = (p.members || []).map(member => ({
-                     ...member,
-                     holidayCalendarId: member.holidayCalendarId && updatedCalendars.some(cal => cal.id === member.holidayCalendarId) ? member.holidayCalendarId : null,
-                 }));
+       const updatedProject: Project = {
+           ...selectedProject,
+           holidayCalendars: updatedCalendars,
+           members: updatedMembers,
+       };
 
-                 return { ...p, holidayCalendars: updatedCalendars, members: updatedMembers };
-             }
-             return p;
-         });
-         return updatedProjects;
-     });
+       updateProjectData(updatedProject);
 
-     // Show toasts *after* the state update
-      setTimeout(() => {
-         toast({ title: "Success", description: `Holiday calendars updated for project '${currentProjectName}'.` });
-         membersToUpdate.forEach(member => {
-             toast({ variant: "warning", title: "Calendar Unassigned", description: `Holiday calendar assigned to ${member.name} was deleted or is no longer available.` });
-         });
-      }, 0);
+       // Show toasts *after* the mutation call (optimistically)
+       setTimeout(() => {
+           toast({ title: "Success", description: `Holiday calendars updated for project '${currentProjectName}'.` });
+           membersToUpdate.forEach(member => {
+               toast({ variant: "warning", title: "Calendar Unassigned", description: `Holiday calendar assigned to ${member.name} was deleted or is no longer available.` });
+           });
+       }, 0);
 
- }, [selectedProjectId, toast]);
+   }, [selectedProject, updateProjectData, toast]);
 
    // Handler to save teams for the *selected* project
    const handleSaveTeams = useCallback((updatedTeams: Team[]) => {
-     if (!selectedProjectId) {
-         toast({ variant: "destructive", title: "Error", description: "No project selected." });
-         return;
-     }
-     let currentProjectName = 'N/A';
-     setProjects(prevProjects => {
-         const updatedProjects = prevProjects.map(p => {
-             if (p.id === selectedProjectId) {
-                 currentProjectName = p.name; // Capture name
-                 // Optionally, add validation here to ensure team members and leads still exist
-                 const validTeams = updatedTeams.map(team => {
-                     const validMembers = team.members.filter(tm => (p.members || []).some(m => m.id === tm.memberId));
-                     let validLead = team.leadMemberId;
-                     if (validLead && !(p.members || []).some(m => m.id === validLead)) {
-                          console.warn(`Lead member ID ${validLead} for team ${team.name} not found. Resetting.`);
-                          validLead = null;
-                     }
-                     return { ...team, members: validMembers, leadMemberId: validLead };
-                 });
-                 return { ...p, teams: validTeams };
-             }
-             return p;
-         });
-         return updatedProjects;
-     });
-     toast({ title: "Success", description: `Teams updated for project '${currentProjectName}'.` });
-   }, [selectedProjectId, toast]);
+       if (!selectedProject) {
+           toast({ variant: "destructive", title: "Error", description: "No project selected." });
+           return;
+       }
+       const currentProjectName = selectedProject.name;
+
+       // Optionally, add validation here to ensure team members and leads still exist
+       const validTeams = updatedTeams.map(team => {
+           const validMembers = team.members.filter(tm => (selectedProject.members || []).some(m => m.id === tm.memberId));
+           let validLead = team.leadMemberId;
+           if (validLead && !(selectedProject.members || []).some(m => m.id === validLead)) {
+                console.warn(`Lead member ID ${validLead} for team ${team.name} not found. Resetting.`);
+                validLead = null;
+           }
+           return { ...team, members: validMembers, leadMemberId: validLead };
+       });
+
+       const updatedProject: Project = { ...selectedProject, teams: validTeams };
+       updateProjectData(updatedProject);
+       toast({ title: "Success", description: `Teams updated for project '${currentProjectName}'.` });
+   }, [selectedProject, updateProjectData, toast]);
 
     // Handler to save NEW backlog items (from the new items table)
     const handleSaveNewBacklogItems = useCallback((newItems: Task[]) => {
-        if (!selectedProjectId) {
+        if (!selectedProject) {
             toast({ variant: "destructive", title: "Error", description: "No project selected." });
             return;
         }
-        let currentProjectName = 'N/A';
-        setProjects(prevProjects => {
-            const updatedProjects = prevProjects.map(p => {
-                if (p.id === selectedProjectId) {
-                    currentProjectName = p.name;
-                    const existingBacklog = p.backlog ?? [];
-                    // Assign persistent IDs to new items before adding
-                    const itemsWithIds = newItems.map((item, index) => ({
-                        ...item,
-                        id: `backlog_${p.id}_${Date.now()}_${index}`, // Generate a more robust unique ID
-                    }));
-                    const updatedBacklog = [...existingBacklog, ...itemsWithIds];
-                    // Re-sort the entire backlog after adding
-                     updatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
-                    return { ...p, backlog: updatedBacklog };
-                }
-                return p;
-            });
-            return updatedProjects;
-        });
-        // No separate toast here, handled in BacklogTab's save function
-    }, [selectedProjectId, toast]);
+        const existingBacklog = selectedProject.backlog ?? [];
+        // Assign persistent IDs to new items before adding (using a temporary approach)
+        const itemsWithIds = newItems.map((item, index) => ({
+            ...item,
+            id: item.id || `backlog_${selectedProject.id}_${Date.now()}_${index}`, // Generate ID if missing
+        }));
+        const updatedBacklog = [...existingBacklog, ...itemsWithIds];
+        updatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
+
+        const updatedProject: Project = { ...selectedProject, backlog: updatedBacklog };
+        updateProjectData(updatedProject);
+        // Toast handled in BacklogTab save function
+    }, [selectedProject, updateProjectData, toast]);
 
     // Handler to update a specific SAVED backlog item
      const handleUpdateSavedBacklogItem = useCallback((updatedItem: Task) => {
-        if (!selectedProjectId) {
+        if (!selectedProject) {
             toast({ variant: "destructive", title: "Error", description: "No project selected." });
             return;
         }
-        setProjects(prevProjects =>
-            prevProjects.map(p =>
-                p.id === selectedProjectId
-                    ? { ...p, backlog: (p.backlog ?? []).map(item => item.id === updatedItem.id ? updatedItem : item) }
-                    : p
-            )
-        );
-        // Optional: Add a success toast here if needed
-     }, [selectedProjectId, toast]);
+        const updatedBacklog = (selectedProject.backlog ?? []).map(item => item.id === updatedItem.id ? updatedItem : item);
+        const updatedProject: Project = { ...selectedProject, backlog: updatedBacklog };
+        updateProjectData(updatedProject);
+        // Optional: Add success toast
+     }, [selectedProject, updateProjectData, toast]);
 
      // Handler to delete a specific SAVED backlog item
       const handleDeleteSavedBacklogItem = useCallback((itemId: string) => {
-         if (!selectedProjectId) {
+         if (!selectedProject) {
              toast({ variant: "destructive", title: "Error", description: "No project selected." });
              return;
          }
-         // TODO: Add confirmation dialog here before deleting
-         setProjects(prevProjects =>
-             prevProjects.map(p =>
-                 p.id === selectedProjectId
-                     ? { ...p, backlog: (p.backlog ?? []).filter(item => item.id !== itemId) }
-                     : p
-             )
-         );
+         // TODO: Add confirmation dialog before deleting from Firestore
+         const updatedBacklog = (selectedProject.backlog ?? []).filter(item => item.id !== itemId);
+         const updatedProject: Project = { ...selectedProject, backlog: updatedBacklog };
+         updateProjectData(updatedProject);
          toast({ title: "Backlog Item Deleted", description: "The item has been removed from the backlog." });
-      }, [selectedProjectId, toast]);
+      }, [selectedProject, updateProjectData, toast]);
 
 
    // Handler to move a backlog item to a sprint
    const handleMoveToSprint = useCallback((backlogItemId: string, targetSprintNumber: number) => {
-       if (!selectedProjectId) {
+       if (!selectedProject) {
            toast({ variant: "destructive", title: "Error", description: "No project selected." });
            return;
        }
-       let currentProjectName = 'N/A';
+       const currentProjectName = selectedProject.name;
        let movedItemDetails: string | null = null;
 
-       setProjects(prevProjects => {
-           const updatedProjects = prevProjects.map(p => {
-               if (p.id === selectedProjectId) {
-                    currentProjectName = p.name; // Capture name
-                   const backlogItemIndex = (p.backlog ?? []).findIndex(item => item.id === backlogItemId);
-                   if (backlogItemIndex === -1) {
-                       console.error("Backlog item not found:", backlogItemId);
-                       // Don't show toast here, maybe already removed?
-                       return p; // Return unchanged project
-                   }
+       const backlogItemIndex = (selectedProject.backlog ?? []).findIndex(item => item.id === backlogItemId);
+       if (backlogItemIndex === -1) {
+           console.error("Backlog item not found:", backlogItemId);
+           return;
+       }
+       const backlogItem = selectedProject.backlog![backlogItemIndex];
+       movedItemDetails = `${backlogItem.backlogId} (${backlogItem.title || 'No Title'})`;
 
-                   const backlogItem = p.backlog![backlogItemIndex];
-                   movedItemDetails = `${backlogItem.backlogId} (${backlogItem.title || 'No Title'})`; // For toast message
+       const targetSprintIndex = (selectedProject.sprintData.sprints ?? []).findIndex(s => s.sprintNumber === targetSprintNumber);
+       if (targetSprintIndex === -1) {
+            console.error("Target sprint not found:", targetSprintNumber);
+            toast({ variant: "destructive", title: "Error", description: "Target sprint not found." });
+            return;
+       }
 
-                   const targetSprintIndex = (p.sprintData.sprints ?? []).findIndex(s => s.sprintNumber === targetSprintNumber);
-                   if (targetSprintIndex === -1) {
-                        console.error("Target sprint not found:", targetSprintNumber);
-                        toast({ variant: "destructive", title: "Error", description: "Target sprint not found." });
-                        return p; // Return unchanged project
-                   }
+       // Create the task for the sprint
+       const sprintTask: Task = {
+           ...backlogItem,
+           id: `sprint_task_${Date.now()}_${Math.random()}`,
+           status: 'To Do',
+           startDate: undefined,
+           devEstimatedTime: backlogItem.devEstimatedTime ?? '',
+           qaEstimatedTime: backlogItem.qaEstimatedTime ?? '2d',
+           bufferTime: backlogItem.bufferTime ?? '1d',
+           assignee: backlogItem.assignee,
+           reviewer: backlogItem.reviewer,
+           movedToSprint: undefined,
+           historyStatus: undefined,
+           needsGrooming: undefined,
+           readyForSprint: undefined,
+           backlogId: backlogItem.backlogId ?? '',
+       };
 
-                   // Create the task for the sprint
-                   const sprintTask: Task = {
-                       ...backlogItem,
-                       id: `sprint_task_${Date.now()}_${Math.random()}`, // New ID for the sprint task instance
-                       status: 'To Do', // Set initial status for sprint
-                       startDate: undefined, // Sprint start date is set during planning
-                       devEstimatedTime: backlogItem.devEstimatedTime ?? '', // Carry over estimates if they exist, else empty
-                       qaEstimatedTime: backlogItem.qaEstimatedTime ?? '2d', // Default QA time
-                       bufferTime: backlogItem.bufferTime ?? '1d', // Default Buffer time
-                       // Carry over other relevant fields if needed (assignee, reviewer, etc.)
-                       assignee: backlogItem.assignee,
-                       reviewer: backlogItem.reviewer,
-                       // Clear backlog-specific fields that shouldn't be in sprint context
-                       // taskType: undefined, // Keep taskType for history? Decide later.
-                       // createdDate: undefined, // Keep createdDate? Decide later.
-                       initiator: backlogItem.initiator, // Keep initiator
-                       movedToSprint: undefined, // Clear movedToSprint for sprint task
-                       historyStatus: undefined, // Clear history status for sprint task
-                        needsGrooming: undefined, // Clear flag
-                        readyForSprint: undefined, // Clear flag
-                        backlogId: backlogItem.backlogId ?? '', // Ensure backlogId
-                   };
+       // Update item in backlog to mark it as moved
+       const updatedBacklog = selectedProject.backlog!.map((item, index) =>
+           index === backlogItemIndex
+               ? { ...item, movedToSprint: targetSprintNumber, historyStatus: 'Move' as HistoryStatus }
+               : item
+       );
 
-                   // Instead of removing, update the item in backlog to mark it as moved
-                   const updatedBacklog = p.backlog!.map((item, index) => {
-                       if (index === backlogItemIndex) {
-                           return { ...item, movedToSprint: targetSprintNumber, historyStatus: 'Move' as HistoryStatus }; // Set history status to 'Move'
-                       }
-                       return item;
-                   });
+       // Add item to the target sprint's newTasks
+       const updatedSprints = [...selectedProject.sprintData.sprints];
+       const targetSprint = updatedSprints[targetSprintIndex];
+       const updatedPlanning = {
+           ...(targetSprint.planning ?? initialSprintPlanning),
+           newTasks: [...(targetSprint.planning?.newTasks ?? []), sprintTask],
+       };
+       updatedSprints[targetSprintIndex] = { ...targetSprint, planning: updatedPlanning };
 
-                   // Add item to the target sprint's newTasks
-                   const updatedSprints = [...p.sprintData.sprints];
-                   const targetSprint = updatedSprints[targetSprintIndex];
-                   const updatedPlanning = {
-                       ...(targetSprint.planning ?? initialSprintPlanning),
-                       newTasks: [...(targetSprint.planning?.newTasks ?? []), sprintTask],
-                   };
-                   updatedSprints[targetSprintIndex] = { ...targetSprint, planning: updatedPlanning };
+       const updatedProject: Project = {
+           ...selectedProject,
+           backlog: updatedBacklog,
+           sprintData: {
+               ...selectedProject.sprintData,
+               sprints: updatedSprints,
+           }
+       };
 
-                   return {
-                       ...p,
-                       backlog: updatedBacklog, // Save the updated backlog
-                       sprintData: {
-                           ...p.sprintData,
-                           sprints: updatedSprints,
-                       }
-                   };
-               }
-               return p;
-           });
-           return updatedProjects;
-       });
+       updateProjectData(updatedProject);
 
        if (movedItemDetails) {
          toast({ title: "Item Moved", description: `Backlog item '${movedItemDetails}' moved to Sprint ${targetSprintNumber}. Marked in backlog.` });
        }
-   }, [selectedProjectId, toast]);
+   }, [selectedProject, updateProjectData, toast]);
 
 
    // Handler to revert a task from sprint planning back to the backlog
    const handleRevertTaskToBacklog = useCallback((sprintNumber: number, taskId: string, taskBacklogId: string | undefined) => {
-        if (!selectedProjectId) {
-            toast({ variant: "destructive", title: "Error", description: "No project selected." });
-            return;
+       if (!selectedProject) {
+           toast({ variant: "destructive", title: "Error", description: "No project selected." });
+           return;
+       }
+
+       let revertedTaskDetails: string | null = null;
+       let updatePerformed = false; // Track if an update actually happened
+
+       const showToast = (options: any) => setTimeout(() => toast(options), 0);
+
+        const projectIndex = projects.findIndex(p => p.id === selectedProjectId);
+        if (projectIndex === -1) {
+            console.error("Project not found during revert");
+            return; // Should not happen if selectedProject exists
         }
 
-        let revertedTaskDetails: string | null = null;
-        let updatePerformed = false; // Track if an update actually happened
+        const currentProject = { ...selectedProject }; // Clone to modify
 
-        // Use setTimeout to ensure toast is shown after state update attempt
-        const showToast = (options: any) => setTimeout(() => toast(options), 0);
+        let foundAndRemoved = false;
+        let taskToRemoveDetails: Partial<Task> = {};
 
-        setProjects(prevProjects => {
-            const updatedProjects = prevProjects.map(p => {
-                if (p.id === selectedProjectId) {
-                    let foundAndRemoved = false;
-                    let taskToRemoveDetails: Partial<Task> = {};
-                    let originalProject = p; // Keep reference to original project state for toast
+        // Find the task in the specified sprint's planning.newTasks
+        let targetSprintIndex = currentProject.sprintData.sprints.findIndex(s => s.sprintNumber === sprintNumber);
+        if (targetSprintIndex === -1) {
+            console.warn(`Sprint ${sprintNumber} not found.`);
+             showToast({ variant: "warning", title: "Sprint Not Found", description: `Could not find Sprint ${sprintNumber}.` });
+             return;
+        }
 
-                    // Find the task in the specified sprint's planning.newTasks
-                    let targetSprintIndex = p.sprintData.sprints.findIndex(s => s.sprintNumber === sprintNumber);
-                    if (targetSprintIndex === -1) {
-                        console.warn(`Sprint ${sprintNumber} not found.`);
-                         showToast({ variant: "warning", title: "Sprint Not Found", description: `Could not find Sprint ${sprintNumber}.` });
-                         return originalProject;
-                    }
+        let targetSprint = { ...currentProject.sprintData.sprints[targetSprintIndex] }; // Clone sprint
+        let updatedNewTasks = [...(targetSprint.planning?.newTasks || [])];
+        let taskIndex = updatedNewTasks.findIndex(t => t.id === taskId);
 
-                    let targetSprint = p.sprintData.sprints[targetSprintIndex];
-                    let updatedNewTasks = [...(targetSprint.planning?.newTasks || [])];
-                    let taskIndex = updatedNewTasks.findIndex(t => t.id === taskId);
+        if (taskIndex !== -1) {
+            const taskToRemove = updatedNewTasks[taskIndex];
+            taskToRemoveDetails = { ...taskToRemove }; // Capture details before removing
+             revertedTaskDetails = `${taskToRemove.backlogId || taskToRemove.ticketNumber} (${taskToRemove.title || 'No Title'})`;
+             foundAndRemoved = true;
+            updatedNewTasks.splice(taskIndex, 1); // Remove the task
+        } else {
+              console.warn(`Task ID ${taskId} not found in Sprint ${sprintNumber} new tasks.`);
+              showToast({ variant: "warning", title: "Task Not Found", description: `Could not find task ID ${taskId} in Sprint ${sprintNumber} planning.` });
+              return;
+        }
 
-                    if (taskIndex !== -1) {
-                        const taskToRemove = updatedNewTasks[taskIndex];
-                        taskToRemoveDetails = { ...taskToRemove }; // Capture details before removing
-                         // Use backlog ID if available, otherwise ticket number
-                         revertedTaskDetails = `${taskToRemove.backlogId || taskToRemove.ticketNumber} (${taskToRemove.title || 'No Title'})`;
-                         foundAndRemoved = true;
-                        updatedNewTasks.splice(taskIndex, 1); // Remove the task
-                    } else {
-                          console.warn(`Task ID ${taskId} not found in Sprint ${sprintNumber} new tasks.`);
-                          showToast({ variant: "warning", title: "Task Not Found", description: `Could not find task ID ${taskId} in Sprint ${sprintNumber} planning.` });
-                          return originalProject; // Return original project state
-                    }
-
-                     // If the task wasn't found in the sprint, no need to update backlog (handled above)
+        // Update the sprint with the modified tasks
+        targetSprint.planning = {
+            ...(targetSprint.planning || initialSprintPlanning),
+            newTasks: updatedNewTasks,
+        };
+        const updatedSprints = [...currentProject.sprintData.sprints];
+        updatedSprints[targetSprintIndex] = targetSprint;
 
 
-                    // Update the sprint with the modified tasks
-                    const updatedSprints = [...p.sprintData.sprints];
-                    updatedSprints[targetSprintIndex] = {
-                        ...targetSprint,
-                        planning: {
-                            ...(targetSprint.planning || initialSprintPlanning),
-                            newTasks: updatedNewTasks,
-                        }
-                    };
+        // Find the corresponding item in the backlog and reset its 'movedToSprint' status
+        const updatedBacklog = (currentProject.backlog || []).map(item => {
+             const isMatch = taskBacklogId ? item.backlogId === taskBacklogId : item.ticketNumber === taskToRemoveDetails.ticketNumber;
 
-                    // Find the corresponding item in the backlog and reset its 'movedToSprint' status
-                    const updatedBacklog = (p.backlog || []).map(item => {
-                        // Match primarily using taskBacklogId if available, otherwise try matching by ticketNumber if backlogId is missing
-                         const isMatch = taskBacklogId ? item.backlogId === taskBacklogId : item.ticketNumber === taskToRemoveDetails.ticketNumber;
-
-                         if (isMatch && item.movedToSprint === sprintNumber && item.historyStatus === 'Move') {
-                            updatePerformed = true; // Mark that we found and updated the backlog item
-                            return { ...item, movedToSprint: undefined, historyStatus: undefined }; // Reset movedToSprint and historyStatus
-                         }
-                         return item;
-                    });
-
-                     // If the backlog item was not found to be updated (e.g., it was manually deleted from backlog), show a warning
-                     if (!updatePerformed) {
-                         console.warn(`Could not find corresponding backlog item for task ${revertedTaskDetails} (Backlog ID: ${taskBacklogId}) that was marked as moved to sprint ${sprintNumber}. Task removed from sprint only.`);
-                         showToast({ variant: "warning", title: "Task Removed from Sprint", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber}, but its corresponding backlog item couldn't be updated (may have been deleted or modified).` });
-                     } else {
-                         showToast({ title: "Task Reverted", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber} and returned to backlog.` });
-                     }
-
-                    return {
-                        ...p,
-                        backlog: updatedBacklog,
-                        sprintData: {
-                            ...p.sprintData,
-                            sprints: updatedSprints,
-                        }
-                    };
-                }
-                return p;
-            });
-            return updatedProjects;
+             if (isMatch && item.movedToSprint === sprintNumber && item.historyStatus === 'Move') {
+                updatePerformed = true; // Mark that we found and updated the backlog item
+                return { ...item, movedToSprint: undefined, historyStatus: undefined }; // Reset movedToSprint and historyStatus
+             }
+             return item;
         });
-    }, [selectedProjectId, toast, setProjects]); // Include setProjects
+
+         // If the backlog item was not found to be updated, show a warning
+         if (!updatePerformed) {
+             console.warn(`Could not find corresponding backlog item for task ${revertedTaskDetails} (Backlog ID: ${taskBacklogId}) that was marked as moved to sprint ${sprintNumber}. Task removed from sprint only.`);
+             showToast({ variant: "warning", title: "Task Removed from Sprint", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber}, but its corresponding backlog item couldn't be updated (may have been deleted or modified).` });
+         } else {
+             showToast({ title: "Task Reverted", description: `Task '${revertedTaskDetails}' removed from Sprint ${sprintNumber} and returned to backlog.` });
+         }
+
+         // Create the final updated project object
+        const finalUpdatedProject: Project = {
+            ...currentProject,
+            backlog: updatedBacklog,
+            sprintData: {
+                ...currentProject.sprintData,
+                sprints: updatedSprints,
+            }
+        };
+
+        updateProjectData(finalUpdatedProject);
+
+
+   }, [selectedProject, updateProjectData, toast, projects, selectedProjectId]); // Added projects and selectedProjectId
 
 
     // Handler to split a backlog item
     const handleSplitBacklogItem = useCallback((originalTaskId: string, splitTasks: Task[]) => {
-        if (!selectedProjectId) {
+        if (!selectedProject) {
             toast({ variant: "destructive", title: "Error", description: "No project selected." });
             return;
         }
@@ -861,66 +649,59 @@ export default function Home() {
         let originalTaskDetails: string | null = null;
         let newIds: string[] = [];
 
-        setProjects(prevProjects => {
-            const updatedProjects = prevProjects.map(p => {
-                if (p.id === selectedProjectId) {
-                    const originalBacklogIndex = (p.backlog ?? []).findIndex(item => item.id === originalTaskId);
-                    if (originalBacklogIndex === -1) {
-                        console.error("Original backlog item not found for splitting:", originalTaskId);
-                        toast({ variant: "destructive", title: "Error", description: "Original item not found." });
-                        return p;
-                    }
+        const originalBacklogIndex = (selectedProject.backlog ?? []).findIndex(item => item.id === originalTaskId);
+        if (originalBacklogIndex === -1) {
+            console.error("Original backlog item not found for splitting:", originalTaskId);
+            toast({ variant: "destructive", title: "Error", description: "Original item not found." });
+            return;
+        }
 
-                    const originalItem = p.backlog![originalBacklogIndex];
-                    originalTaskDetails = `${originalItem.backlogId} (${originalItem.title || 'No Title'})`;
+        const originalItem = selectedProject.backlog![originalBacklogIndex];
+        originalTaskDetails = `${originalItem.backlogId} (${originalItem.title || 'No Title'})`;
 
-                    // 1. Mark the original item with 'Split' status in history
-                    const markedOriginalItem = {
-                        ...originalItem,
-                        historyStatus: 'Split' as HistoryStatus,
-                        movedToSprint: undefined, // Ensure it's not marked as moved to a sprint
-                        splitFromId: undefined, // Original items don't have this
-                    };
+        // 1. Mark the original item with 'Split' status in history
+        const markedOriginalItem = {
+            ...originalItem,
+            historyStatus: 'Split' as HistoryStatus,
+            movedToSprint: undefined,
+            splitFromId: undefined,
+        };
 
-                     // 2. Prepare new split tasks with unique IDs and backlog IDs
-                     const allItemsForIdGen = [...(p.backlog || []), ...splitTasks]; // Include potential new tasks for ID uniqueness check
+        // 2. Prepare new split tasks with unique IDs and backlog IDs
+        const allItemsForIdGen = [...(selectedProject.backlog || []), ...splitTasks];
 
-                     const newSplitTasksWithIds = splitTasks.map((task, index) => {
-                         // Split results now get their own unique, standard IDs
-                         const suffix = String.fromCharCode(97 + index); // 'a', 'b', 'c'...
-                         const newSplitBacklogId = `${originalItem.backlogId}-${suffix}`;
+        const newSplitTasksWithIds = splitTasks.map((task, index) => {
+             const suffix = String.fromCharCode(97 + index);
+             const newSplitBacklogId = `${originalItem.backlogId}-${suffix}`;
+             const newId = `split_${originalTaskId}_${newSplitBacklogId}_${Date.now()}`; // Ensure unique persistent ID
 
-                         return {
-                           ...task,
-                           id: `split_${originalTaskId}_${newSplitBacklogId}_${Date.now()}`, // Use new backlog ID in unique ID
-                           backlogId: newSplitBacklogId, // Assign generated suffixed ID
-                           ticketNumber: newSplitBacklogId, // Default ticket number
-                           needsGrooming: true, // Mark as needing grooming
-                           readyForSprint: false, // Mark as not ready
-                           splitFromId: originalItem.id, // Link back to the original task ID
-                         };
-                     });
-
-
-                     newIds = newSplitTasksWithIds.map(t => t.backlogId || t.id); // Store new IDs for toast
-
-                    // 3. Update the backlog array: Replace original with historical, add new splits
-                    const updatedBacklog = [
-                        ...(p.backlog?.slice(0, originalBacklogIndex) ?? []),
-                        markedOriginalItem, // Keep historical original
-                        ...newSplitTasksWithIds, // Add new split tasks
-                        ...(p.backlog?.slice(originalBacklogIndex + 1) ?? []),
-                    ];
-
-                    return {
-                        ...p,
-                        backlog: updatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')), // Re-sort backlog
-                    };
-                }
-                return p;
-            });
-            return updatedProjects;
+             return {
+               ...task,
+               id: newId,
+               backlogId: newSplitBacklogId,
+               ticketNumber: newSplitBacklogId,
+               needsGrooming: true,
+               readyForSprint: false,
+               splitFromId: originalItem.id, // Link back to the original task ID
+             };
         });
+
+        newIds = newSplitTasksWithIds.map(t => t.backlogId || t.id);
+
+        // 3. Update the backlog array: Replace original with historical, add new splits
+        const updatedBacklog = [
+            ...(selectedProject.backlog?.slice(0, originalBacklogIndex) ?? []),
+            markedOriginalItem,
+            ...newSplitTasksWithIds,
+            ...(selectedProject.backlog?.slice(originalBacklogIndex + 1) ?? []),
+        ];
+
+        const updatedProject: Project = {
+            ...selectedProject,
+            backlog: updatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
+        };
+
+        updateProjectData(updatedProject);
 
         if (originalTaskDetails) {
             toast({
@@ -929,12 +710,12 @@ export default function Home() {
                 duration: 5000,
             });
         }
-    }, [selectedProjectId, toast]); // Removed generateNextBacklogId dependency
+    }, [selectedProject, updateProjectData, toast]); // Removed generateNextBacklogId dependency
 
 
     // Handler to merge backlog items
     const handleMergeBacklogItems = useCallback((taskIdsToMerge: string[], mergedTask: Task) => {
-       if (!selectedProjectId) {
+       if (!selectedProject) {
          toast({ variant: "destructive", title: "Error", description: "No project selected." });
          return;
        }
@@ -943,75 +724,69 @@ export default function Home() {
           return;
        }
 
-       const mergeEventId = `merge_${Date.now()}`; // Generate a unique ID for this merge event
+       const mergeEventId = `merge_${Date.now()}`;
        let mergedItemDetails: string[] = [];
+       let firstOriginalBacklogId: string | undefined = undefined;
+       const itemsToMarkHistorical: Task[] = [];
 
-       setProjects(prevProjects => {
-          const updatedProjects = prevProjects.map(p => {
-             if (p.id === selectedProjectId) {
-                let updatedBacklog = [...(p.backlog ?? [])];
-                const itemsToMarkHistorical: Task[] = [];
-                let firstOriginalBacklogId: string | undefined = undefined;
+       let currentBacklog = [...(selectedProject.backlog ?? [])];
 
-                // Mark original items as merged
-                updatedBacklog = updatedBacklog.map(item => {
-                   if (taskIdsToMerge.includes(item.id)) {
-                        if (!firstOriginalBacklogId) {
-                           firstOriginalBacklogId = item.backlogId; // Capture the first original ID for naming convention
-                        }
-                       mergedItemDetails.push(`${item.backlogId} (${item.title || 'No Title'})`);
-                       itemsToMarkHistorical.push({
-                           ...item,
-                           historyStatus: 'Merge' as HistoryStatus,
-                           movedToSprint: undefined, // Ensure not marked as moved
-                           mergeEventId: mergeEventId, // Link to the merge event
-                       });
-                       return null; // Mark for removal from active backlog later
-                   }
-                   return item;
-                }).filter((item): item is Task => item !== null); // Remove the original items from active view
-
-                // Generate the new merged backlog ID
-                const newMergedBacklogId = `${firstOriginalBacklogId || 'merged'}-m`; // Use first original ID + '-m'
-
-                const newMergedTaskWithId: Task = {
-                   ...mergedTask,
-                   id: `merged_${Date.now()}_${Math.random()}`, // Generate unique ID
-                   backlogId: newMergedBacklogId, // Assign merged ID
-                   ticketNumber: newMergedBacklogId, // Default ticket number
-                   needsGrooming: true,
-                   readyForSprint: false,
-                   mergeEventId: mergeEventId, // Link the resulting merged item to the event
-                };
-
-                // Combine active backlog, new merged task, and historical items
-                 const finalBacklog = [
-                    ...updatedBacklog,
-                    newMergedTaskWithId,
-                    ...itemsToMarkHistorical
-                 ];
-
-                return {
-                   ...p,
-                   backlog: finalBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')), // Re-sort
-                };
-             }
-             return p;
-          });
-          return updatedProjects;
+       // Mark original items as merged
+       const activeBacklogAfterRemoval = currentBacklog.filter(item => {
+           if (taskIdsToMerge.includes(item.id)) {
+               if (!firstOriginalBacklogId) {
+                  firstOriginalBacklogId = item.backlogId;
+               }
+               mergedItemDetails.push(`${item.backlogId} (${item.title || 'No Title'})`);
+               itemsToMarkHistorical.push({
+                   ...item,
+                   historyStatus: 'Merge' as HistoryStatus,
+                   movedToSprint: undefined,
+                   mergeEventId: mergeEventId,
+               });
+               return false; // Remove from active backlog
+           }
+           return true; // Keep in active backlog
        });
 
-        toast({
-            title: "Items Merged",
-            description: `Items [${mergedItemDetails.join(', ')}] marked as Merged. New item '${mergedTask.title}' created.`,
-            duration: 5000,
-        });
 
-    }, [selectedProjectId, toast]); // Removed generateNextBacklogId dependency
+       const newMergedBacklogId = `${firstOriginalBacklogId || 'merged'}-m`;
+
+       const newMergedTaskWithId: Task = {
+          ...mergedTask,
+          id: `merged_${Date.now()}_${Math.random()}`,
+          backlogId: newMergedBacklogId,
+          ticketNumber: newMergedBacklogId,
+          needsGrooming: true,
+          readyForSprint: false,
+          mergeEventId: mergeEventId,
+       };
+
+       // Combine active backlog, new merged task, and historical items
+        const finalBacklog = [
+           ...activeBacklogAfterRemoval,
+           newMergedTaskWithId,
+           ...itemsToMarkHistorical
+        ];
+
+       const updatedProject: Project = {
+           ...selectedProject,
+           backlog: finalBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
+       };
+
+       updateProjectData(updatedProject);
+
+       toast({
+           title: "Items Merged",
+           description: `Items [${mergedItemDetails.join(', ')}] marked as Merged. New item '${mergedTask.title}' created.`,
+           duration: 5000,
+       });
+
+    }, [selectedProject, updateProjectData, toast]); // Removed generateNextBacklogId dependency
 
     // Handler to undo a backlog action (Split/Merge)
      const handleUndoBacklogAction = useCallback((taskId: string) => {
-         if (!selectedProjectId) {
+         if (!selectedProject) {
              toast({ variant: "destructive", title: "Error", description: "No project selected." });
              return;
          }
@@ -1020,206 +795,178 @@ export default function Home() {
          let undoneItemDetails: string | null = null;
          let restoredItemIds: string[] = [];
          let removedItemIds: string[] = [];
-         let actionSuccess = false; // Track if the undo logic successfully modified state
+         let actionSuccess = false;
 
-          // Defer toast to avoid render interference
          const showToast = (options: any) => setTimeout(() => toast(options), 50);
 
-         setProjects(prevProjects => {
-             let projectUpdated = false;
-             const updatedProjects = prevProjects.map(p => {
-                 if (p.id === selectedProjectId) {
-                     let updatedBacklog = [...(p.backlog || [])];
-                     const triggerItem = updatedBacklog.find(item => item.id === taskId);
+         let currentBacklog = [...(selectedProject.backlog || [])];
+         const triggerItem = currentBacklog.find(item => item.id === taskId);
 
-                     if (!triggerItem) {
-                         console.error("Undo Trigger item not found:", taskId);
-                         showToast({ variant: "destructive", title: "Error", description: "Cannot perform undo: Item not found." });
-                         return p;
-                     }
+         if (!triggerItem) {
+             console.error("Undo Trigger item not found:", taskId);
+             showToast({ variant: "destructive", title: "Error", description: "Cannot perform undo: Item not found." });
+             return;
+         }
 
-                      // Enhanced logging for debugging
-                      console.log("Attempting to undo action for item:", triggerItem);
+         console.log("Attempting to undo action for item:", triggerItem);
 
-                     let originalItemToRestore: Task | undefined;
-                     let itemsToRemove: Task[] = [];
-                     let itemsToRestore: Task[] = [];
-                     let mergeEventId: string | undefined;
+         let originalItemToRestore: Task | undefined;
+         let itemsToRemove: Task[] = [];
+         let itemsToRestore: Task[] = [];
+         let mergeEventId: string | undefined;
 
-                     // Determine action and related items based on the *trigger item*
-                     if (triggerItem.historyStatus === 'Split') { // Undoing original historical Split item
-                         undoneActionType = 'Split';
-                         originalItemToRestore = triggerItem; // This is the item to restore
-                         itemsToRemove = updatedBacklog.filter(item => item.splitFromId === originalItemToRestore!.id); // Find results by splitFromId
-                     } else if (triggerItem.historyStatus === 'Merge') { // Undoing original historical Merge item
-                         undoneActionType = 'Merge';
-                         mergeEventId = triggerItem.mergeEventId;
-                         if (!mergeEventId) {
-                             console.error("Cannot undo merge: Missing mergeEventId on historical item", taskId);
-                             showToast({ variant: "destructive", title: "Error", description: "Cannot undo merge action (missing link)." });
-                             return p;
-                         }
-                         // Find the resulting merged item and the original items using the mergeEventId
-                         itemsToRemove = updatedBacklog.filter(item => item.mergeEventId === mergeEventId && !item.historyStatus); // The non-historical item with the event ID is the result
-                         itemsToRestore = updatedBacklog.filter(item => item.mergeEventId === mergeEventId && item.historyStatus === 'Merge'); // Original items have status 'Merge' and the event ID
-                     } else if (triggerItem.splitFromId) { // Undoing a resulting Split item
-                         undoneActionType = 'Split';
-                         // Find the original historical item that was split
-                         originalItemToRestore = updatedBacklog.find(item => item.id === triggerItem.splitFromId && item.historyStatus === 'Split');
-                         if (!originalItemToRestore) {
-                             console.error("Cannot undo split: Original item not found for split item", taskId);
-                             showToast({ variant: "destructive", title: "Error", description: "Cannot undo split action (original missing)." });
-                             return p;
-                         }
-                         // Find all items resulting from that split (including the trigger item itself)
-                         itemsToRemove = updatedBacklog.filter(item => item.splitFromId === originalItemToRestore!.id);
-                     } else if (triggerItem.mergeEventId && !triggerItem.historyStatus) { // Undoing a resulting Merge item
-                         undoneActionType = 'Merge';
-                         mergeEventId = triggerItem.mergeEventId;
-                         itemsToRemove = [triggerItem]; // The item itself is the result to remove
-                         itemsToRestore = updatedBacklog.filter(item => item.mergeEventId === mergeEventId && item.historyStatus === 'Merge'); // Find originals via event ID
-                     } else {
-                         console.error("Item not eligible for undo:", taskId, triggerItem);
-                         showToast({ variant: "destructive", title: "Error", description: "Cannot undo this action (item not eligible)." });
-                         return p;
-                     }
+         // Determine action and related items based on the *trigger item*
+         if (triggerItem.historyStatus === 'Split') {
+             undoneActionType = 'Split';
+             originalItemToRestore = triggerItem;
+             itemsToRemove = currentBacklog.filter(item => item.splitFromId === originalItemToRestore!.id);
+         } else if (triggerItem.historyStatus === 'Merge') {
+             undoneActionType = 'Merge';
+             mergeEventId = triggerItem.mergeEventId;
+             if (!mergeEventId) {
+                 console.error("Cannot undo merge: Missing mergeEventId on historical item", taskId);
+                 showToast({ variant: "destructive", title: "Error", description: "Cannot undo merge action (missing link)." });
+                 return;
+             }
+             itemsToRemove = currentBacklog.filter(item => item.mergeEventId === mergeEventId && !item.historyStatus);
+             itemsToRestore = currentBacklog.filter(item => item.mergeEventId === mergeEventId && item.historyStatus === 'Merge');
+         } else if (triggerItem.splitFromId) {
+             undoneActionType = 'Split';
+             originalItemToRestore = currentBacklog.find(item => item.id === triggerItem.splitFromId && item.historyStatus === 'Split');
+             if (!originalItemToRestore) {
+                 console.error("Cannot undo split: Original item not found for split item", taskId);
+                 showToast({ variant: "destructive", title: "Error", description: "Cannot undo split action (original missing)." });
+                 return;
+             }
+             itemsToRemove = currentBacklog.filter(item => item.splitFromId === originalItemToRestore!.id);
+         } else if (triggerItem.mergeEventId && !triggerItem.historyStatus) {
+             undoneActionType = 'Merge';
+             mergeEventId = triggerItem.mergeEventId;
+             itemsToRemove = [triggerItem];
+             itemsToRestore = currentBacklog.filter(item => item.mergeEventId === mergeEventId && item.historyStatus === 'Merge');
+         } else {
+             console.error("Item not eligible for undo:", taskId, triggerItem);
+             showToast({ variant: "destructive", title: "Error", description: "Cannot undo this action (item not eligible)." });
+             return;
+         }
 
+         // Set details for toast message
+         if (undoneActionType === 'Split') {
+            undoneItemDetails = originalItemToRestore ? `${originalItemToRestore.backlogId} (${originalItemToRestore.title || 'No Title'})` : `Split items related to ${triggerItem.backlogId}`;
+         } else if (undoneActionType === 'Merge') {
+            undoneItemDetails = mergeEventId ? `Merged Items (Event: ${mergeEventId})` : `Merge related to ${triggerItem.backlogId}`;
+         }
 
-                     // Set details for toast message based on the action type and trigger item
-                     if (undoneActionType === 'Split') {
-                        undoneItemDetails = originalItemToRestore ? `${originalItemToRestore.backlogId} (${originalItemToRestore.title || 'No Title'})` : `Split items related to ${triggerItem.backlogId}`;
-                     } else if (undoneActionType === 'Merge') {
-                        undoneItemDetails = mergeEventId ? `Merged Items (Event: ${mergeEventId})` : `Merge related to ${triggerItem.backlogId}`;
-                     }
+         // Perform the updates only if an action type was determined
+         if (undoneActionType) {
+             actionSuccess = true;
 
+             const removedIdsSet = new Set(itemsToRemove.map(t => t.id));
+             removedItemIds = itemsToRemove.map(t => t.backlogId || t.id);
 
-                     // Perform the updates only if an action type was determined
-                     if (undoneActionType) {
-                         projectUpdated = true;
-                         actionSuccess = true; // Assume success unless checks fail
+             // Filter out the items created by the action
+             let updatedBacklog = currentBacklog.filter(item => !removedIdsSet.has(item.id));
 
-                         // IDs of items to be removed
-                         const removedIdsSet = new Set(itemsToRemove.map(t => t.id));
-                         removedItemIds = itemsToRemove.map(t => t.backlogId || t.id); // Store IDs for toast
+             const itemsToMakeActive = undoneActionType === 'Split' ? [originalItemToRestore] : itemsToRestore;
+             const restoredIdsSet = new Set(itemsToMakeActive.filter(Boolean).map(t => t!.id));
+             restoredItemIds = itemsToMakeActive.filter(Boolean).map(t => t!.backlogId || t!.id);
 
-                         // Filter out the items created by the action
-                         updatedBacklog = updatedBacklog.filter(item => !removedIdsSet.has(item.id));
-
-
-                         // IDs of items to be restored (either original split parent or original merge children)
-                         const itemsToMakeActive = undoneActionType === 'Split' ? [originalItemToRestore] : itemsToRestore;
-                         const restoredIdsSet = new Set(itemsToMakeActive.filter(Boolean).map(t => t!.id));
-                         restoredItemIds = itemsToMakeActive.filter(Boolean).map(t => t!.backlogId || t!.id); // Store IDs for toast
-
-                         // Restore original items: Remove historyStatus and related IDs
-                         updatedBacklog = updatedBacklog.map(item => {
-                             if (restoredIdsSet.has(item.id)) {
-                                  console.log("Restoring item:", item.id, item.backlogId);
-                                 return { ...item, historyStatus: undefined, splitFromId: undefined, mergeEventId: undefined, movedToSprint: undefined };
-                             }
-                             return item;
-                         });
-
-                          // Validation checks
-                         if (undoneActionType === 'Merge' && itemsToRestore.length === 0 && mergeEventId) {
-                             console.error(`Undo Merge: Could not find original items for mergeEventId ${mergeEventId}`);
-                              showToast({ variant: "warning", title: "Undo Incomplete", description: "Could not restore original merged items." });
-                              actionSuccess = false;
-                              return p; // Revert state change
-                         }
-                         if (itemsToRemove.length === 0 && (undoneActionType === 'Split' || undoneActionType === 'Merge')) {
-                              console.warn(`Undo ${undoneActionType}: Could not find the resulting item(s) to remove. Originals restored.`);
-                              showToast({ variant: "warning", title: "Undo Warning", description: `Resulting ${undoneActionType === 'Split' ? 'split' : 'merged'} item(s) not found, originals restored.` });
-                         }
-
-                         return {
-                             ...p,
-                             backlog: updatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
-                         };
-                     } else {
-                         // Should not reach here if logic above is correct, but acts as a safeguard
-                         console.error("Undo Error: Could not determine action type for item", taskId);
-                         showToast({ variant: "destructive", title: "Error", description: "Could not process the undo request." });
-                         return p;
-                     }
+             // Restore original items: Remove historyStatus and related IDs
+             updatedBacklog = updatedBacklog.map(item => {
+                 if (restoredIdsSet.has(item.id)) {
+                      console.log("Restoring item:", item.id, item.backlogId);
+                     return { ...item, historyStatus: undefined, splitFromId: undefined, mergeEventId: undefined, movedToSprint: undefined };
                  }
-                 return p;
+                 return item;
              });
 
-              // Show appropriate toast after the state update attempt
-             if (actionSuccess && undoneItemDetails && undoneActionType) {
-                 const restoredCount = restoredItemIds.length;
-                 const removedCount = removedItemIds.length;
-                 showToast({
-                     title: `${undoneActionType} Undone`,
-                     description: `Action related to '${undoneItemDetails}' undone. ${restoredCount} item(s) restored, ${removedCount} item(s) removed.`,
-                     duration: 5000,
-                 });
-              } else if (!actionSuccess && undoneActionType) {
-                  // Toast for failure might have already been shown, but add a generic one if needed
-                  // showToast({ variant: "destructive", title: "Undo Failed", description: "The undo operation could not be completed." });
-              }
+              // Validation checks
+             if (undoneActionType === 'Merge' && itemsToRestore.length === 0 && mergeEventId) {
+                 console.error(`Undo Merge: Could not find original items for mergeEventId ${mergeEventId}`);
+                  showToast({ variant: "warning", title: "Undo Incomplete", description: "Could not restore original merged items." });
+                  actionSuccess = false;
+                  return;
+             }
+             if (itemsToRemove.length === 0 && (undoneActionType === 'Split' || undoneActionType === 'Merge')) {
+                  console.warn(`Undo ${undoneActionType}: Could not find the resulting item(s) to remove. Originals restored.`);
+                  showToast({ variant: "warning", title: "Undo Warning", description: `Resulting ${undoneActionType === 'Split' ? 'split' : 'merged'} item(s) not found, originals restored.` });
+             }
 
+             const updatedProject: Project = {
+                ...selectedProject,
+                backlog: updatedBacklog.sort((a, b) => (taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!)) || (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
+             };
+             updateProjectData(updatedProject);
 
-             return projectUpdated ? updatedProjects : prevProjects; // Return original state if no update occurred
-         });
+         } else {
+             console.error("Undo Error: Could not determine action type for item", taskId);
+             showToast({ variant: "destructive", title: "Error", description: "Could not process the undo request." });
+             return;
+         }
 
-     }, [selectedProjectId, toast, setProjects]); // Added setProjects dependency
+          // Show appropriate toast after the state update attempt
+         if (actionSuccess && undoneItemDetails && undoneActionType) {
+             const restoredCount = restoredItemIds.length;
+             const removedCount = removedItemIds.length;
+             showToast({
+                 title: `${undoneActionType} Undone`,
+                 description: `Action related to '${undoneItemDetails}' undone. ${restoredCount} item(s) restored, ${removedCount} item(s) removed.`,
+                 duration: 5000,
+             });
+          }
+
+     }, [selectedProject, updateProjectData, toast]); // Removed setProjects dependency
 
 
   // Handler to add members to the *newly created* project (from dialog)
    const handleAddMembersToNewProject = useCallback((addedMembers: Member[]) => {
        if (!newlyCreatedProjectId) return;
-       let newProjectName = 'the new project';
 
-        // Wrap state updates in setTimeout to defer execution
-        setTimeout(() => {
-            setProjects(prevProjects => {
-              const updatedProjects = prevProjects.map(p => {
-                if (p.id === newlyCreatedProjectId) {
-                  newProjectName = p.name; // Capture name
-                  return { ...p, members: [...(p.members || []), ...addedMembers] };
-                }
-                return p;
-              });
-              return updatedProjects;
-            });
-            toast({ title: "Members Added", description: `Members added to project '${newProjectName}'.` });
-            setIsAddMembersDialogOpen(false); // Close the dialog
-            setNewlyCreatedProjectId(null); // Reset the tracked ID
-        }, 0); // Use 0 timeout to push to the end of the event loop
+       const projectToUpdate = projects.find(p => p.id === newlyCreatedProjectId);
+       if (!projectToUpdate) {
+            toast({ variant: "destructive", title: "Error", description: "Newly created project not found." });
+            setIsAddMembersDialogOpen(false);
+            setNewlyCreatedProjectId(null);
+            return;
+       }
 
-   }, [newlyCreatedProjectId, toast, setProjects, setIsAddMembersDialogOpen, setNewlyCreatedProjectId]); // Include state setters in dependency array if ESLint requires
+        const updatedProject: Project = {
+           ...projectToUpdate,
+           members: [...(projectToUpdate.members || []), ...addedMembers]
+        };
+
+       updateProjectData(updatedProject); // Update via mutation
+
+       toast({ title: "Members Added", description: `Members added to project '${projectToUpdate.name}'.` });
+       setIsAddMembersDialogOpen(false);
+       setNewlyCreatedProjectId(null);
+
+   }, [newlyCreatedProjectId, projects, updateProjectData, toast, setIsAddMembersDialogOpen, setNewlyCreatedProjectId]);
 
   // Handler to delete a sprint
   const handleDeleteSprint = useCallback((sprintNumber: number) => {
-    if (!selectedProjectId) {
+    if (!selectedProject) {
       toast({ variant: "destructive", title: "Error", description: "No project selected." });
       return;
     }
-    let currentProjectName = 'N/A';
-    setProjects(prevProjects => {
-      const updatedProjects = prevProjects.map(p => {
-        if (p.id === selectedProjectId) {
-          currentProjectName = p.name; // Capture name
-          const filteredSprints = (p.sprintData.sprints ?? []).filter(s => s.sprintNumber !== sprintNumber); // Handle null/undefined
-          return {
-            ...p,
-            sprintData: {
-              ...(p.sprintData ?? initialSprintData), // Use initialSprintData if sprintData is null/undefined
-              sprints: filteredSprints,
-              // Recalculate overall metrics if needed
-              totalStoryPoints: filteredSprints.reduce((sum, s) => sum + s.completedPoints, 0),
-              daysInSprint: filteredSprints.length > 0 ? Math.max(...filteredSprints.map(s => s.totalDays)) : 0,
-            },
-          };
-        }
-        return p;
-      });
-      return updatedProjects;
-    });
+    const currentProjectName = selectedProject.name;
+    const filteredSprints = (selectedProject.sprintData.sprints ?? []).filter(s => s.sprintNumber !== sprintNumber);
+    const totalPoints = filteredSprints.reduce((sum, s) => sum + s.completedPoints, 0);
+    const maxDays = filteredSprints.length > 0 ? Math.max(...filteredSprints.map(s => s.totalDays)) : 0;
+
+    const updatedProject: Project = {
+        ...selectedProject,
+        sprintData: {
+            ...(selectedProject.sprintData ?? initialSprintData),
+            sprints: filteredSprints,
+            totalStoryPoints: totalPoints,
+            daysInSprint: maxDays,
+        },
+    };
+
+    updateProjectData(updatedProject);
     toast({ title: "Sprint Deleted", description: `Sprint ${sprintNumber} deleted from project '${currentProjectName}'.` });
-  }, [selectedProjectId, toast]);
+  }, [selectedProject, updateProjectData, toast]);
 
 
   // Export data for the currently selected project
@@ -1421,25 +1168,31 @@ export default function Home() {
       id: `proj_${Date.now()}`,
       name: trimmedName,
       sprintData: initialSprintData,
-      members: [], // Initialize with empty members array
-      holidayCalendars: [], // Initialize with empty holiday calendars
-      teams: [], // Initialize with empty teams array
-      backlog: [], // Initialize with empty backlog array
+      members: [],
+      holidayCalendars: [],
+      teams: [],
+      backlog: [],
     };
 
-    // Update projects state first
-    setProjects(prevProjects => [...prevProjects, newProject]);
-    setSelectedProjectId(newProject.id);
-    setNewProjectName('');
-    setIsNewProjectDialogOpen(false);
-    setNewlyCreatedProjectId(newProject.id); // Track the new project ID for dialog
-    setActiveTab("dashboard"); // Set dashboard as active after creating
+    updateProjectMutation.mutate(newProject, {
+      onSuccess: (data, variables) => {
+        // variables is the project object passed to mutate
+        setSelectedProjectId(variables.id);
+        setNewProjectName('');
+        setIsNewProjectDialogOpen(false);
+        setNewlyCreatedProjectId(variables.id);
+        setActiveTab("dashboard");
 
-    // Defer the toast and dialog opening slightly
-     setTimeout(() => {
-        toast({ title: "Project Created", description: `Project "${trimmedName}" created successfully.` });
-        setIsAddMembersDialogOpen(true); // Open the dialog AFTER state update
-    }, 50); // Increased timeout slightly
+        // Defer the toast and dialog opening slightly
+        setTimeout(() => {
+          toast({ title: "Project Created", description: `Project "${trimmedName}" created successfully.` });
+          setIsAddMembersDialogOpen(true); // Open the dialog AFTER state update
+        }, 50);
+      },
+      onError: (error) => {
+        toast({ variant: "destructive", title: "Create Error", description: `Failed to create project: ${error.message}` });
+      }
+    });
   };
 
    // Handler to open the delete project confirmation dialog
@@ -1467,16 +1220,23 @@ export default function Home() {
            return;
        }
 
-       setProjects(prevProjects => prevProjects.filter(p => p.id !== projectToDeleteId));
-
-       // If the deleted project was the selected one, select the first available project or null
-       if (selectedProjectId === projectToDeleteId) {
-           setSelectedProjectId(projects.length > 1 ? projects.find(p => p.id !== projectToDeleteId)?.id ?? null : null);
-       }
-
-       toast({ title: "Project Deleted", description: `Project "${project.name}" has been deleted.` });
-       setIsDeleteDialogOpen(false);
-       setProjectToDeleteId(null);
+       deleteProjectMutation.mutate(projectToDeleteId, {
+          onSuccess: () => {
+             toast({ title: "Project Deleted", description: `Project "${project.name}" has been deleted.` });
+             setIsDeleteDialogOpen(false);
+             setProjectToDeleteId(null);
+              // If the deleted project was the selected one, select the first available project or null
+             if (selectedProjectId === projectToDeleteId) {
+                const remainingProjects = projects.filter(p => p.id !== projectToDeleteId);
+                setSelectedProjectId(remainingProjects.length > 0 ? remainingProjects[0].id : null);
+             }
+          },
+          onError: (error) => {
+             toast({ variant: "destructive", title: "Delete Error", description: `Failed to delete project: ${error.message}` });
+              setIsDeleteDialogOpen(false); // Close dialog even on error
+              setProjectToDeleteId(null);
+          }
+       });
    };
 
 
@@ -1519,6 +1279,42 @@ export default function Home() {
   // Render the currently active tab content
   const renderActiveTabContent = () => {
     if (!selectedProject) {
+      // Initial loading state from React Query
+      if (isLoadingProjects) {
+          return (
+              <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
+                  <CardHeader className="text-center">
+                      <CardTitle>Loading Project Data...</CardTitle>
+                      <CardDescription>Please wait while the application loads.</CardDescription>
+                  </CardHeader>
+              </Card>
+          );
+      }
+       // Error state from React Query
+      if (projectsError) {
+          return (
+              <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2 border-destructive">
+                  <CardHeader className="text-center">
+                      <CardTitle className="text-destructive">Error Loading Projects</CardTitle>
+                      <CardDescription>Could not load project data. Please check your connection or Firebase setup.</CardDescription>
+                      <CardDescription className="text-xs text-muted-foreground mt-2">{projectsError.message}</CardDescription>
+                  </CardHeader>
+              </Card>
+          );
+      }
+       // No projects exist state
+       if (projects.length === 0) {
+            return (
+                <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
+                  <CardHeader className="text-center">
+                    <CardTitle>No Projects Found</CardTitle>
+                    <CardDescription>Create your first project using the 'New Project' button above.</CardDescription>
+                  </CardHeader>
+                </Card>
+            );
+       }
+
+       // No project selected (should ideally default to first, but handle as fallback)
       return (
         <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
           <CardHeader className="text-center">
@@ -1584,15 +1380,10 @@ export default function Home() {
                 componentProps = {
                      ...componentProps,
                      initialBacklog: selectedProject.backlog ?? [], // Pass full backlog
-                      // Grooming usually modifies existing items, so reuse update handler or create specific one
+                      // Grooming usually modifies existing items, requires saving the whole project
                       onSaveBacklog: (groomedBacklog: Task[]) => {
-                          // Determine which items were updated in grooming
-                          const updatedIds = new Set(groomedBacklog.filter(t => !t.historyStatus).map(t => t.id));
-                          const combined = [
-                              ...groomedBacklog, // Groomed items (may include newly marked historical)
-                              ...(selectedProject.backlog?.filter(t => t.historyStatus && !groomedBacklog.some(gt => gt.id === t.id)) || []) // Keep existing historical not touched in grooming
-                          ];
-                           setProjects(prev => prev.map(p => p.id === selectedProjectId ? { ...p, backlog: combined } : p));
+                           const updatedProject: Project = { ...selectedProject, backlog: groomedBacklog };
+                           updateProjectData(updatedProject);
                            toast({ title: "Backlog Groomed", description: "Changes saved." });
                       },
                      onSplitBacklogItem: handleSplitBacklogItem, // Pass split handler
@@ -1665,20 +1456,20 @@ export default function Home() {
              <Select
                value={selectedProjectId ?? undefined}
                onValueChange={(value) => {
-                  if (value === 'loading') return; // Prevent selecting the loading indicator
+                  if (value === 'loading' || value === 'no-projects') return; // Prevent selecting placeholder items
                    console.log(`Project selected: ${value}`);
                    setSelectedProjectId(value);
                    setActiveTab("dashboard"); // Reset to dashboard tab on project change
                }}
-               disabled={isLoading || projects.length === 0} // Disable while loading or if no projects
+               disabled={isLoadingProjects || projects.length === 0} // Disable while loading or if no projects
              >
                 <SelectTrigger className="w-[200px]"> {/* Increased width */}
-                  <SelectValue placeholder={isLoading ? "Loading..." : "Select a project"} />
+                  <SelectValue placeholder={isLoadingProjects ? "Loading..." : (projects.length === 0 ? "No projects yet" : "Select a project")} />
                 </SelectTrigger>
                 <SelectContent>
                     <SelectGroup>
                         <SelectLabel>Projects</SelectLabel>
-                        {isLoading ? (
+                        {isLoadingProjects ? (
                             <SelectItem value="loading" disabled>Loading projects...</SelectItem>
                         ) : projects.length > 0 ? (
                             projects.map(project => (
@@ -1733,7 +1524,9 @@ export default function Home() {
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button type="button" onClick={handleCreateNewProject}>Create Project</Button>
+                        <Button type="button" onClick={handleCreateNewProject} disabled={updateProjectMutation.isPending}>
+                           {updateProjectMutation.isPending ? 'Creating...' : 'Create Project'}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
              </Dialog>
@@ -1775,10 +1568,13 @@ export default function Home() {
                    <AlertDialogCancel onClick={() => setProjectToDeleteId(null)}>Cancel</AlertDialogCancel>
                    <AlertDialogAction
                        onClick={handleConfirmDeleteProject}
-                       disabled={confirmProjectName.trim().toLowerCase() !== (projects.find(p => p.id === projectToDeleteId)?.name.toLowerCase() ?? ' ')}
+                       disabled={
+                            deleteProjectMutation.isPending ||
+                            confirmProjectName.trim().toLowerCase() !== (projects.find(p => p.id === projectToDeleteId)?.name.toLowerCase() ?? ' ')
+                        }
                        className={cn(buttonVariants({ variant: "destructive" }))}
                    >
-                       Delete Project
+                       {deleteProjectMutation.isPending ? 'Deleting...' : 'Delete Project'}
                    </AlertDialogAction>
                </AlertDialogFooter>
            </AlertDialogContent>
@@ -1795,7 +1591,7 @@ export default function Home() {
 
 
       <main className="flex-1 p-6">
-         {isLoading ? (
+         {isLoadingProjects ? ( // Use React Query loading state
              <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
                  <CardHeader className="text-center">
                      <CardTitle>Loading Project Data...</CardTitle>
@@ -1817,41 +1613,28 @@ export default function Home() {
                </TabsList>
 
                 {/* Sub Tabs and Content Area */}
-                {selectedProject ? (
-                    <div className="mt-4">
-                         {/* Render Sub Tabs only if the active main tab has them */}
-                         {tabsConfig[activeMainTab as keyof typeof tabsConfig]?.subTabs && (
-                             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mb-6">
-                                <TabsList className={cn(
-                                    "grid w-full",
-                                    // Adjust grid cols dynamically based on the number of subtabs
-                                    `grid-cols-${Object.keys(tabsConfig[activeMainTab as keyof typeof tabsConfig].subTabs!).length}`
-                                )}>
-                                    {Object.entries(tabsConfig[activeMainTab as keyof typeof tabsConfig].subTabs!).map(([subKey, subConfig]) => (
-                                        <TabsTrigger key={`${activeMainTab}/${subKey}`} value={`${activeMainTab}/${subKey}`}>
-                                           <subConfig.icon className="mr-2 h-4 w-4" /> {subConfig.label}
-                                        </TabsTrigger>
-                                    ))}
-                                </TabsList>
-                                 {/* Content will be rendered below based on the combined activeTab state */}
-                             </Tabs>
-                         )}
+                 <div className="mt-4">
+                     {/* Render Sub Tabs only if the active main tab has them */}
+                     {tabsConfig[activeMainTab as keyof typeof tabsConfig]?.subTabs && (
+                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mb-6">
+                            <TabsList className={cn(
+                                "grid w-full",
+                                // Adjust grid cols dynamically based on the number of subtabs
+                                `grid-cols-${Object.keys(tabsConfig[activeMainTab as keyof typeof tabsConfig].subTabs!).length}`
+                            )}>
+                                {Object.entries(tabsConfig[activeMainTab as keyof typeof tabsConfig].subTabs!).map(([subKey, subConfig]) => (
+                                    <TabsTrigger key={`${activeMainTab}/${subKey}`} value={`${activeMainTab}/${subKey}`}>
+                                       <subConfig.icon className="mr-2 h-4 w-4" /> {subConfig.label}
+                                    </TabsTrigger>
+                                ))}
+                            </TabsList>
+                             {/* Content will be rendered below based on the combined activeTab state */}
+                         </Tabs>
+                     )}
 
-                        {/* Render Content based on the full activeTab state */}
-                        {renderActiveTabContent()}
-                    </div>
-                 ) : (
-                    // Render the "No Project Selected" card if no project is selected
-                     <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2 mt-4">
-                        <CardHeader className="text-center">
-                           <CardTitle>No Project Selected</CardTitle>
-                           <CardDescription>Please select a project from the dropdown above, or create a new one.</CardDescription>
-                        </CardHeader>
-                         <CardContent>
-                             {/* Optional: Add a button or link to create a new project */}
-                         </CardContent>
-                     </Card>
-                 )}
+                    {/* Render Content based on the full activeTab state */}
+                    {renderActiveTabContent()}
+                 </div>
              </Tabs>
           )}
       </main>
@@ -1863,5 +1646,3 @@ export default function Home() {
   );
 
 }
-
-    
