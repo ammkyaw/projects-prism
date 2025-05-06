@@ -1,61 +1,66 @@
-'use client';
 
+// src/components/login-modal.tsx
 import { useState } from 'react';
+import { auth } from '@/lib/firebase'; // Import Firebase auth object
+import { signInWithEmailAndPassword } from 'firebase/auth'; // Import the sign-in function
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from 'lucide-react'; // Import Loader icon
+import { XCircle } from 'lucide-react';
 
 interface LoginModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onLoginSuccess: () => void; // Callback for successful login
+  onLoginSuccess: () => void;
 }
 
 export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: LoginModalProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleLogin = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setIsLoading(true);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault(); // Prevent default form submission
     setError(null);
+    setIsLoading(true);
 
-    // **Placeholder Login Logic**
-    // Replace this with actual Firebase Authentication call
-    console.log("Attempting login with:", { email, password });
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // **Simulate Success/Failure**
-    // In a real app, check Firebase Auth response
-    if (email === "test@example.com" && password === "password") {
-      console.log("Login successful (simulated)");
-      toast({ title: "Login Successful", description: "Redirecting..." });
-      onLoginSuccess(); // Call the success callback
-    } else {
-      console.log("Login failed (simulated)");
-      setError("Invalid email or password.");
-      toast({ variant: "destructive", title: "Login Failed", description: "Invalid email or password." });
+    try {
+        console.log("Attempting login with:", email);
+        await signInWithEmailAndPassword(auth, email, password);
+        console.log("Firebase login successful");
+        toast({ title: "Login Successful", description: "Redirecting..." });
+        onLoginSuccess(); // Call the success callback
+    } catch (err: any) {
+        console.error("Firebase login failed:", err);
+        let errorMessage = "An unexpected error occurred. Please try again.";
+        // Handle specific Firebase auth errors
+        switch (err.code) {
+            case 'auth/user-not-found':
+            case 'auth/wrong-password':
+                 errorMessage = "Invalid email or password.";
+                 break;
+            case 'auth/invalid-email':
+                errorMessage = "Please enter a valid email address.";
+                break;
+            case 'auth/too-many-requests':
+                errorMessage = "Too many login attempts. Please try again later.";
+                break;
+             case 'auth/invalid-credential': // More generic error for wrong email/password
+                 errorMessage = "Invalid email or password.";
+                 break;
+            // Add other specific error codes as needed
+        }
+        setError(errorMessage);
+        toast({ variant: "destructive", title: "Login Failed", description: errorMessage });
+    } finally {
+        setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
-
-  // Reset form when dialog closes/opens
-  useEffect(() => {
-    if (!isOpen) {
-      setEmail('');
-      setPassword('');
-      setError(null);
-      setIsLoading(false);
-    }
-  }, [isOpen]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -63,11 +68,20 @@ export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: Log
         <DialogHeader>
           <DialogTitle>Login to Project Prism</DialogTitle>
           <DialogDescription>
-            Enter your credentials to access the dashboard.
+            Enter your email and password to access your dashboard.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleLogin}> {/* Add form element */}
           <div className="grid gap-4 py-4">
+            {error && (
+               <Alert variant="destructive">
+                 <XCircle className="h-4 w-4" />
+                 <AlertTitle>Error</AlertTitle>
+                 <AlertDescription>
+                   {error}
+                 </AlertDescription>
+               </Alert>
+             )}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="email" className="text-right">
                 Email
@@ -78,9 +92,8 @@ export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: Log
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="col-span-3"
-                placeholder="you@example.com"
                 required
-                disabled={isLoading}
+                autoComplete="email"
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
@@ -93,31 +106,21 @@ export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: Log
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="col-span-3"
-                placeholder="••••••••"
                 required
-                disabled={isLoading}
+                autoComplete="current-password"
               />
             </div>
-            {error && (
-              <p className="col-span-4 text-center text-sm text-destructive">{error}</p>
-            )}
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button type="button" variant="outline" disabled={isLoading}>
-                Cancel
-              </Button>
+              <Button type="button" variant="outline">Cancel</Button>
             </DialogClose>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Login
+            <Button type="submit" disabled={isLoading}> {/* Change to type="submit" */}
+              {isLoading ? 'Logging in...' : 'Login'}
             </Button>
           </DialogFooter>
-        </form>
+        </form> {/* Close form element */}
       </DialogContent>
     </Dialog>
   );
 }
-
-// Import useEffect from react
-import { useEffect } from 'react';
