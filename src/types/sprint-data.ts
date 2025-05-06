@@ -51,14 +51,14 @@ export type HistoryStatus = 'Move' | 'Split' | 'Merge';
 export interface Task {
   id: string; // Unique ID for the task item
   backlogId?: string | ''; // Allow empty string for manual input
-  ticketNumber?: string; // Primary identifier for tasks *within* a sprint (e.g., JIRA key), can be same as backlogId initially
+  ticketNumber?: string | null; // Primary identifier for tasks *within* a sprint (e.g., JIRA key), can be same as backlogId initially
   title?: string; // Optional: A more descriptive title for the task
   description?: string; // Optional: Detailed description of the task
   acceptanceCriteria?: string; // Optional: Acceptance criteria for the task
   storyPoints?: number | string; // Can be number or empty string from input
-  devEstimatedTime?: string; // Optional: e.g., "2d", "4h", "1w 2d"
-  qaEstimatedTime?: string; // Optional: Defaults to "2d"
-  bufferTime?: string; // Optional: Defaults to "1d"
+  devEstimatedTime?: string | null; // Optional: e.g., "2d", "4h", "1w 2d"
+  qaEstimatedTime?: string | null; // Optional: Defaults to "2d"
+  bufferTime?: string | null; // Optional: Defaults to "1d"
   assignee?: string; // Optional: Stores the Member's name
   reviewer?: string; // Optional: Stores the Member's name for review
   status?: 'To Do' | 'In Progress' | 'In Review' | 'QA' | 'Done' | 'Blocked'; // Status applicable *within* a sprint or backlog
@@ -72,8 +72,8 @@ export interface Task {
   needsGrooming?: boolean; // Flag to indicate if item needs refinement
   readyForSprint?: boolean; // Flag to indicate if item is ready to be pulled into a sprint
   // --- History Tracking ---
-  movedToSprint?: number; // Optional: The sprint number this backlog item was moved to.
-  historyStatus?: HistoryStatus; // Optional: Status indicating how the item moved to history (Move, Split, Merge).
+  movedToSprint?: number | null; // Optional: The sprint number this backlog item was moved to.
+  historyStatus?: HistoryStatus | null; // Optional: Status indicating how the item moved to history (Move, Split, Merge).
   splitFromId?: string; // Optional: ID of the original task this was split from.
   mergeEventId?: string; // Optional: An ID linking items involved in the same merge event.
   // Legacy fields - keep if needed for migration or detail view, but planning uses new fields

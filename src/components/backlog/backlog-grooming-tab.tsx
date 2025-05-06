@@ -94,7 +94,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                assignee: null,
                reviewer: null,
                startDate: null,
-               ticketNumber: null,
+               ticketNumber: null
            })).sort((a, b) => (a.backlogId || '').localeCompare(b.backlogId || ''));
 
         // Compare against the *displayable* initial items (those not moved/split/merged)

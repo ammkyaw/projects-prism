@@ -441,12 +441,12 @@ export default function BacklogTab({
 
        const backlogId = row.backlogId?.trim() || '';
        const title = row.title?.trim();
-       const description = row.description?.trim();
-       const storyPointsRaw = row.storyPoints?.toString().trim();
-       const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
+       const description = row.description?.trim() ?? '';
+       const storyPointsRaw = row.storyPoints?.toString().trim() ?? '';
+       const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : '';
        const taskType = row.taskType ?? 'New Feature';
        const createdDate = row.createdDate ?? '';
-       const initiator = row.initiator?.trim() || undefined;
+       const initiator = row.initiator?.trim() || '';
        const dependsOn = row.dependsOn || [];
        const priority = row.priority ?? 'Medium';
        const needsGrooming = !!row.needsGrooming;
@@ -510,13 +510,13 @@ export default function BacklogTab({
          // Ensure historical fields are not set for new items
          historyStatus: null,
          movedToSprint: null,
-         devEstimatedTime: null,
-         qaEstimatedTime: null,
-         bufferTime: null,
-         assignee: null,
-         reviewer: null,
-         status: null, // Status isn't typically set for backlog items directly
-         startDate: null,
+         devEstimatedTime: '',
+         qaEstimatedTime: '',
+         bufferTime: '',
+         assignee: '',
+         reviewer: '',
+         status: 'To Do', // Status isn't typically set for backlog items directly
+         startDate: '',
          acceptanceCriteria: row.acceptanceCriteria, // Persist acceptance criteria
        });
      });

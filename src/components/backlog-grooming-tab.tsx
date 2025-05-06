@@ -61,9 +61,9 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                devEstimatedTime: null,
                qaEstimatedTime: null,
                bufferTime: null,
-               assignee: null,
-               reviewer: null,
-               startDate: null,
+               assignee: '',
+               reviewer: '',
+               startDate: '',
                ticketNumber: null,
            })).sort((a, b) => (a.backlogId || '').localeCompare(b.backlogId || ''));
 
