@@ -508,15 +508,15 @@ export default function BacklogTab({
          needsGrooming,
          readyForSprint,
          // Ensure historical fields are not set for new items
-         historyStatus: undefined,
-         movedToSprint: undefined,
-         devEstimatedTime: undefined,
-         qaEstimatedTime: undefined,
-         bufferTime: undefined,
-         assignee: undefined,
-         reviewer: undefined,
-         status: undefined, // Status isn't typically set for backlog items directly
-         startDate: undefined,
+         historyStatus: null,
+         movedToSprint: null,
+         devEstimatedTime: null,
+         qaEstimatedTime: null,
+         bufferTime: null,
+         assignee: null,
+         reviewer: null,
+         status: null, // Status isn't typically set for backlog items directly
+         startDate: null,
          acceptanceCriteria: row.acceptanceCriteria, // Persist acceptance criteria
        });
      });
