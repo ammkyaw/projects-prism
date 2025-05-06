@@ -131,7 +131,7 @@ export default function Home() {
          setActiveTab(mainTabKey);
       } else {
          const defaultSub = defaultSubTabs[mainTabKey] || ''; // Fallback to empty string if no default
-         setActiveTab(`${mainKey}/${defaultSub}`);
+         setActiveTab(`${mainTabKey}/${defaultSub}`);
       }
   };
 
@@ -1452,7 +1452,7 @@ export default function Home() {
     <div className="flex flex-col min-h-screen bg-background">
       <header className="sticky top-0 z-10 flex items-center justify-between p-4 bg-card border-b shadow-sm">
         <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-semibold text-primary">Project Prism</h1>
+            <h1 className="text-2xl font-semibold text-primary">Projects Prism</h1>
              <Select
                value={selectedProjectId ?? undefined}
                onValueChange={(value) => {

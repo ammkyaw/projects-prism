@@ -20,7 +20,7 @@ const LandingPage = () => {
       {/* Hero Section */}
       <section className="text-center w-full max-w-4xl mb-16">
         <h1 className="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-primary via-blue-500 to-accent text-transparent bg-clip-text">
-          Project Prism
+          Projects Prism
         </h1>
         <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
           Streamline your Agile reporting. Gain insights into sprint velocity, burndown progress, and developer statistics with intuitive visualizations.
