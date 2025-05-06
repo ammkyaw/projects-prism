@@ -352,7 +352,9 @@ export default function Home() {
          });
      } else {
          // Show success toast if the update was successful
-         toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
+         setTimeout(() => { // Defer toast
+              toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
+         }, 0);
      }
    }, [selectedProjectId, toast, clientNow]);
 
@@ -1725,7 +1727,7 @@ export default function Home() {
                                 value={newProjectName}
                                 onChange={(e) => setNewProjectName(e.target.value)}
                                 className="col-span-3"
-                                placeholder="E.g., Website Redesign"
+                                placeholder="Auto-insurance"
                                 autoFocus
                             />
                         </div>
