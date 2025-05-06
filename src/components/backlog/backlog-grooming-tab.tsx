@@ -88,13 +88,13 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                dependsOn: (rest.dependsOn || []).sort(),
                needsGrooming: !!rest.needsGrooming,
                readyForSprint: !!rest.readyForSprint,
-               devEstimatedTime: undefined,
-               qaEstimatedTime: undefined,
-               bufferTime: undefined,
-               assignee: undefined,
-               reviewer: undefined,
-               startDate: undefined,
-               ticketNumber: undefined,
+               devEstimatedTime: null,
+               qaEstimatedTime: null,
+               bufferTime: null,
+               assignee: null,
+               reviewer: null,
+               startDate: null,
+               ticketNumber: null,
            })).sort((a, b) => (a.backlogId || '').localeCompare(b.backlogId || ''));
 
         // Compare against the *displayable* initial items (those not moved/split/merged)

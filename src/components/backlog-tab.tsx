@@ -120,13 +120,13 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
                createdDate: rest.createdDate ?? '',
                initiator: rest.initiator?.trim() || '',
                dependsOn: (rest.dependsOn || []).sort(), // Sort dependencies for consistent comparison
-               devEstimatedTime: undefined,
-               qaEstimatedTime: undefined,
-               bufferTime: undefined,
-               assignee: undefined,
-               reviewer: undefined,
-               startDate: undefined,
-               ticketNumber: undefined,
+               devEstimatedTime: null,
+               qaEstimatedTime: null,
+               bufferTime: null,
+               assignee: null,
+               reviewer: null,
+               startDate: null,
+               ticketNumber: null,
            })).sort((a, b) => (a.backlogId || '').localeCompare(b.backlogId || ''));
 
        const originalBacklogString = JSON.stringify(cleanBacklog(initialBacklog));
@@ -256,7 +256,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
       const title = row.title?.trim();
       const description = row.description?.trim();
       const storyPointsRaw = row.storyPoints?.toString().trim();
-      const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
+      const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : null;
       const taskType = row.taskType ?? 'New Feature';
       const createdDate = row.createdDate ?? '';
       const initiator = row.initiator?.trim() || undefined;
@@ -303,13 +303,13 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
         initiator,
         dependsOn,
         priority: priority as Task['priority'],
-        devEstimatedTime: undefined,
-        qaEstimatedTime: undefined,
-        bufferTime: undefined,
-        assignee: undefined,
-        reviewer: undefined,
-        status: undefined,
-        startDate: undefined,
+        devEstimatedTime: null,
+        qaEstimatedTime: null,
+        bufferTime: null,
+        assignee: null,
+        reviewer: null,
+        status: null,
+        startDate: null,
       });
     });
 

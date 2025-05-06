@@ -58,13 +58,13 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
                createdDate: rest.createdDate ?? '',
                initiator: rest.initiator?.trim() || '',
                dependsOn: (rest.dependsOn || []).sort(),
-               devEstimatedTime: undefined,
-               qaEstimatedTime: undefined,
-               bufferTime: undefined,
-               assignee: undefined,
-               reviewer: undefined,
-               startDate: undefined,
-               ticketNumber: undefined,
+               devEstimatedTime: null,
+               qaEstimatedTime: null,
+               bufferTime: null,
+               assignee: null,
+               reviewer: null,
+               startDate: null,
+               ticketNumber: null,
            })).sort((a, b) => (a.backlogId || '').localeCompare(b.backlogId || ''));
 
        const originalBacklogString = JSON.stringify(cleanBacklog(initialBacklog));
@@ -108,7 +108,7 @@ export default function BacklogGroomingTab({ projectId, projectName, initialBack
         const description = item.description?.trim();
         const acceptanceCriteria = item.acceptanceCriteria?.trim(); // Added
         const storyPointsRaw = item.storyPoints?.toString().trim();
-        const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
+        const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : null;
         const priority = item.priority ?? 'Medium';
 
         let itemErrors: string[] = [];

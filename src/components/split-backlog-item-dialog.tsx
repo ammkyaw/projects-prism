@@ -173,16 +173,16 @@ export default function SplitBacklogItemDialog({
         dependsOn: row.dependsOn ?? [],
         needsGrooming: true, // Always true for newly split items
         readyForSprint: false, // Always false for newly split items
-        movedToSprint: undefined, // Ensure not moved
-        historyStatus: undefined, // Ensure no history status initially
+        movedToSprint: null, // Ensure not moved
+        historyStatus: null, // Ensure no history status initially
         // Fields not typically set during split
-        devEstimatedTime: undefined,
-        qaEstimatedTime: undefined,
-        bufferTime: undefined,
-        assignee: undefined,
-        reviewer: undefined,
-        status: undefined,
-        startDate: undefined,
+        devEstimatedTime: null,
+        qaEstimatedTime: null,
+        bufferTime: null,
+        assignee: null,
+        reviewer: null,
+        status: null,
+        startDate: null,
       });
     });
 
