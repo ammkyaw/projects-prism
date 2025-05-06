@@ -3,7 +3,6 @@
 
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button'; // Import ShadCN Button
-import Image from 'next/image'; // Import Next.js Image component
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { TrendingUp, BarChart, LayoutDashboard } from 'lucide-react';
 
@@ -20,7 +19,7 @@ const LandingPage = () => {
       {/* Hero Section */}
       <section className="text-center w-full max-w-4xl mb-16">
         <h1 className="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-primary via-blue-500 to-accent text-transparent bg-clip-text">
-          Projects Prism
+          Project Prism
         </h1>
         <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
           Streamline your Agile reporting. Gain insights into sprint velocity, burndown progress, and developer statistics with intuitive visualizations.
@@ -29,16 +28,7 @@ const LandingPage = () => {
           Go to Prism Dashboard
           <LayoutDashboard className="ml-2 h-5 w-5" />
         </Button>
-        <div className="mt-12 w-full max-w-2xl mx-auto rounded-lg overflow-hidden shadow-xl border">
-             <Image
-                src="https://picsum.photos/1000/500" // Replace with a more relevant image later
-                alt="Project Prism Dashboard Preview"
-                width={1000}
-                height={500}
-                className="object-cover"
-                data-ai-hint="dashboard analytics" // AI hint for image selection
-             />
-        </div>
+         {/* Image Removed */}
       </section>
 
        {/* Features Section (Optional) */}
