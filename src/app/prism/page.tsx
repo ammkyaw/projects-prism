@@ -3,7 +3,6 @@
 
 import type { ChangeEvent } from 'react';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Added useRef, React
-import * as XLSX from 'xlsx';
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Added CardContent
 import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History, CheckCircle, Undo, ArrowUpDown, ListChecks } from 'lucide-react'; // Added ArrowUpDown, ListChecks icons
@@ -12,7 +11,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Import AlertDialog components
 
 
 // Main Content Components (Tabs) - Renamed and New Placeholders
@@ -38,11 +37,12 @@ import AnalyticsChartsTab from '@/components/analytics-charts-tab';
 import AnalyticsReportsTab from '@/components/analytics/analytics-reports-tab'; // Updated path
 
 
-import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember, HistoryStatus } from '@/types/sprint-data'; // Added HistoryStatus
+import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember, HistoryStatus, ToastFun } from '@/types/sprint-data'; // Added HistoryStatus, ToastFun
 import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam, initialBacklogTask, taskPriorities } from '@/types/sprint-data'; // Import taskPriorities
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isPast, isValid, getYear } from 'date-fns'; // Added getYear
+import { handleExport } from '@/lib/export'; // Import the handleExport function
 import { generateNextBacklogIdHelper } from '@/lib/utils'; // Import the helper function
 import { ModeToggle } from '@/components/mode-toggle'; // Import ModeToggle
 import { useProjects, useUpdateProject, useDeleteProject } from '@/hooks/use-projects'; // Import React Query hooks
@@ -943,189 +943,6 @@ export default function Home() {
   }, [selectedProject, updateProjectData, toast]);
 
 
-  // Export data for the currently selected project
-  const handleExport = () => {
-    if (!selectedProject || (!selectedProject.sprintData?.sprints?.length && !selectedProject.members?.length && !selectedProject.holidayCalendars?.length && !selectedProject.teams?.length && !selectedProject.backlog?.length)) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: `No data available to export for project '${selectedProject?.name ?? 'N/A'}'.`,
-      });
-      return;
-    }
-     try {
-      const wb = XLSX.utils.book_new();
-
-       // Sprint Summary Sheet
-       if (selectedProject.sprintData?.sprints?.length > 0) {
-           const summaryData = selectedProject.sprintData.sprints.map(s => ({
-             'SprintNumber': s.sprintNumber,
-             'StartDate': s.startDate,
-             'EndDate': s.endDate,
-             'Duration': s.duration,
-             'Status': s.status,
-             'TotalCommitment': s.committedPoints,
-             'TotalDelivered': s.completedPoints,
-           }));
-           const wsSummary = XLSX.utils.json_to_sheet(summaryData);
-           XLSX.utils.book_append_sheet(wb, wsSummary, 'Sprint Summary');
-       }
-
-       // Planning Sheets (Summary and Tasks)
-       const planningExists = selectedProject.sprintData?.sprints?.some(s => s.planning && (s.planning.goal || s.planning.newTasks?.length > 0 || s.planning.spilloverTasks?.length > 0 || s.planning.definitionOfDone || s.planning.testingStrategy));
-       if (planningExists) {
-           const planningSummaryData: any[] = [];
-           const planningTasksData: any[] = [];
-           selectedProject.sprintData.sprints.forEach(sprint => {
-               if (sprint.planning) {
-                   planningSummaryData.push({
-                      'SprintNumber': sprint.sprintNumber,
-                      'Goal': sprint.planning.goal,
-                      'DefinitionOfDone': sprint.planning.definitionOfDone,
-                      'TestingStrategy': sprint.planning.testingStrategy,
-                   });
-                   // Helper function to map task to export row
-                    const mapTaskToRow = (task: Task, type: 'New' | 'Spillover') => ({
-                      'SprintNumber': sprint.sprintNumber,
-                      'Type': type,
-                      'TaskID': task.id,
-                      'TicketNumber': task.ticketNumber, // Use ticketNumber
-                      'BacklogID': task.backlogId, // Include backlog ID
-                      'Title': task.title,
-                      'Description': task.description,
-                      'StoryPoints': task.storyPoints,
-                      'DevEstTime': task.devEstimatedTime,
-                      'QAEstTime': task.qaEstimatedTime,
-                      'BufferTime': task.bufferTime,
-                      'Assignee': task.assignee,
-                      'Reviewer': task.reviewer,
-                      'Status': task.status,
-                      'StartDate': task.startDate,
-                      'Priority': task.priority,
-                    });
-
-
-                   (sprint.planning.newTasks || []).forEach(task => planningTasksData.push(mapTaskToRow(task, 'New')));
-                    (sprint.planning.spilloverTasks || []).forEach(task => planningTasksData.push(mapTaskToRow(task, 'Spillover')));
-               }
-           });
-            if (planningSummaryData.length > 0) {
-               const wsPlanningSummary = XLSX.utils.json_to_sheet(planningSummaryData);
-               XLSX.utils.book_append_sheet(wb, wsPlanningSummary, 'Planning Summary');
-            }
-            if (planningTasksData.length > 0) {
-               const wsPlanningTasks = XLSX.utils.json_to_sheet(planningTasksData);
-               XLSX.utils.book_append_sheet(wb, wsPlanningTasks, 'Planning Tasks');
-            }
-       }
-
-        // Backlog Sheet
-        if (selectedProject.backlog && selectedProject.backlog.length > 0) {
-            const backlogData = selectedProject.backlog.map(task => ({
-                'BacklogItemID': task.id,
-                'BacklogID': task.backlogId,
-                'Title': task.title,
-                'Description': task.description,
-                'TaskType': task.taskType,
-                'Priority': task.priority,
-                'Initiator': task.initiator,
-                'CreatedDate': task.createdDate,
-                'StoryPoints': task.storyPoints,
-                'DependsOn': (task.dependsOn || []).join(', '), // Flatten dependency array
-                'MovedToSprint': task.movedToSprint ?? '', // Add movedToSprint history
-                'HistoryStatus': task.historyStatus ?? '', // Add history status
-                 'NeedsGrooming': task.needsGrooming ? 'Yes' : 'No', // Add flag
-                 'ReadyForSprint': task.readyForSprint ? 'Yes' : 'No', // Add flag
-                  'SplitFromID': task.splitFromId ?? '', // Export split info
-                  'MergeEventID': task.mergeEventId ?? '', // Export merge info
-                 // Other backlog specific fields if needed
-            }));
-            const wsBacklog = XLSX.utils.json_to_sheet(backlogData);
-            XLSX.utils.book_append_sheet(wb, wsBacklog, 'Backlog');
-        }
-
-       // Members Sheet
-       if (selectedProject.members && selectedProject.members.length > 0) {
-            const membersData = selectedProject.members.map(m => ({
-                'MemberID': m.id,
-                'Name': m.name,
-                'Role': m.role,
-                'HolidayCalendarID': m.holidayCalendarId, // Added holiday calendar ID
-            }));
-            const wsMembers = XLSX.utils.json_to_sheet(membersData);
-            XLSX.utils.book_append_sheet(wb, wsMembers, 'Members');
-       }
-
-       // Holiday Calendars Sheet
-       if (selectedProject.holidayCalendars && selectedProject.holidayCalendars.length > 0) {
-           const calendarsData: any[] = [];
-           selectedProject.holidayCalendars.forEach(cal => {
-               cal.holidays.forEach(holiday => {
-                  calendarsData.push({
-                      'CalendarID': cal.id,
-                      'CalendarName': cal.name,
-                      'CountryCode': cal.countryCode,
-                      'HolidayID': holiday.id,
-                      'HolidayName': holiday.name,
-                      'HolidayDate': holiday.date,
-                  });
-               });
-               // Add row for calendar itself if it has no holidays
-               if (cal.holidays.length === 0) {
-                   calendarsData.push({
-                       'CalendarID': cal.id,
-                       'CalendarName': cal.name,
-                       'CountryCode': cal.countryCode,
-                       'HolidayID': '',
-                       'HolidayName': '',
-                       'HolidayDate': '',
-                   });
-               }
-           });
-            const wsHolidays = XLSX.utils.json_to_sheet(calendarsData);
-            XLSX.utils.book_append_sheet(wb, wsHolidays, 'Holiday Calendars');
-       }
-
-        // Teams Sheet
-        if (selectedProject.teams && selectedProject.teams.length > 0) {
-            const teamsData: any[] = [];
-            selectedProject.teams.forEach(team => {
-                team.members.forEach(tm => {
-                    teamsData.push({
-                        'TeamID': team.id,
-                        'TeamName': team.name,
-                        'LeadMemberID': team.leadMemberId,
-                        'MemberID': tm.memberId,
-                    });
-                });
-                 // Add row for team itself if it has no members
-                 if (team.members.length === 0) {
-                    teamsData.push({
-                        'TeamID': team.id,
-                        'TeamName': team.name,
-                        'LeadMemberID': team.leadMemberId,
-                        'MemberID': '',
-                    });
-                 }
-            });
-            const wsTeams = XLSX.utils.json_to_sheet(teamsData);
-            XLSX.utils.book_append_sheet(wb, wsTeams, 'Teams');
-        }
-
-
-      const projectNameSlug = selectedProject.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      XLSX.writeFile(wb, `sprint_stats_${projectNameSlug}_report.xlsx`);
-      toast({ title: "Success", description: `Data for project '${selectedProject.name}' exported to Excel.` });
-    } catch (error) {
-      console.error("Error exporting data:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to export data.",
-      });
-    }
-  };
-
   // Handle creating a new project
   const handleCreateNewProject = () => {
     const trimmedName = newProjectName.trim();
@@ -1508,7 +1325,7 @@ export default function Home() {
 
         <div className="flex items-center gap-4">
           {selectedProject && (selectedProject.sprintData?.sprints?.length > 0 || selectedProject.members?.length > 0 || selectedProject.holidayCalendars?.length > 0 || selectedProject.teams?.length > 0 || selectedProject.backlog?.length > 0) && (
-            <Button onClick={handleExport} variant="outline" size="sm">
+            <Button onClick={() => handleExport(selectedProject, toast as ToastFun)} variant="outline" size="sm">
               <Download className="mr-2 h-4 w-4" />
               Export Project Data
             </Button>
