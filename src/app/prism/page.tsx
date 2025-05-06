@@ -43,35 +43,9 @@ import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam, in
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isPast, isValid, getYear } from 'date-fns'; // Added getYear
+import { generateNextBacklogIdHelper } from '@/lib/utils'; // Import the helper function
 import { ModeToggle } from '@/components/mode-toggle'; // Import ModeToggle
 import { useProjects, useUpdateProject, useDeleteProject } from '@/hooks/use-projects'; // Import React Query hooks
-
-// Helper function to generate the next backlog ID based on *all* items (including historical and unsaved)
-const generateNextBacklogIdHelper = (allProjectBacklogItems: Task[]): string => {
-   const currentYear = getYear(new Date()).toString().slice(-2); // Get last two digits of the year
-   const prefix = `BL-${currentYear}`;
-   let maxNum = 0;
-
-   allProjectBacklogItems.forEach(item => {
-     const id = item.backlogId; // Use the actual backlogId
-     // Consider only base BL-YYxxxx IDs from the current year
-     // Use regex to extract the numeric part more reliably
-     const match = id?.match(/^BL-\d{2}(\d{4})(?:-.*)?$/); // Match BL-YYNNNN or BL-YYNNNN-suffix
-     if (id && id.startsWith(prefix) && match) {
-         const numPart = parseInt(match[1], 10); // Get the NNNN part
-         if (!isNaN(numPart) && numPart > maxNum) {
-             maxNum = numPart;
-         }
-     }
-   });
-
-   const nextNum = maxNum + 1;
-   const nextNumPadded = nextNum.toString().padStart(4, '0'); // Pad with leading zeros to 4 digits
-   const newBaseId = `${prefix}${nextNumPadded}`;
-   console.log("Generated next backlog ID:", newBaseId, "based on max:", maxNum); // Debug log
-   return newBaseId;
- };
-
 
 export default function Home() {
   // Local UI state
