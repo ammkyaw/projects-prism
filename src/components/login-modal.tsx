@@ -1,4 +1,3 @@
-
 // src/components/login-modal.tsx
 import { useState } from 'react';
 import { auth } from '@/lib/firebase'; // Import Firebase auth object
@@ -9,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast";
-import { XCircle } from 'lucide-react';
+import { XCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff icons
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -20,6 +19,7 @@ interface LoginModalProps {
 export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: LoginModalProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false); // State for password visibility
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -62,6 +62,10 @@ export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: Log
     }
   };
 
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
@@ -96,19 +100,29 @@ export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: Log
                 autoComplete="email"
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
+            <div className="grid grid-cols-4 items-center gap-4 relative"> {/* Added relative positioning */}
               <Label htmlFor="password" className="text-right">
                 Password
               </Label>
               <Input
                 id="password"
-                type="password"
+                type={showPassword ? 'text' : 'password'} // Toggle input type
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="col-span-3"
+                className="col-span-3 pr-10" // Add padding for the icon
                 required
                 autoComplete="current-password"
               />
+              <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground" // Position the icon button
+                  onClick={togglePasswordVisibility}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
             </div>
           </div>
           <DialogFooter>
