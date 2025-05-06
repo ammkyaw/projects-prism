@@ -55,7 +55,7 @@ const calculateSprintMetrics = (startDateStr: string, duration: string): { total
 };
 
 // Helper function to parse estimated time string (e.g., "2d", "1w 3d") into days
-const parseEstimatedTimeToDays = (timeString: string | undefined): number | null => {
+const parseEstimatedTimeToDays = (timeString: string | undefined | null): number | null => {
   if (!timeString) return null;
   timeString = timeString.trim().toLowerCase();
   let totalDays = 0;
@@ -109,18 +109,18 @@ interface SprintPlanningTabProps {
   holidayCalendars: HolidayCalendar[]; // Add holiday calendars prop
   teams: Team[]; // Add teams prop
   backlog: Task[]; // Add backlog prop
-  onRevertTask: (sprintNumber: number, taskId: string, taskBacklogId: string | undefined) => void; // Add revert callback
+  onRevertTask: (sprintNumber: number, taskId: string, taskBacklogId: string | null) => void; // Add revert callback
   onCompleteSprint: (sprintNumber: number) => void; // Add complete callback
 }
 
 interface TaskRow extends Task {
   _internalId: string;
-  startDateObj?: Date | undefined;
+  startDateObj?: Date | null;
 }
 
 interface NewSprintFormState {
     sprintNumber: string;
-    startDate: Date | undefined;
+    startDate: Date | null;
     duration: string;
 }
 
@@ -136,8 +136,8 @@ const createEmptyTaskRow = (): TaskRow => ({
   assignee: '',
   reviewer: '', // Added reviewer
   status: 'To Do',
-  startDate: undefined,
-  startDateObj: undefined,
+  startDate: null,
+  startDateObj: null,
   // Ensure other fields possibly used by TaskRow are initialized
   title: '',
   description: '',
@@ -149,10 +149,10 @@ const createEmptyTaskRow = (): TaskRow => ({
   initiator: '',
   needsGrooming: false,
   readyForSprint: false,
-  movedToSprint: undefined,
-  historyStatus: undefined,
-  splitFromId: undefined,
-  mergeEventId: undefined,
+  movedToSprint: null,
+  historyStatus: null,
+  splitFromId: null,
+  mergeEventId: null,
 });
 
 
@@ -162,7 +162,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
   const [newTasks, setNewTasks] = useState<TaskRow[]>([]);
   const [spilloverTasks, setSpilloverTasks] = useState<TaskRow[]>([]);
   const [isCreatingNewSprint, setIsCreatingNewSprint] = useState(false);
-  const [newSprintForm, setNewSprintForm] = useState<NewSprintFormState>({ sprintNumber: '', startDate: undefined, duration: '' });
+  const [newSprintForm, setNewSprintForm] = useState<NewSprintFormState>({ sprintNumber: '', startDate: null, duration: '' });
   const [isBacklogDialogOpen, setIsBacklogDialogOpen] = useState(false); // State for backlog dialog
   const [selectedBacklogIds, setSelectedBacklogIds] = useState<Set<string>>(new Set()); // State for selected backlog item IDs
   const [timelineViewMode, setTimelineViewMode] = useState<'task' | 'assignee'>('task'); // State for timeline view
@@ -211,10 +211,10 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
        return allTaskRows
          .filter(task =>
              task.startDate &&
-             task.devEstimatedTime !== undefined && // Check if dev time exists
-             task.qaEstimatedTime !== undefined && // Check if qa time exists
-             task.bufferTime !== undefined && // Check if buffer time exists
-             isValid(parseISO(task.startDate)) &&
+             task.devEstimatedTime !== undefined || task.devEstimatedTime !== null && // Check if dev time exists
+             task.qaEstimatedTime !== undefined || task.qaEstimatedTime !== null && // Check if qa time exists
+             task.bufferTime !== undefined || task.bufferTime !== null && // Check if buffer time exists
+             isValid(parseISO(task.startDate?? '')) &&
              parseEstimatedTimeToDays(task.devEstimatedTime) !== null && // Check if parsable
              parseEstimatedTimeToDays(task.qaEstimatedTime) !== null &&
              parseEstimatedTimeToDays(task.bufferTime) !== null
@@ -235,7 +235,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
       setSpilloverTasks([]); // Initialize spillover as empty
   }, []);
 
-  const parseDateString = (dateString: string | undefined): Date | undefined => {
+  const parseDateString = (dateString: string | undefined | null): Date | undefined => {
       if (!dateString) return undefined;
       try {
           const parsed = parseISO(dateString);
@@ -295,9 +295,9 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
     if (isCreatingNewSprint) {
         setSelectedSprintNumber(null);
         resetForms();
-        setNewSprintForm({ sprintNumber: nextSprintNumber, startDate: undefined, duration: '' });
+        setNewSprintForm({ sprintNumber: nextSprintNumber, startDate: null, duration: '' });
     } else {
-        setNewSprintForm({ sprintNumber: '', startDate: undefined, duration: '' });
+        setNewSprintForm({ sprintNumber: '', startDate: null, duration: '' });
     }
   }, [isCreatingNewSprint, nextSprintNumber, resetForms]);
 
@@ -373,7 +373,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
 
 
  // Function to find the team lead for a given member
- const findTeamLead = useCallback((memberName: string | undefined): string | undefined => {
+ const findTeamLead = useCallback((memberName: string | null): string | undefined => {
     if (!memberName) return undefined;
 
     const member = members.find(m => m.name === memberName);
@@ -430,7 +430,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
       updater(rows =>
           rows.map(row => {
               if (row._internalId === internalId) {
-                  const dateString = date ? format(date, 'yyyy-MM-dd') : undefined;
+                  const dateString = date ? format(date, 'yyyy-MM-dd') : null;
                   return { ...row, [field]: dateString, [`${field}Obj`]: date };
               }
               return row;
@@ -472,8 +472,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
          ...task, // Overwrite with backlog data
          _internalId: `backlog_added_${task.id}_${Date.now()}`,
          status: 'To Do', // Set status to 'To Do' when moved from backlog
-         startDate: undefined, // Clear start date, needs planning
-         startDateObj: undefined,
+         startDate: null, // Clear start date, needs planning
+         startDateObj: null,
          storyPoints: task.storyPoints?.toString() ?? '', // Ensure string
          qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Apply defaults if missing
          bufferTime: task.bufferTime ?? '1d',
@@ -523,12 +523,12 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
 
           const ticketNumber = row.ticketNumber?.trim();
           const storyPointsRaw = row.storyPoints?.toString().trim();
-          const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
-          const devEstimatedTime = row.devEstimatedTime?.trim() || undefined;
+          const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : null;
+          const devEstimatedTime = row.devEstimatedTime?.trim() || null;
           const qaEstimatedTime = row.qaEstimatedTime?.trim() || '2d'; // Ensure default if empty
           const bufferTime = row.bufferTime?.trim() || '1d'; // Ensure default if empty
-          const assignee = row.assignee?.trim() || undefined;
-          const reviewer = row.reviewer?.trim() || undefined; // Added reviewer
+          const assignee = row.assignee?.trim() || '';
+          const reviewer = row.reviewer?.trim() || ''; // Added reviewer
           const status = row.status?.trim() as Task['status'];
           const startDate = row.startDate;
           const title = row.title?.trim(); // Include title
@@ -615,7 +615,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
      };
 
      // Pass the current status if saving an active sprint, otherwise undefined (or planned)
-     const currentStatus = selectedSprint?.status === 'Active' ? 'Active' : undefined;
+     const currentStatus = selectedSprint?.status === 'Active' ? 'Active' : null;
 
      onSavePlanning(selectedSprintNumber, finalPlanningData, currentStatus);
  };

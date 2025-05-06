@@ -55,14 +55,14 @@ export interface Task {
   title?: string; // Optional: A more descriptive title for the task
   description?: string; // Optional: Detailed description of the task
   acceptanceCriteria?: string; // Optional: Acceptance criteria for the task
-  storyPoints?: number | string; // Can be number or empty string from input
+  storyPoints?: number | string | null; // Can be number or empty string from input
   devEstimatedTime?: string | null; // Optional: e.g., "2d", "4h", "1w 2d"
   qaEstimatedTime?: string | null; // Optional: Defaults to "2d"
   bufferTime?: string | null; // Optional: Defaults to "1d"
   assignee?: string; // Optional: Stores the Member's name
   reviewer?: string; // Optional: Stores the Member's name for review
   status?: 'To Do' | 'In Progress' | 'In Review' | 'QA' | 'Done' | 'Blocked'; // Status applicable *within* a sprint or backlog
-  startDate?: string | undefined; // Optional: YYYY-MM-DD for Gantt chart (only relevant when planned in sprint)
+  startDate?: string | null; // Optional: YYYY-MM-DD for Gantt chart (only relevant when planned in sprint)
   priority?: 'Highest' | 'High' | 'Medium' | 'Low' | 'Lowest'; // Optional: Priority level
   dependsOn?: string[]; // Optional: Array of Backlog IDs this task depends on
   // --- Backlog Specific Fields ---
@@ -74,8 +74,8 @@ export interface Task {
   // --- History Tracking ---
   movedToSprint?: number | null; // Optional: The sprint number this backlog item was moved to.
   historyStatus?: HistoryStatus | null; // Optional: Status indicating how the item moved to history (Move, Split, Merge).
-  splitFromId?: string; // Optional: ID of the original task this was split from.
-  mergeEventId?: string; // Optional: An ID linking items involved in the same merge event.
+  splitFromId?: string | null; // Optional: ID of the original task this was split from.
+  mergeEventId?: string | null; // Optional: An ID linking items involved in the same merge event.
   // Legacy fields - keep if needed for migration or detail view, but planning uses new fields
   devTime?: string; // Legacy, replaced by devEstimatedTime
 }
@@ -183,7 +183,7 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     title: '',
     description: '',
     acceptanceCriteria: '', // Initialize acceptance criteria
-    storyPoints: undefined,
+    storyPoints: null,
     priority: 'Medium',
     taskType: 'New Feature', // Default task type
     createdDate: '', // Will be set on creation
@@ -191,15 +191,15 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     dependsOn: [],
     needsGrooming: false, // Default new items to NOT need grooming
     readyForSprint: false,
-    movedToSprint: undefined, // Initialize as not moved
-    historyStatus: undefined, // Initialize history status
-    splitFromId: undefined, // Initialize split tracking
-    mergeEventId: undefined, // Initialize merge tracking
+    movedToSprint: null, // Initialize as not moved
+    historyStatus: null, // Initialize history status
+    splitFromId: null, // Initialize split tracking
+    mergeEventId: null, // Initialize merge tracking
     // Fields typically set during sprint planning:
-    devEstimatedTime: undefined,
-    qaEstimatedTime: undefined, // Don't default these in backlog
-    bufferTime: undefined,
-    assignee: undefined,
-    reviewer: undefined,
-    startDate: undefined,
+    devEstimatedTime: null,
+    qaEstimatedTime: null, // Don't default these in backlog
+    bufferTime: null,
+    assignee: '',
+    reviewer: '',
+    startDate: null,
 };

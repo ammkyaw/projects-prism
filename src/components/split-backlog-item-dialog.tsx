@@ -133,7 +133,7 @@ export default function SplitBacklogItemDialog({
       const backlogId = row.backlogId?.trim(); // Now auto-generated
       const title = row.title?.trim();
       const storyPointsRaw = row.storyPoints?.toString().trim();
-      const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined;
+      const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : null;
       const priority = row.priority ?? 'Medium';
 
       let rowErrors: string[] = [];

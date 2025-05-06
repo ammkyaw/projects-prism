@@ -297,7 +297,7 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
         ticketNumber: backlogId,
         title,
         description,
-        storyPoints,
+        storyPoints: null,
         taskType: taskType as TaskType,
         createdDate,
         initiator,
@@ -306,10 +306,10 @@ export default function BacklogTab({ projectId, projectName, initialBacklog, onS
         devEstimatedTime: null,
         qaEstimatedTime: null,
         bufferTime: null,
-        assignee: null,
-        reviewer: null,
-        status: null,
-        startDate: null,
+        assignee: '',
+        reviewer: '',
+        status: 'To Do',
+        startDate: '',
       });
     });
 

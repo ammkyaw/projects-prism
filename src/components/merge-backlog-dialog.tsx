@@ -101,7 +101,7 @@ export default function MergeBacklogDialog({
       initiator: firstSelectedItem?.initiator, // Optional: Maybe take initiator from first? Or leave blank?
       dependsOn: [...new Set(selectedTasks.flatMap(t => t.dependsOn || []))], // Combine unique dependencies
       createdDate: format(new Date(), 'yyyy-MM-dd'), // Set created date to now
-      storyPoints: undefined, // Requires re-estimation
+      storyPoints: null, // Requires re-estimation
     });
     setStep('confirm');
   };

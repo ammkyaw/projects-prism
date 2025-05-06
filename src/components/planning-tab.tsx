@@ -169,8 +169,8 @@ const createEmptyTaskRow = (): TaskRow => ({
   assignee: '',
   reviewer: '', // Added reviewer
   status: 'To Do',
-  startDate: undefined,
-  startDateObj: undefined,
+  startDate: null,
+  startDateObj: null,
 });
 
 
@@ -180,7 +180,7 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
   const [newTasks, setNewTasks] = useState<TaskRow[]>([]);
   const [spilloverTasks, setSpilloverTasks] = useState<TaskRow[]>([]);
   const [isCreatingNewSprint, setIsCreatingNewSprint] = useState(false);
-  const [newSprintForm, setNewSprintForm] = useState<NewSprintFormState>({ sprintNumber: '', startDate: undefined, duration: '' });
+  const [newSprintForm, setNewSprintForm] = useState<NewSprintFormState>({ sprintNumber: '', startDate: null, duration: '' });
   const [isBacklogDialogOpen, setIsBacklogDialogOpen] = useState(false); // State for backlog dialog
   const [selectedBacklogIds, setSelectedBacklogIds] = useState<Set<string>>(new Set()); // State for selected backlog item IDs
   const { toast } = useToast();
@@ -236,12 +236,12 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
   }, []);
 
   const parseDateString = (dateString: string | undefined): Date | undefined => {
-      if (!dateString) return undefined;
+      if (!dateString) return null;
       try {
           const parsed = parseISO(dateString);
           return isValid(parsed) ? parsed : undefined;
       } catch {
-          return undefined;
+          return null;
       }
   };
 
@@ -289,9 +289,9 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
     if (isCreatingNewSprint) {
         setSelectedSprintNumber(null);
         resetForms();
-        setNewSprintForm({ sprintNumber: nextSprintNumber, startDate: undefined, duration: '' });
+        setNewSprintForm({ sprintNumber: nextSprintNumber, startDate: null, duration: '' });
     } else {
-        setNewSprintForm({ sprintNumber: '', startDate: undefined, duration: '' });
+        setNewSprintForm({ sprintNumber: '', startDate: null, duration: '' });
     }
   }, [isCreatingNewSprint, nextSprintNumber, resetForms]);
 
@@ -443,8 +443,8 @@ export default function PlanningTab({ sprints, onSavePlanning, onCreateAndPlanSp
          ...task,
          _internalId: `backlog_added_${task.id}_${Date.now()}`,
          status: 'To Do', // Set status to 'To Do' when moved from backlog
-         startDate: undefined, // Clear start date, needs planning
-         startDateObj: undefined,
+         startDate: null, // Clear start date, needs planning
+         startDateObj: null,
          storyPoints: task.storyPoints?.toString() ?? '', // Ensure string
          qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Apply defaults if missing
          bufferTime: task.bufferTime ?? '1d',

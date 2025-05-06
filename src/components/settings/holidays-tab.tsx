@@ -33,7 +33,7 @@ interface EditableCalendar extends HolidayCalendar {
 
 interface EditableHoliday extends PublicHoliday {
   _internalId: string; // For React key management
-  dateObj?: Date | undefined; // For date picker state
+  dateObj?: Date | null; // For date picker state
 }
 
 // Updated list of countries for the dropdown
@@ -63,7 +63,7 @@ const createEmptyHoliday = (): EditableHoliday => ({
   id: '',
   name: '',
   date: '',
-  dateObj: undefined,
+  dateObj: null,
 });
 
 // Helper to parse date string safely
