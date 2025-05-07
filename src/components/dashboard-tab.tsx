@@ -3,8 +3,7 @@
 
 import type { SprintData, Sprint, Task, DailyProgressDataPoint } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { PieChart, Pie, Cell } from 'recharts';
+import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent, ChartPie, ChartPieChart, ChartCell } from "@/components/ui/chart"; // Use imported types from chart.tsx
 import { Info, LineChart, Activity, CheckCircle, ListChecks, TrendingDown, CalendarCheck, CalendarRange, BarChartBig, Clock } from 'lucide-react';
 import VelocityChart from '@/components/charts/velocity-chart';
 import BurndownChart from '@/components/charts/burndown-chart';
@@ -65,8 +64,9 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
 
   const activeSprint = sprintData?.sprints.find(s => s.status === 'Active');
 
-  const pointsChartData = useMemo(() => {
-    if (!activeSprint) return [];
+  // Recalculate points chart data and completion percentage
+  const { pointsChartData, pointsCompletionPercentage } = useMemo(() => {
+    if (!activeSprint) return { pointsChartData: [], pointsCompletionPercentage: 0 };
     const committed = activeSprint.committedPoints || 0;
      const completed = (activeSprint.status === 'Active' || activeSprint.status === 'Planned') && activeSprint.planning
          ? [...(activeSprint.planning.newTasks || []), ...(activeSprint.planning.spilloverTasks || [])]
@@ -75,11 +75,14 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
          : activeSprint.completedPoints || 0;
 
     const remaining = Math.max(0, committed - completed);
-    return [
+    const percentage = committed > 0 ? Math.round((completed / committed) * 100) : 0;
+    const chartData = [
       { name: 'Completed', value: completed, fill: chartConfig.completed.color },
       { name: 'Remaining', value: remaining, fill: chartConfig.remaining.color },
     ];
+    return { pointsChartData: chartData, pointsCompletionPercentage: percentage };
   }, [activeSprint]);
+
 
   const taskProgressData = useMemo(() => {
     if (!activeSprint || !activeSprint.planning) return { totalTasks: 0, completedTasks: 0, tasks: [] };
@@ -129,8 +132,6 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
         tasksCompleted: data.tasksCompleted,
       }))
       .sort((a, b) => {
-         // Handle potential year wrapping issue if sprint spans across year-end
-         // This is a simplified sort, assumes dates are within the same year mostly
          const dateA = parseISO(`2000-${a.date.replace('/', '-')}`); // Use placeholder year
          const dateB = parseISO(`2000-${b.date.replace('/', '-')}`);
          return dateA.getTime() - dateB.getTime();
@@ -214,12 +215,12 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
             <CardContent className="flex-1 flex items-center justify-center pb-0 -mt-4">
               {pointsChartData.reduce((acc, curr) => acc + curr.value, 0) > 0 ? (
                 <ChartContainer config={chartConfig} className="w-full h-[250px]">
-                  <PieChart>
+                  <ChartPieChart> {/* Changed from PieChart */}
                     <ChartTooltip
                        cursor={false}
                        content={<ChartTooltipContent hideLabel nameKey="name" />}
                      />
-                    <Pie
+                    <ChartPie // Changed from Pie
                       data={pointsChartData}
                       dataKey="value"
                       nameKey="name"
@@ -228,9 +229,10 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
                       strokeWidth={5}
                     >
                        {pointsChartData.map((entry, index) => (
-                         <Cell key={`cell-${index}`} fill={entry.fill} />
+                         <ChartCell key={`cell-${index}`} fill={entry.fill} /> // Changed from Cell
                        ))}
-                    </Pie>
+                    </ChartPie>
+                     {/* Center Text */}
                      <text
                         x="50%"
                         y="50%"
@@ -238,7 +240,7 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
                         dominantBaseline="middle"
                         className="fill-foreground text-2xl font-semibold"
                      >
-                        {activeSprint.committedPoints || 0}
+                         {pointsCompletionPercentage}% {/* Display percentage */}
                      </text>
                      <text
                          x="50%"
@@ -248,9 +250,9 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
                          dy="1.2em"
                          className="fill-muted-foreground text-xs"
                       >
-                         Committed
+                         Completed {/* Update label */}
                       </text>
-                  </PieChart>
+                  </ChartPieChart> {/* Changed from PieChart */}
                 </ChartContainer>
               ) : (
                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center">
@@ -273,14 +275,12 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
             <CardContent className="flex-1 flex flex-col justify-center items-center gap-4 pb-4 pt-2">
                {taskProgressData.totalTasks > 0 ? (
                  <>
-                   {/* Progress Bar */}
                    <div className="w-full px-4 relative">
                      <Progress value={taskCompletionPercentage} className="h-4" />
                      <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-primary-foreground mix-blend-screen">
                         {taskCompletionPercentage}% Complete
                      </span>
                    </div>
-                   {/* Node Progress */}
                    <TaskNodeProgress tasks={taskProgressData.tasks} />
                  </>
                ) : (
@@ -346,3 +346,6 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
     </div>
   );
 }
+
+
+  

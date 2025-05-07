@@ -239,7 +239,7 @@ const ChartTooltipContent = React.forwardRef<
                           {itemConfig?.label || item.name}
                         </span>
                       </div>
-                      {item.value && (
+                      {item.value != null && ( // Changed from item.value to item.value != null to handle 0
                         <span className="font-mono font-medium tabular-nums text-foreground">
                           {item.value.toLocaleString()}
                         </span>
@@ -356,6 +356,7 @@ function getPayloadConfigFromPayload(
     : config[key as keyof typeof config]
 }
 
+// Explicitly export Recharts primitives needed for Pie charts
 const ChartPie = RechartsPrimitive.Pie;
 const ChartPieChart = RechartsPrimitive.PieChart;
 const ChartCell = RechartsPrimitive.Cell;
@@ -367,7 +368,9 @@ export {
   ChartLegend,
   ChartLegendContent,
   ChartStyle,
-  ChartPie, // Export Pie
-  ChartPieChart, // Export PieChart
-  ChartCell // Export Cell
+  ChartPie,
+  ChartPieChart,
+  ChartCell
 }
+
+  
