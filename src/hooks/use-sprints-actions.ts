@@ -1,7 +1,7 @@
 
 import { useCallback } from 'react';
 import type { SprintPlanning, SprintStatus, Project, Task, ToastFun, Sprint, Member, HolidayCalendar, Team } from '@/types/sprint-data';
-import { initialSprintPlanning, initialSprintData, taskPriorities } from '@/types/sprint-data';
+import { initialSprintPlanning, initialSprintData, taskPriorities, taskStatuses } from '@/types/sprint-data'; // Import taskStatuses
 import { isValid, parseISO, isPast } from 'date-fns';
 
 interface UseSprintsActionsProps {
@@ -147,9 +147,6 @@ const parseEstimatedTimeToDays = (timeString: string | undefined | null): number
   return totalDays >= 0 ? totalDays : (timeString === '0' || timeString === '0d' ? 0 : null);
 };
 
-// Predefined Task Statuses - applicable IN a sprint
-export const taskStatuses: Array<Task['status']> = ['To Do', 'In Progress', 'In Review', 'QA', 'Done', 'Blocked'];
-
 
 export const useSprintsActions = ({ selectedProject, updateProjectData, toast, clientNow, projects, selectedProjectId }: UseSprintsActionsProps) => {
 
@@ -185,7 +182,7 @@ export const useSprintsActions = ({ selectedProject, updateProjectData, toast, c
         toast({ variant: "destructive", title: "Validation Error in Tasks", description: allErrors.join("\n") });
         return;
     }
-    
+
     const validatedPlanning: SprintPlanning = {
         ...planningData,
         newTasks: finalNewTasks,
@@ -224,7 +221,7 @@ export const useSprintsActions = ({ selectedProject, updateProjectData, toast, c
       }, 50);
     }
 
-  }, [selectedProject, updateProjectData, toast, clientNow]);
+  }, [selectedProject, updateProjectData, toast]);
 
 
   const handleCreateAndPlanSprint = useCallback((
@@ -254,7 +251,7 @@ export const useSprintsActions = ({ selectedProject, updateProjectData, toast, c
       toast({ variant: "destructive", title: "Error", description: `Sprint number ${sprintDetails.sprintNumber} already exists in project '${projectNameForToast}'.` });
       return;
     }
-    
+
     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(planningData.newTasks || [], 'new', sprintDetails.sprintNumber);
     const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(planningData.spilloverTasks || [], 'spillover', sprintDetails.sprintNumber);
     const allTaskErrors = [...newErrors, ...spillErrors];
@@ -340,7 +337,7 @@ export const useSprintsActions = ({ selectedProject, updateProjectData, toast, c
     }
     const currentProjectName = selectedProject.name;
     const filteredSprints = (selectedProject.sprintData.sprints ?? []).filter(s => s.sprintNumber !== sprintNumber);
-    
+
     const updatedProject: Project = {
       ...selectedProject,
       sprintData: {
