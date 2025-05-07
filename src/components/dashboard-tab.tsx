@@ -5,12 +5,14 @@ import type { SprintData, Sprint, Task, DailyProgressDataPoint } from '@/types/s
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { PieChart, Pie, Cell } from 'recharts';
-import { Info, LineChart, Activity, CheckCircle, ListChecks, TrendingDown, CalendarCheck, CalendarRange, BarChartBig, Clock } from 'lucide-react'; // Added Clock icon
+import { Info, LineChart, Activity, CheckCircle, ListChecks, TrendingDown, CalendarCheck, CalendarRange, BarChartBig, Clock } from 'lucide-react';
 import VelocityChart from '@/components/charts/velocity-chart';
 import BurndownChart from '@/components/charts/burndown-chart';
-import DailyProgressChart from '@/components/charts/daily-progress-chart'; // Import DailyProgressChart
-import { useMemo, useState, useEffect } from 'react'; // Import useState, useEffect
-import { format, parseISO, isValid, eachDayOfInterval, isWithinInterval, getDay, differenceInDays, isBefore, isSameDay } from 'date-fns'; // Added differenceInDays, isBefore, isSameDay
+import DailyProgressChart from '@/components/charts/daily-progress-chart';
+import TaskNodeProgress from '@/components/task-node-progress'; // Import the new node progress component
+import { Progress } from '@/components/ui/progress'; // Import the progress bar
+import { useMemo, useState, useEffect } from 'react';
+import { format, parseISO, isValid, eachDayOfInterval, isWithinInterval, getDay, differenceInDays, isBefore, isSameDay } from 'date-fns';
 
 interface DashboardTabProps {
   sprintData: SprintData | null;
@@ -39,20 +41,19 @@ const chartConfig = {
     label: "Actual",
     color: "hsl(var(--chart-1))",
   },
-  points: { // Added for DailyProgressChart legend consistency
+  points: {
     label: "Points Completed",
     color: "hsl(var(--chart-1))",
   },
-  tasksCompleted: { // Added for task completion in DailyProgressChart
+  tasksCompleted: {
     label: "Tasks Completed",
-    color: "hsl(var(--chart-2))", // Using a different chart color
+    color: "hsl(var(--chart-2))",
   }
 } satisfies ChartConfig;
 
-// Helper to check if a day is a working day (Mon-Fri)
 const isWorkingDay = (date: Date): boolean => {
   const day = getDay(date);
-  return day >= 1 && day <= 5; // 1 (Mon) to 5 (Fri)
+  return day >= 1 && day <= 5;
 };
 
 export default function DashboardTab({ sprintData, projectName, projectId }: DashboardTabProps) {
@@ -80,17 +81,18 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
     ];
   }, [activeSprint]);
 
-  const tasksChartData = useMemo(() => {
-    if (!activeSprint || !activeSprint.planning) return [];
-    const totalTasks = (activeSprint.planning.newTasks?.length || 0) + (activeSprint.planning.spilloverTasks?.length || 0);
-    const completedTasks = [...(activeSprint.planning.newTasks || []), ...(activeSprint.planning.spilloverTasks || [])]
-                           .filter(task => task.status === 'Done').length;
-    const remainingTasks = totalTasks - completedTasks;
-    return [
-      { name: 'Completed', value: completedTasks, fill: chartConfig.completed.color },
-      { name: 'Remaining', value: remainingTasks, fill: chartConfig.remaining.color },
-    ];
+  const taskProgressData = useMemo(() => {
+    if (!activeSprint || !activeSprint.planning) return { totalTasks: 0, completedTasks: 0, tasks: [] };
+    const tasks = [...(activeSprint.planning.newTasks || []), ...(activeSprint.planning.spilloverTasks || [])];
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(task => task.status === 'Done').length;
+    return { totalTasks, completedTasks, tasks };
   }, [activeSprint]);
+
+  const taskCompletionPercentage = taskProgressData.totalTasks > 0
+    ? Math.round((taskProgressData.completedTasks / taskProgressData.totalTasks) * 100)
+    : 0;
+
 
   const dailyProgressChartData = useMemo(() => {
     if (!activeSprint || !activeSprint.startDate || !activeSprint.endDate || !isValid(parseISO(activeSprint.startDate)) || !isValid(parseISO(activeSprint.endDate))) {
@@ -112,7 +114,6 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
         const completedOn = parseISO(task.completedDate);
         if (isWithinInterval(completedOn, { start: sprintStart, end: sprintEnd })) {
           const formattedDate = format(completedOn, 'yyyy-MM-dd');
-          // Ensure the date exists in the map before adding
           if (dailyDataMap[formattedDate]) {
               dailyDataMap[formattedDate].points += (Number(task.storyPoints) || 0);
               dailyDataMap[formattedDate].tasksCompleted += 1;
@@ -128,10 +129,10 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
         tasksCompleted: data.tasksCompleted,
       }))
       .sort((a, b) => {
-         const year = sprintStart.getFullYear();
-         // Construct full date strings for reliable parsing and comparison
-         const dateA = parseISO(`${year}-${a.date.replace('/', '-')}`);
-         const dateB = parseISO(`${year}-${b.date.replace('/', '-')}`);
+         // Handle potential year wrapping issue if sprint spans across year-end
+         // This is a simplified sort, assumes dates are within the same year mostly
+         const dateA = parseISO(`2000-${a.date.replace('/', '-')}`); // Use placeholder year
+         const dateB = parseISO(`2000-${b.date.replace('/', '-')}`);
          return dateA.getTime() - dateB.getTime();
        });
 
@@ -145,27 +146,23 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
      ? format(parseISO(activeSprint.endDate), 'MMM d, yyyy')
      : 'N/A';
 
-   // Calculate remaining working days
    const remainingWorkingDays = useMemo(() => {
        if (!activeSprint || !clientNow || !activeSprint.endDate || !isValid(parseISO(activeSprint.endDate))) {
            return null;
        }
        const sprintEnd = parseISO(activeSprint.endDate);
-       // Ensure end date is today or in the future
        if (isBefore(sprintEnd, clientNow) && !isSameDay(sprintEnd, clientNow)) {
-           return 0; // Sprint already ended
+           return 0;
        }
 
        const today = clientNow;
        try {
-            // Calculate interval from tomorrow (or today if sprint starts today) to sprint end
             const intervalStart = isBefore(today, parseISO(activeSprint.startDate)) ? parseISO(activeSprint.startDate) : today;
             const interval = eachDayOfInterval({ start: intervalStart, end: sprintEnd });
-            // Filter for working days within the interval (including today if it's a working day and part of the interval)
             return interval.filter(day => isWorkingDay(day) && (isSameDay(day, today) || isBefore(today, day))).length;
        } catch (e) {
           console.error("Error calculating remaining days:", e);
-          return null; // Return null on error
+          return null;
        }
 
    }, [activeSprint, clientNow]);
@@ -181,7 +178,7 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
            </CardTitle>
             {activeSprint && (
               <>
-                 <CardDescription className="flex items-center gap-4 text-sm text-muted-foreground">
+                 <CardDescription className="flex items-center flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                     <span className="flex items-center gap-2">
                       <CalendarRange className="h-4 w-4" />
                       {formattedStartDate} - {formattedEndDate}
@@ -264,55 +261,28 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
           </Card>
        )}
 
+       {/* --- Task Progress Card --- */}
        {activeSprint && (
           <Card className="lg:col-span-1 h-[350px] flex flex-col">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <ListChecks className="h-4 w-4 text-primary" /> Task Progress
               </CardTitle>
-               <CardDescription className="text-xs">Total vs. Completed tasks.</CardDescription>
+               <CardDescription className="text-xs">Overall task completion status.</CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 flex items-center justify-center pb-0 -mt-4">
-               {tasksChartData.reduce((acc, curr) => acc + curr.value, 0) > 0 ? (
-                 <ChartContainer config={chartConfig} className="w-full h-[250px]">
-                   <PieChart>
-                      <ChartTooltip
-                        cursor={false}
-                        content={<ChartTooltipContent hideLabel nameKey="name" />}
-                      />
-                     <Pie
-                       data={tasksChartData}
-                       dataKey="value"
-                       nameKey="name"
-                       innerRadius={60}
-                       outerRadius={80}
-                        strokeWidth={5}
-                     >
-                        {tasksChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))}
-                     </Pie>
-                      <text
-                         x="50%"
-                         y="50%"
-                         textAnchor="middle"
-                         dominantBaseline="middle"
-                         className="fill-foreground text-2xl font-semibold"
-                      >
-                         {tasksChartData.reduce((acc, curr) => acc + curr.value, 0) || 0}
-                      </text>
-                      <text
-                         x="50%"
-                         y="50%"
-                         textAnchor="middle"
-                         dominantBaseline="middle"
-                         dy="1.2em"
-                         className="fill-muted-foreground text-xs"
-                       >
-                          Total Tasks
-                       </text>
-                   </PieChart>
-                 </ChartContainer>
+            <CardContent className="flex-1 flex flex-col justify-center items-center gap-4 pb-4 pt-2">
+               {taskProgressData.totalTasks > 0 ? (
+                 <>
+                   {/* Progress Bar */}
+                   <div className="w-full px-4 relative">
+                     <Progress value={taskCompletionPercentage} className="h-4" />
+                     <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-primary-foreground mix-blend-screen">
+                        {taskCompletionPercentage}% Complete
+                     </span>
+                   </div>
+                   {/* Node Progress */}
+                   <TaskNodeProgress tasks={taskProgressData.tasks} />
+                 </>
                ) : (
                   <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center">
                     <Info className="mr-2 h-5 w-5" /> No tasks planned for this sprint.
@@ -321,9 +291,9 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
             </CardContent>
           </Card>
        )}
+       {/* --- End Task Progress Card --- */}
 
 
-      {/* Burndown Chart */}
       <Card className="lg:col-span-1 h-[350px]">
         <CardHeader>
           <CardTitle className="flex items-center justify-center gap-2">
@@ -336,7 +306,6 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
         </CardContent>
       </Card>
 
-       {/* Daily Progress Chart */}
        <Card className="lg:col-span-1 h-[350px]">
         <CardHeader>
           <CardTitle className="flex items-center justify-center gap-2">
@@ -377,5 +346,3 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
     </div>
   );
 }
-
-    
