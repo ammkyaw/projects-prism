@@ -44,30 +44,23 @@ export default function BurndownChart({ activeSprint }: BurndownChartProps) {
     // Calculate total working days in the sprint
     const totalSprintWorkingDays = sprintDaysArray.filter(isWorkingDay).length;
     
-    // Avoid division by zero if there are no working days (e.g. very short sprint or all weekend)
     const pointsToBurnPerWorkingDay = totalSprintWorkingDays > 0 ? committedPoints / totalSprintWorkingDays : 0;
 
-    let idealRemaining = committedPoints;
-    let workingDaysElapsed = 0;
+    let nthWorkingDayCounter = 0; 
 
-    return sprintDaysArray.map((currentDay, index) => {
+    return sprintDaysArray.map((currentDay) => {
+      let idealForThisDay;
+
       if (isWorkingDay(currentDay)) {
-        // For the first working day, ideal remaining is committed points
-        // For subsequent working days, burn points.
-        // Ensure ideal line doesn't start burning before the first working day of the sprint or after the sprint ends.
-        if (index > 0 || isSameDay(currentDay, sprintStart)) { // Start burning from the first day
-             idealRemaining = Math.max(0, committedPoints - (workingDaysElapsed * pointsToBurnPerWorkingDay));
-        }
-        if(!isBefore(currentDay, sprintStart)) { // Only increment if currentDay is not before sprintStart
-            workingDaysElapsed++;
+        nthWorkingDayCounter++; 
+        idealForThisDay = Math.max(0, committedPoints - (nthWorkingDayCounter * pointsToBurnPerWorkingDay));
+      } else {
+        if (nthWorkingDayCounter === 0) { 
+          idealForThisDay = committedPoints;
+        } else {
+          idealForThisDay = Math.max(0, committedPoints - (nthWorkingDayCounter * pointsToBurnPerWorkingDay));
         }
       }
-      // If it's a weekend, ideal remaining stays the same as the previous working day,
-      // unless it's the very first day of the sprint and it's a weekend, then it's committedPoints.
-      else if (index === 0) {
-        idealRemaining = committedPoints;
-      }
-
 
       const actualRemaining = allTasks.reduce((sum, task) => {
         const taskPoints = Number(task.storyPoints) || 0;
@@ -75,24 +68,21 @@ export default function BurndownChart({ activeSprint }: BurndownChartProps) {
           return sum + taskPoints;
         }
         if (task.completedDate && isValid(parseISO(task.completedDate))) {
-          if (isBefore(currentDay, parseISO(task.completedDate))) { // If currentDay is before task completion day
+          if (isBefore(currentDay, parseISO(task.completedDate))) { 
             return sum + taskPoints;
           }
-        } else { // If task is Done but no completedDate, assume it's still remaining for burndown calc
+        } else { 
             return sum + taskPoints;
         }
         return sum;
       }, 0);
       
-      // Special handling for the first day of the sprint for the actual line
-      // On the first day, actual remaining points are always the total committed points
-      // unless tasks were somehow completed *before* the sprint officially started (unlikely scenario).
-      const actualForToday = index === 0 ? committedPoints : actualRemaining;
+      const actualForToday = isSameDay(currentDay, sprintStart) ? committedPoints : actualRemaining;
 
 
       return {
         date: format(currentDay, 'MM/dd'),
-        ideal: parseFloat(idealRemaining.toFixed(2)),
+        ideal: parseFloat(idealForThisDay.toFixed(2)),
         actual: actualForToday,
       };
     });
@@ -138,7 +128,7 @@ export default function BurndownChart({ activeSprint }: BurndownChartProps) {
             tickMargin={8} 
             fontSize={10} 
             allowDecimals={false}
-            domain={[0, yAxisMax]} // Set dynamic Y-axis domain
+            domain={[0, yAxisMax]} 
           />
           <Tooltip content={<ChartTooltipContent hideLabel />} />
           <Legend verticalAlign="top" height={36} />
