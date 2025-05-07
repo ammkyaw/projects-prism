@@ -1,14 +1,14 @@
-
 "use client";
 
 import type { SprintData, Sprint, Task } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { PieChart, Pie, Cell, Tooltip } from 'recharts';
-import { Info, LineChart, BarChart, Activity, CheckCircle, ListChecks, TrendingDown, CalendarCheck, CalendarRange } from 'lucide-react'; // Added CalendarRange
+import { PieChart, Pie, Cell } from 'recharts'; // Removed Tooltip from recharts as ChartTooltipContent is used
+import { Info, LineChart, Activity, CheckCircle, ListChecks, TrendingDown, CalendarCheck, CalendarRange } from 'lucide-react';
 import VelocityChart from '@/components/charts/velocity-chart';
+import BurndownChart from '@/components/charts/burndown-chart'; // Import BurndownChart
 import { useMemo } from 'react';
-import { format, parseISO, isValid } from 'date-fns'; // Import date-fns helpers
+import { format, parseISO, isValid } from 'date-fns';
 
 interface DashboardTabProps {
   sprintData: SprintData | null;
@@ -16,20 +16,27 @@ interface DashboardTabProps {
   projectId: string;
 }
 
-// Define colors for charts
 const chartConfig = {
   completed: {
     label: "Completed",
-    color: "hsl(var(--chart-1))", // Use primary theme color
+    color: "hsl(var(--chart-1))",
   },
   remaining: {
     label: "Remaining",
-    color: "hsl(var(--chart-3))", // Use a muted/secondary theme color
+    color: "hsl(var(--chart-3))",
   },
-   committed: { // Keep committed for Velocity chart legend consistency
+   committed: {
      label: "Committed",
      color: "hsl(var(--secondary))",
    },
+   ideal: { // Added for BurndownChart legend consistency (though color is defined in BurndownChart)
+    label: "Ideal",
+    color: "hsl(var(--chart-2))",
+  },
+  actual: { // Added for BurndownChart legend consistency
+    label: "Actual",
+    color: "hsl(var(--chart-1))",
+  },
 } satisfies ChartConfig;
 
 export default function DashboardTab({ sprintData, projectName, projectId }: DashboardTabProps) {
@@ -39,17 +46,16 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
   const pointsChartData = useMemo(() => {
     if (!activeSprint) return [];
     const committed = activeSprint.committedPoints || 0;
-    // Calculate completed based on 'Done' tasks if status is Active/Planned, otherwise use stored value
-     const completed = (activeSprint.status === 'Active' || activeSprint.status === 'Planned')
-         ? [...(activeSprint.planning?.newTasks || []), ...(activeSprint.planning?.spilloverTasks || [])]
+     const completed = (activeSprint.status === 'Active' || activeSprint.status === 'Planned') && activeSprint.planning
+         ? [...(activeSprint.planning.newTasks || []), ...(activeSprint.planning.spilloverTasks || [])]
              .filter(task => task.status === 'Done')
              .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0)
          : activeSprint.completedPoints || 0;
 
-    const remaining = Math.max(0, committed - completed); // Ensure remaining is not negative
+    const remaining = Math.max(0, committed - completed);
     return [
-      { name: 'Completed', value: completed, fill: 'var(--color-completed)' },
-      { name: 'Remaining', value: remaining, fill: 'var(--color-remaining)' },
+      { name: 'Completed', value: completed, fill: chartConfig.completed.color }, // Use chartConfig for fill
+      { name: 'Remaining', value: remaining, fill: chartConfig.remaining.color }, // Use chartConfig for fill
     ];
   }, [activeSprint]);
 
@@ -60,12 +66,11 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
                            .filter(task => task.status === 'Done').length;
     const remainingTasks = totalTasks - completedTasks;
     return [
-      { name: 'Completed', value: completedTasks, fill: 'var(--color-completed)' },
-      { name: 'Remaining', value: remainingTasks, fill: 'var(--color-remaining)' },
+      { name: 'Completed', value: completedTasks, fill: chartConfig.completed.color }, // Use chartConfig for fill
+      { name: 'Remaining', value: remainingTasks, fill: chartConfig.remaining.color }, // Use chartConfig for fill
     ];
   }, [activeSprint]);
 
-   // Format dates safely
    const formattedStartDate = activeSprint?.startDate && isValid(parseISO(activeSprint.startDate))
      ? format(parseISO(activeSprint.startDate), 'MMM d, yyyy')
      : 'N/A';
@@ -76,7 +81,6 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-       {/* Active Sprint Status */}
        <Card className="lg:col-span-2">
          <CardHeader>
            <CardTitle className="flex items-center gap-2">
@@ -100,17 +104,16 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
        </Card>
 
 
-       {/* Commitment vs Delivered Points Pie Chart */}
        {activeSprint && (
           <Card className="lg:col-span-1 h-[350px] flex flex-col">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base"> {/* Smaller title */}
+              <CardTitle className="flex items-center gap-2 text-base">
                 <CheckCircle className="h-4 w-4 text-primary" /> Story Points Progress
               </CardTitle>
                <CardDescription className="text-xs">Committed vs. Completed points.</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 flex items-center justify-center pb-0 -mt-4">
-              {pointsChartData.reduce((acc, curr) => acc + curr.value, 0) > 0 ? ( // Check if there's data to show
+              {pointsChartData.reduce((acc, curr) => acc + curr.value, 0) > 0 ? (
                 <ChartContainer config={chartConfig} className="w-full h-[250px]">
                   <PieChart>
                     <ChartTooltip
@@ -129,7 +132,6 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
                          <Cell key={`cell-${index}`} fill={entry.fill} />
                        ))}
                     </Pie>
-                     {/* Center Label */}
                      <text
                         x="50%"
                         y="50%"
@@ -144,7 +146,7 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
                          y="50%"
                          textAnchor="middle"
                          dominantBaseline="middle"
-                         dy="1.2em" // Adjust vertical position
+                         dy="1.2em"
                          className="fill-muted-foreground text-xs"
                       >
                          Committed
@@ -160,17 +162,16 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
           </Card>
        )}
 
-       {/* Total Tasks vs Remaining Tasks Pie Chart */}
        {activeSprint && (
           <Card className="lg:col-span-1 h-[350px] flex flex-col">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base"> {/* Smaller title */}
+              <CardTitle className="flex items-center gap-2 text-base">
                 <ListChecks className="h-4 w-4 text-primary" /> Task Progress
               </CardTitle>
                <CardDescription className="text-xs">Total vs. Completed tasks.</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 flex items-center justify-center pb-0 -mt-4">
-               {tasksChartData.reduce((acc, curr) => acc + curr.value, 0) > 0 ? ( // Check if there are tasks
+               {tasksChartData.reduce((acc, curr) => acc + curr.value, 0) > 0 ? (
                  <ChartContainer config={chartConfig} className="w-full h-[250px]">
                    <PieChart>
                       <ChartTooltip
@@ -189,7 +190,6 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
                           <Cell key={`cell-${index}`} fill={entry.fill} />
                         ))}
                      </Pie>
-                      {/* Center Label */}
                       <text
                          x="50%"
                          y="50%"
@@ -204,7 +204,7 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
                          y="50%"
                          textAnchor="middle"
                          dominantBaseline="middle"
-                         dy="1.2em" // Adjust vertical position
+                         dy="1.2em"
                          className="fill-muted-foreground text-xs"
                        >
                           Total Tasks
@@ -221,17 +221,16 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
        )}
 
 
-      {/* Burndown Chart Placeholder */}
-      <Card className="lg:col-span-1 h-[350px] flex flex-col items-center justify-center border-dashed border-2">
-        <CardHeader className="text-center">
+      {/* Burndown Chart */}
+      <Card className="lg:col-span-1 h-[350px]">
+        <CardHeader>
           <CardTitle className="flex items-center justify-center gap-2">
-             <TrendingDown className="h-5 w-5 text-muted-foreground" /> Burndown Chart
+             <TrendingDown className="h-5 w-5 text-primary" /> Burndown Chart
           </CardTitle>
-          <CardDescription>(Ideal vs. Actual burndown)</CardDescription>
+          <CardDescription className="text-center">Ideal vs. Actual burndown for active sprint.</CardDescription>
         </CardHeader>
-        <CardContent className="flex items-center justify-center text-muted-foreground">
-          <Info className="mr-2 h-5 w-5" />
-          (Placeholder - Requires daily progress tracking)
+        <CardContent className="h-[calc(100%-100px)] pl-2">
+          <BurndownChart activeSprint={activeSprint} />
         </CardContent>
       </Card>
 
@@ -245,11 +244,10 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
         </CardHeader>
         <CardContent className="flex items-center justify-center text-muted-foreground">
           <Info className="mr-2 h-5 w-5" />
-          (Placeholder - Requires daily progress tracking)
+          (Placeholder - Requires daily progress tracking or more detailed task completion data)
         </CardContent>
       </Card>
 
-       {/* Velocity Chart (Moved to bottom) */}
        <Card className="lg:col-span-2 h-[350px]">
          <CardHeader>
            <CardTitle className="flex items-center gap-2">
@@ -271,4 +269,3 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
     </div>
   );
 }
-

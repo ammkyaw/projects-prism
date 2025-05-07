@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Added useRef, React
@@ -620,7 +619,7 @@ export default function Home() {
                     </div>
                     <DialogFooter>
                         <Button type="button" onClick={handleCreateNewProject} disabled={updateProjectMutation.isPending}>
-                           {updateProjectMutation.isPending ? 'Creating...' : 'Create Project'}
+                           {updateProjectMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</> : 'Create Project'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -669,7 +668,7 @@ export default function Home() {
                         }
                        className={cn(buttonVariants({ variant: "destructive" }))}
                    >
-                       {deleteProjectMutation.isPending ? 'Deleting...' : 'Delete Project'}
+                       {deleteProjectMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Deleting...</> : 'Delete Project'}
                    </AlertDialogAction>
                </AlertDialogFooter>
            </AlertDialogContent>
@@ -741,4 +740,3 @@ export default function Home() {
   );
 
 }
-
