@@ -60,7 +60,7 @@ export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: Log
     } finally {
         // Only set isLoading to false if there was an error.
         // If successful, the modal will close and unmount, so no need to set isLoading to false.
-        if (error || (err as any)?.code) { // Check if there was an error
+        if (error || (error as any)?.code) { // Check if there was an error
              setIsLoading(false);
         }
     }
