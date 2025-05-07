@@ -1,14 +1,15 @@
 "use client";
 
-import type { SprintData, Sprint, Task } from '@/types/sprint-data';
+import type { SprintData, Sprint, Task, DailyProgressDataPoint } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { PieChart, Pie, Cell } from 'recharts'; // Removed Tooltip from recharts as ChartTooltipContent is used
-import { Info, LineChart, Activity, CheckCircle, ListChecks, TrendingDown, CalendarCheck, CalendarRange } from 'lucide-react';
+import { PieChart, Pie, Cell } from 'recharts'; 
+import { Info, LineChart, Activity, CheckCircle, ListChecks, TrendingDown, CalendarCheck, CalendarRange, BarChartBig } from 'lucide-react'; // Added BarChartBig for Daily Progress
 import VelocityChart from '@/components/charts/velocity-chart';
-import BurndownChart from '@/components/charts/burndown-chart'; // Import BurndownChart
+import BurndownChart from '@/components/charts/burndown-chart'; 
+import DailyProgressChart from '@/components/charts/daily-progress-chart'; // Import DailyProgressChart
 import { useMemo } from 'react';
-import { format, parseISO, isValid } from 'date-fns';
+import { format, parseISO, isValid, eachDayOfInterval, isWithinInterval, getDay } from 'date-fns';
 
 interface DashboardTabProps {
   sprintData: SprintData | null;
@@ -29,15 +30,25 @@ const chartConfig = {
      label: "Committed",
      color: "hsl(var(--secondary))",
    },
-   ideal: { // Added for BurndownChart legend consistency (though color is defined in BurndownChart)
+   ideal: { 
     label: "Ideal",
     color: "hsl(var(--chart-2))",
   },
-  actual: { // Added for BurndownChart legend consistency
+  actual: { 
     label: "Actual",
     color: "hsl(var(--chart-1))",
   },
+  points: { // Added for DailyProgressChart legend consistency
+    label: "Points Completed",
+    color: "hsl(var(--chart-1))",
+  }
 } satisfies ChartConfig;
+
+// Helper to check if a day is a working day (Mon-Fri)
+const isWorkingDay = (date: Date): boolean => {
+  const day = getDay(date);
+  return day >= 1 && day <= 5; // 1 (Mon) to 5 (Fri)
+};
 
 export default function DashboardTab({ sprintData, projectName, projectId }: DashboardTabProps) {
 
@@ -54,8 +65,8 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
 
     const remaining = Math.max(0, committed - completed);
     return [
-      { name: 'Completed', value: completed, fill: chartConfig.completed.color }, // Use chartConfig for fill
-      { name: 'Remaining', value: remaining, fill: chartConfig.remaining.color }, // Use chartConfig for fill
+      { name: 'Completed', value: completed, fill: chartConfig.completed.color }, 
+      { name: 'Remaining', value: remaining, fill: chartConfig.remaining.color }, 
     ];
   }, [activeSprint]);
 
@@ -66,10 +77,54 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
                            .filter(task => task.status === 'Done').length;
     const remainingTasks = totalTasks - completedTasks;
     return [
-      { name: 'Completed', value: completedTasks, fill: chartConfig.completed.color }, // Use chartConfig for fill
-      { name: 'Remaining', value: remainingTasks, fill: chartConfig.remaining.color }, // Use chartConfig for fill
+      { name: 'Completed', value: completedTasks, fill: chartConfig.completed.color }, 
+      { name: 'Remaining', value: remainingTasks, fill: chartConfig.remaining.color }, 
     ];
   }, [activeSprint]);
+
+  const dailyProgressChartData = useMemo(() => {
+    if (!activeSprint || !activeSprint.startDate || !activeSprint.endDate || !isValid(parseISO(activeSprint.startDate)) || !isValid(parseISO(activeSprint.endDate))) {
+      return [];
+    }
+
+    const sprintStart = parseISO(activeSprint.startDate);
+    const sprintEnd = parseISO(activeSprint.endDate);
+    const allTasks = [...(activeSprint.planning?.newTasks || []), ...(activeSprint.planning?.spilloverTasks || [])];
+    const dailyDataMap: { [date: string]: number } = {};
+
+    // Initialize all working days in the sprint with 0 points
+    const sprintDaysArray = eachDayOfInterval({ start: sprintStart, end: sprintEnd });
+    sprintDaysArray.forEach(day => {
+      // Only include working days in the initial map if you want to skip weekends on X-axis
+      // if (isWorkingDay(day)) {
+        dailyDataMap[format(day, 'yyyy-MM-dd')] = 0;
+      // }
+    });
+
+    allTasks.forEach(task => {
+      if (task.status === 'Done' && task.completedDate && isValid(parseISO(task.completedDate))) {
+        const completedOn = parseISO(task.completedDate);
+        // Ensure the completion date is within the sprint range
+        if (isWithinInterval(completedOn, { start: sprintStart, end: sprintEnd })) {
+          const formattedDate = format(completedOn, 'yyyy-MM-dd');
+          // if (isWorkingDay(completedOn)) { // Optional: only count points for working days
+            dailyDataMap[formattedDate] = (dailyDataMap[formattedDate] || 0) + (Number(task.storyPoints) || 0);
+          // }
+        }
+      }
+    });
+
+    return Object.entries(dailyDataMap)
+      .map(([date, points]) => ({
+        date: format(parseISO(date), 'MM/dd'), // Format for display
+        points,
+      }))
+      .sort((a, b) => parseISO(a.date.split('/').reverse().join('-')).getTime() - parseISO(b.date.split('/').reverse().join('-')).getTime()); // Sort by date before returning
+      // The above sort is a bit complex because date is "MM/dd". A better way is to sort by original date objects before mapping.
+      // Or, ensure sprintDaysArray is sorted and map from that.
+
+  }, [activeSprint]);
+
 
    const formattedStartDate = activeSprint?.startDate && isValid(parseISO(activeSprint.startDate))
      ? format(parseISO(activeSprint.startDate), 'MMM d, yyyy')
@@ -234,17 +289,23 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
         </CardContent>
       </Card>
 
-       {/* Daily Progress Placeholder */}
-       <Card className="lg:col-span-1 h-[350px] flex flex-col items-center justify-center border-dashed border-2">
-        <CardHeader className="text-center">
+       {/* Daily Progress Chart */}
+       <Card className="lg:col-span-1 h-[350px]">
+        <CardHeader>
           <CardTitle className="flex items-center justify-center gap-2">
-             <CalendarCheck className="h-5 w-5 text-muted-foreground" /> Daily Progress
+             <BarChartBig className="h-5 w-5 text-primary" /> Daily Progress
           </CardTitle>
-          <CardDescription>(Tasks/Points completed per day)</CardDescription>
+          <CardDescription className="text-center">Story points completed per day.</CardDescription>
         </CardHeader>
-        <CardContent className="flex items-center justify-center text-muted-foreground">
-          <Info className="mr-2 h-5 w-5" />
-          (Placeholder - Requires daily progress tracking or more detailed task completion data)
+        <CardContent className="h-[calc(100%-100px)] pl-2">
+          {activeSprint ? (
+            <DailyProgressChart data={dailyProgressChartData} />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+              <Info className="mr-2 h-5 w-5" />
+              <span>No active sprint to display daily progress.</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

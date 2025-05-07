@@ -154,7 +154,7 @@ export const predefinedRoles = [
 
 export const taskStatuses: Array<Task['status']> = ['To Do', 'In Progress', 'In Review', 'QA', 'Done', 'Blocked']; 
 
-export const taskPriorities: Array<Task['priority']> = ['Highest', 'High', 'Medium' | null, 'Low', 'Lowest'];
+export const taskPriorities: Array<Task['priority']> = ['Highest', 'High', 'Medium' , 'Low', 'Lowest'];
 
 
 export const initialTeam: Omit<Team, 'id'> = {
@@ -192,3 +192,8 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
 };
 
 export type ToastFun = (props: { title: string; description?: string; variant?: 'default' | 'destructive', duration?: number }) => void;
+
+export interface DailyProgressDataPoint {
+  date: string; // Formatted date e.g., "MM/dd"
+  points: number;
+}
