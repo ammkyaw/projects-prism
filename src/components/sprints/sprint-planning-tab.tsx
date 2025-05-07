@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -22,7 +23,7 @@ import SprintTimelineChart from '@/components/charts/sprint-timeline-chart';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"; 
 import { Checkbox } from '@/components/ui/checkbox'; 
 import { ScrollArea } from '@/components/ui/scroll-area'; 
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; 
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; 
 
 const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
 
@@ -213,7 +214,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
              parseEstimatedTimeToDays(task.qaEstimatedTime) !== null &&
              parseEstimatedTimeToDays(task.bufferTime) !== null
          )
-         .map(task => ({ ...task })); 
+         .map(task => ({ ...task } as Task)); 
    }, [newTasks, spilloverTasks]);
 
 
@@ -563,7 +564,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
               priority: priority,
               acceptanceCriteria: row.acceptanceCriteria,
               dependsOn: row.dependsOn,
-              taskType: task.taskType,
+              taskType: row.taskType,
               createdDate: row.createdDate,
               initiator: row.initiator,
               needsGrooming: row.needsGrooming,
