@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Added useRef, React
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Added CardContent
-import { Download, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Eye, GitCommitVertical, History, Loader2 } from 'lucide-react'; // Added ArrowUpDown, ListChecks icons, Loader2
+import { Download, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Eye, GitCommitVertical, History, Loader2, AlertTriangle, ClipboardCheck } from 'lucide-react'; // Added ArrowUpDown, ListChecks icons, Loader2, AlertTriangle, ClipboardCheck
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -15,6 +15,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 // Main Content Components (Tabs) - Renamed and New Placeholders
 import DashboardTab from '@/components/dashboard-tab'; // Renamed from HomeTab
+import RiskTab from '@/components/risk-tab'; // New component
+import EvaluationTab from '@/components/evaluation-tab'; // New component
+
 
 // Sprint Sub-Tab Components
 import SprintSummaryTab from '@/components/sprints/sprint-summary-tab'; // Updated path
@@ -135,6 +138,7 @@ function PrismPage() {
       backlog: 'management',
       analytics: 'charts',
       settings: 'members', // Default to 'members' under settings now
+      // Risk and Evaluation are main tabs without subtabs for now
   };
 
   // Derive activeMainTab from activeTab
@@ -144,7 +148,8 @@ function PrismPage() {
 
   // Update activeTab logic for main tabs
   const handleMainTabChange = (mainTabKey: string) => {
-      if (mainTabKey === 'dashboard') { // Only dashboard is a main tab without subtabs now
+      // Handle main tabs that don't have sub-tabs directly
+      if (['dashboard', 'risk', 'evaluation'].includes(mainTabKey)) {
          setActiveTab(mainTabKey);
       } else {
          const defaultSub = defaultSubTabs[mainTabKey] || ''; // Fallback to empty string if no default
@@ -327,7 +332,7 @@ function PrismPage() {
    };
 
 
-  // Define the tab structure
+  // Define the tab structure including new tabs
   const tabsConfig: Record<string, { label: string; icon: React.ElementType; component?: React.ElementType; subTabs?: Record<string, { label: string; icon: React.ElementType; component: React.ElementType }> }> = {
       dashboard: { label: "Dashboard", icon: LayoutDashboard, component: DashboardTab },
       sprints: {
@@ -344,6 +349,8 @@ function PrismPage() {
               history: { label: "History", icon: History, component: HistoryTab },
           }
       },
+      risk: { label: "Risk", icon: AlertTriangle, component: RiskTab }, // New Risk Tab
+      evaluation: { label: "Evaluation", icon: ClipboardCheck, component: EvaluationTab }, // New Evaluation Tab
       analytics: {
           label: "Analytics", icon: BarChartBig, subTabs: {
               charts: { label: "Charts", icon: BarChart, component: AnalyticsChartsTab },
@@ -540,10 +547,14 @@ function PrismPage() {
                 break;
         }
     } else {
-        // Handle main tabs without sub-tabs (Dashboard)
+        // Handle main tabs without sub-tabs (Dashboard, Risk, Evaluation)
         ActiveComponent = mainConfig.component;
          if (mainKey === 'dashboard') {
             componentProps = { ...componentProps, sprintData: selectedProject.sprintData };
+         } else if (mainKey === 'risk') {
+             componentProps = { ...componentProps, sprintData: selectedProject.sprintData, backlog: selectedProject.backlog }; // Add props for RiskTab if needed
+         } else if (mainKey === 'evaluation') {
+              componentProps = { ...componentProps, sprintData: selectedProject.sprintData, backlog: selectedProject.backlog, members: selectedProject.members }; // Add props for EvaluationTab if needed
          }
         // Add props for other main tabs if needed
     }
@@ -712,8 +723,8 @@ function PrismPage() {
              </Card>
          ) : (
              <Tabs value={activeMainTab} onValueChange={handleMainTabChange} className="w-full">
-                {/* Main Tabs List - Updated grid cols (now 5 main tabs) */}
-               <TabsList className="grid w-full grid-cols-5 mb-6">
+                {/* Main Tabs List - Updated grid cols for 7 main tabs */}
+               <TabsList className="grid w-full grid-cols-7 mb-6">
                  {Object.entries(tabsConfig).map(([key, config]) => (
                      <TabsTrigger key={key} value={key}>
                         <config.icon className="h-4 w-4 md:mr-2" /> {/* Icon always visible, margin only on larger screens */}
@@ -757,5 +768,3 @@ function PrismPage() {
   );
 
 }
-
-    
