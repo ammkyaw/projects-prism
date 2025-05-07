@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo } from 'react';
@@ -26,7 +25,7 @@ type SortKey = 'priority' | 'title' | 'taskType' | 'createdDate' | 'movedToSprin
 type SortDirection = 'asc' | 'desc';
 
 // Helper function to get an icon based on HistoryStatus
-const getHistoryStatusIcon = (status: HistoryStatus | undefined) => {
+const getHistoryStatusIcon = (status: HistoryStatus | undefined | null) => {
   switch (status) {
     case 'Move': return <Move className="h-3 w-3 mr-1 inline" />;
     case 'Split': return <Split className="h-3 w-3 mr-1 inline" />;
@@ -107,9 +106,9 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
       });
     } else {
         // Default sort by historyStatus (Move, Split, Merge), then movedToSprint, then priority
-        const statusOrder: HistoryStatus[] = ['Move', 'Split', 'Merge'];
+        const statusOrder: (HistoryStatus | null)[] = ['Move', 'Split', 'Merge', null]; // Include null for items without status
         sortableItems.sort((a, b) =>
-            (statusOrder.indexOf(a.historyStatus!) - statusOrder.indexOf(b.historyStatus!)) ||
+            (statusOrder.indexOf(a.historyStatus) - statusOrder.indexOf(b.historyStatus)) ||
             (a.movedToSprint ?? Infinity) - (b.movedToSprint ?? Infinity) ||
             taskPriorities.indexOf(a.priority || 'Medium') - taskPriorities.indexOf(b.priority || 'Medium')
         );
@@ -137,6 +136,10 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
        setIsViewDialogOpen(true);
    };
 
+   const handleUndoClick = (itemId: string) => {
+       onUndoBacklogAction(itemId);
+   };
+
   return (
     <>
       <Card>
@@ -153,7 +156,7 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
             ) : (
               <div className="overflow-x-auto">
                  {/* Adjust min-width if necessary to accommodate removed columns */}
-                <div className="min-w-[1300px]"> {/* Adjusted min-width */}
+                <div className="min-w-[1500px]"> {/* Adjusted min-width */}
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -207,7 +210,7 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
                               </Button>
                           </TableHead>
                          <TableHead className="w-[80px] text-right">Story Pts</TableHead>
-                         {/* Removed "Actions" Header */}
+                         <TableHead className="w-[50px] text-center">Undo</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -246,7 +249,20 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
                           </TableCell>
                            <TableCell>{task.movedToSprint ?? '-'}</TableCell>
                           <TableCell className="text-right">{task.storyPoints ?? '-'}</TableCell>
-                           {/* Removed "Actions" Cell */}
+                           {/* Undo Button Cell */}
+                          <TableCell className="text-center">
+                             {(task.historyStatus === 'Split' || task.historyStatus === 'Merge') && (
+                                 <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleUndoClick(task.id)}
+                                    className="h-7 w-7 text-blue-600 hover:text-blue-700"
+                                    title={`Undo ${task.historyStatus}`}
+                                 >
+                                     <Undo className="h-4 w-4" />
+                                 </Button>
+                             )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -325,5 +341,3 @@ export default function HistoryTab({ projectId, projectName, historyItems, onUnd
     </>
   );
 }
-
-    

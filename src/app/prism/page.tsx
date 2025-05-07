@@ -132,6 +132,13 @@ function PrismPage() {
     return project;
   }, [projects, selectedProjectId]);
 
+  // Memoize the list of plannable sprints (Active or Planned) for the selected project
+  const plannableSprints = useMemo(() => {
+    if (!selectedProject) return [];
+    return (selectedProject.sprintData?.sprints ?? []).filter(s => s.status === 'Active' || s.status === 'Planned');
+  }, [selectedProject]);
+
+
   // Define default sub-tabs for each main tab
   const defaultSubTabs: Record<string, string> = {
       sprints: 'summary',
@@ -147,15 +154,26 @@ function PrismPage() {
   }, [activeTab]);
 
   // Update activeTab logic for main tabs
-  const handleMainTabChange = (mainTabKey: string) => {
+  const handleMainTabChange = useCallback((mainTabKey: string) => {
       // Handle main tabs that don't have sub-tabs directly
       if (['dashboard', 'risk', 'evaluation'].includes(mainTabKey)) {
          setActiveTab(mainTabKey);
+      } else if (mainTabKey === 'sprints') {
+          // If navigating to Sprints and there's only one plannable sprint, go directly to planning
+          if (plannableSprints.length === 1) {
+              setActiveTab('sprints/planning');
+              // If you have a selectedSprintNumber state, you might want to set it here too
+              // e.g., setSelectedSprintNumberForPlanning(plannableSprints[0].sprintNumber);
+          } else {
+              // Otherwise, go to the default sub-tab for Sprints (summary)
+              setActiveTab(`sprints/${defaultSubTabs.sprints}`);
+          }
       } else {
          const defaultSub = defaultSubTabs[mainTabKey] || ''; // Fallback to empty string if no default
          setActiveTab(`${mainTabKey}/${defaultSub}`);
       }
-  };
+  }, [plannableSprints, defaultSubTabs]); // Add plannableSprints and defaultSubTabs to dependencies
+
 
    // Helper function to update project data via mutation
    const updateProjectData = useCallback((updatedProject: Project) => {
@@ -542,7 +560,7 @@ function PrismPage() {
                  };
                  break;
             default:
-                ActiveComponent = () => <div>Unknown Tab</div>; // Fallback if a specific case isn't matched but subConfig exists
+                // ActiveComponent = () => <div>Unknown Tab</div>; // Fallback if a specific case isn't matched but subConfig exists
                 componentProps = {};
                 break;
         }
