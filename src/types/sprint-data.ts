@@ -38,9 +38,9 @@ export interface Team {
 }
 
 // Task Types for Backlog items
-export type TaskType = 'New Feature' | 'Improvement' | 'Bug' | 'Refactoring' | 'Documentation' | 'Security' | 'Infra' | 'CI/CD' | 'Compliance';
+export type TaskType = 'New Feature' | 'Improvement' | 'Bug' | 'Hotfix' | 'Refactoring' | 'Documentation' | 'Security' | 'Infra' | 'CI/CD' | 'Compliance';
 export const taskTypes: TaskType[] = [
-    'New Feature', 'Improvement', 'Bug', 'Refactoring', 'Documentation', 'Security', 'Infra', 'CI/CD', 'Compliance'
+    'New Feature', 'Improvement', 'Bug', 'Hotfix', 'Refactoring', 'Documentation', 'Security', 'Infra', 'CI/CD', 'Compliance'
 ];
 
 // Represents the status of a backlog item in history
