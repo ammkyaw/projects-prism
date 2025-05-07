@@ -124,7 +124,8 @@ export const useBacklogActions = ({
   }, [selectedProject, updateProjectData, toast]);
 
 
-  // New function to handle moving multiple selected backlog items to a sprint plan
+  // Updated function to handle moving multiple selected backlog items to a sprint plan
+  // This now ALSO updates the main project state and returns the tasks for the sprint plan.
   const handleMoveSelectedBacklogItemsToSprint = useCallback((
     backlogItemIds: string[],
     targetSprintNumber: number
@@ -133,6 +134,11 @@ export const useBacklogActions = ({
       toast({ variant: "destructive", title: "Error", description: "No project selected." });
       return [];
     }
+     const targetSprintIndex = (selectedProject.sprintData.sprints ?? []).findIndex(s => s.sprintNumber === targetSprintNumber);
+     if (targetSprintIndex === -1) {
+       toast({ variant: "destructive", title: "Error", description: `Target Sprint ${targetSprintNumber} not found.` });
+       return [];
+     }
 
     const tasksForSprintPlan: Task[] = [];
     let updatedBacklog = [...(selectedProject.backlog ?? [])];
@@ -143,9 +149,9 @@ export const useBacklogActions = ({
       if (itemIndex !== -1) {
         const originalItem = updatedBacklog[itemIndex];
 
-        // Ensure it's not already moved or historical in a way that prevents moving again from backlog UI
+        // Ensure it's not already moved or historical
         if (originalItem.movedToSprint || originalItem.historyStatus) {
-            console.warn(`Item ${originalItem.backlogId} already processed or in history, skipping move from 'Add from Backlog'.`);
+            console.warn(`Item ${originalItem.backlogId} already processed or in history, skipping move.`);
             return; // Skip this item
         }
 
@@ -155,7 +161,9 @@ export const useBacklogActions = ({
         updatedBacklog[itemIndex] = {
           ...originalItem,
           movedToSprint: targetSprintNumber,
-          historyStatus: 'Move' as HistoryStatus,
+          historyStatus: 'Move' as HistoryStatus, // Mark as moved
+          readyForSprint: false, // Item is no longer "ready" in the backlog view
+          needsGrooming: false, // Moved items don't need backlog grooming
         };
 
         // 2. Create a new task object for the sprint plan
@@ -174,9 +182,21 @@ export const useBacklogActions = ({
           movedToSprint: null,
           historyStatus: null,
           needsGrooming: false,    // Item is being planned, so grooming is done/not applicable here
-          readyForSprint: true,    // Implicitly true by being added
+          readyForSprint: true,    // Implicitly true by being added to sprint plan
           splitFromId: null,       // Reset split/merge info for the new sprint task instance
           mergeEventId: null,
+          // Carry over other relevant fields
+          title: originalItem.title,
+          description: originalItem.description,
+          acceptanceCriteria: originalItem.acceptanceCriteria,
+          storyPoints: originalItem.storyPoints,
+          priority: originalItem.priority,
+          taskType: originalItem.taskType,
+          createdDate: originalItem.createdDate,
+          initiator: originalItem.initiator,
+          dependsOn: originalItem.dependsOn,
+          backlogId: originalItem.backlogId, // Carry over the original backlog ID for reference
+          ticketNumber: originalItem.ticketNumber // Carry over ticket number
         };
         tasksForSprintPlan.push(sprintTask);
       } else {
@@ -189,14 +209,27 @@ export const useBacklogActions = ({
         return [];
     }
 
+    // Update the target sprint's newTasks
+    const updatedSprints = [...selectedProject.sprintData.sprints];
+    const targetSprint = updatedSprints[targetSprintIndex];
+    const updatedPlanning = {
+        ...(targetSprint.planning ?? initialSprintPlanning),
+        newTasks: [...(targetSprint.planning?.newTasks ?? []), ...tasksForSprintPlan], // Add the newly created tasks
+    };
+    updatedSprints[targetSprintIndex] = { ...targetSprint, planning: updatedPlanning };
+
     const finalBacklog = updatedBacklog.sort((a,b) => taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
 
     const updatedProjectDataState: Project = {
       ...selectedProject,
-      backlog: finalBacklog,
+      backlog: finalBacklog, // Update the backlog with moved items marked
+      sprintData: {
+          ...selectedProject.sprintData,
+          sprints: updatedSprints // Update the sprints array with new tasks added to the target sprint
+      }
     };
 
-    updateProjectData(updatedProjectDataState); // This persists the changes to the backlog
+    updateProjectData(updatedProjectDataState); // Persist changes to backlog AND sprint planning
 
     if (itemsMovedDetails.length > 0) {
         toast({
@@ -205,7 +238,7 @@ export const useBacklogActions = ({
         });
     }
 
-    return tasksForSprintPlan;
+    return tasksForSprintPlan; // Return the tasks added to the sprint plan
   }, [selectedProject, updateProjectData, toast]);
 
 
@@ -269,12 +302,9 @@ export const useBacklogActions = ({
     const updatedSprints = [...currentProject.sprintData.sprints];
     updatedSprints[targetSprintIndex] = targetSprint;
 
-    // Find the corresponding item in the backlog (could be in active or history) and reset its status
+    // Find the corresponding item in the backlog (must match backlogId) and reset its status
     const updatedBacklog = (currentProject.backlog || []).map(item => {
-      // Match by backlogId if available, otherwise by original item ID (if it was a direct copy)
-      const isMatch = taskBacklogId ? item.backlogId === taskBacklogId : item.id === taskToRemoveDetails.id; // Fallback for older items might be item.ticketNumber
-
-      if (isMatch && item.movedToSprint === sprintNumber && item.historyStatus === 'Move') {
+      if (taskBacklogId && item.backlogId === taskBacklogId && item.movedToSprint === sprintNumber && item.historyStatus === 'Move') {
         updatePerformed = true;
         return { ...item, movedToSprint: null, historyStatus: null, readyForSprint: false }; // Reset flags
       }
@@ -332,8 +362,6 @@ export const useBacklogActions = ({
 
     // 2. Prepare new split tasks with unique IDs and backlog IDs
     const newSplitTasksWithIds = splitTasks.map((task, index) => {
-      // const suffix = String.fromCharCode(97 + index); // Assuming suffixes are already handled if needed
-      // const newSplitBacklogId = `${originalItem.backlogId}-${suffix}`; // IDs should be generated by SplitDialog
       const newId = `split_instance_${originalItem.id}_${task.backlogId}_${Date.now()}`; // Ensure unique persistent ID for the new instance
 
       return {

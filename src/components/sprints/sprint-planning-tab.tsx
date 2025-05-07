@@ -107,6 +107,7 @@ interface SprintPlanningTabProps {
   backlog: Task[]; 
   onRevertTask: (sprintNumber: number, taskId: string, taskBacklogId: string | null) => void; 
   onCompleteSprint: (sprintNumber: number, latestPlanning: SprintPlanning) => void;
+  onAddBacklogItems: (backlogItemIds: string[], targetSprintNumber: number) => Task[]; // Function to handle moving items from backlog
 }
 
 interface TaskRow extends Task {
@@ -152,7 +153,7 @@ const createEmptyTaskRow = (): TaskRow => ({
 });
 
 
-export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars, teams, backlog, onRevertTask, onCompleteSprint }: SprintPlanningTabProps) {
+export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, onCreateAndPlanSprint, projectName, members, holidayCalendars, teams, backlog, onRevertTask, onCompleteSprint, onAddBacklogItems }: SprintPlanningTabProps) {
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<number | null>(null);
   const [planningData, setPlanningData] = useState<SprintPlanning>(initialSprintPlanning);
   const [newTasks, setNewTasks] = useState<TaskRow[]>([]);
@@ -354,14 +355,11 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
      const taskList = type === 'new' ? newTasks : spilloverTasks;
      const taskToRemove = taskList.find(row => row._internalId === internalId);
 
-     if (type === 'new' && taskToRemove && taskToRemove.backlogId && selectedSprintNumber) {
-          setTimeout(() => {
-             onRevertTask(selectedSprintNumber, taskToRemove.id, taskToRemove.backlogId);
-             updater(prevRows => prevRows.filter(row => row._internalId !== internalId));
-          }, 0);
-     } else {
-         updater(prevRows => prevRows.filter(row => row._internalId !== internalId));
+     if (type === 'new' && taskToRemove?.backlogId && selectedSprintNumber) {
+         onRevertTask(selectedSprintNumber, taskToRemove.id, taskToRemove.backlogId); // Call the revert function passed from props
      }
+     // Always remove from the UI state regardless of whether it was reverted in the backend
+     updater(prevRows => prevRows.filter(row => row._internalId !== internalId));
  };
 
 
@@ -446,140 +444,50 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
      });
    };
 
-   const handleAddSelectedBacklogItems = () => {
-     if (selectedBacklogIds.size === 0) {
-       toast({ variant: "default", title: "No items selected", description: "Please select items from the backlog to add." });
-       return;
-     }
+    // Handler for adding selected backlog items to the 'newTasks'
+    const handleAddSelectedBacklogItems = () => {
+      if (selectedBacklogIds.size === 0) {
+        toast({ variant: "default", title: "No items selected", description: "Please select items from the backlog to add." });
+        return;
+      }
+      const currentSprintNum = isCreatingNewSprint ? parseInt(newSprintForm.sprintNumber, 10) : selectedSprintNumber;
+      if (currentSprintNum === null || isNaN(currentSprintNum)) {
+          toast({ variant: "destructive", title: "Error", description: "Cannot determine target sprint number." });
+          return;
+      }
 
-     const itemsToAdd = backlog
-       .filter(task => selectedBacklogIds.has(task.id))
-       .map((task): TaskRow => ({ 
-         ...createEmptyTaskRow(), 
-         ...task, 
-         _internalId: `backlog_added_${task.id}_${Date.now()}`,
-         status: 'To Do', 
-         startDate: null, 
-         startDateObj: null,
-         storyPoints: task.storyPoints?.toString() ?? '', 
-         qaEstimatedTime: task.qaEstimatedTime ?? '2d', 
-         bufferTime: task.bufferTime ?? '1d',
-         backlogId: task.backlogId ?? '', 
-          ticketNumber: task.ticketNumber ?? task.backlogId ?? '', 
-          title: task.title ?? '',
-          description: task.description ?? '',
-          acceptanceCriteria: task.acceptanceCriteria ?? '',
-          priority: task.priority ?? 'Medium',
-          dependsOn: task.dependsOn ?? [],
-          taskType: task.taskType ?? 'New Feature',
-          createdDate: task.createdDate ?? '',
-          initiator: task.initiator ?? '',
-          needsGrooming: task.needsGrooming ?? false,
-          readyForSprint: task.readyForSprint ?? false,
-       }));
+      // Call the function passed from props (from useBacklogActions)
+      const addedTasksForPlan = onAddBacklogItems(Array.from(selectedBacklogIds), currentSprintNum);
 
-     setNewTasks(prev => {
-       const filteredPrev = prev.filter(p => p.ticketNumber?.trim() || p.storyPoints?.toString().trim());
-       return [...filteredPrev, ...itemsToAdd];
-     });
+      if (addedTasksForPlan.length > 0) {
+          // Convert returned Task[] to TaskRow[] for the local state
+          const itemsToAdd = addedTasksForPlan.map((task): TaskRow => ({
+              ...createEmptyTaskRow(), // Start with defaults
+              ...task,                // Spread the task data returned
+              _internalId: `backlog_added_${task.id}_${Date.now()}`,
+              startDateObj: parseDateString(task.startDate),
+              storyPoints: task.storyPoints?.toString() ?? '', // Ensure string
+              qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Apply defaults if missing
+              bufferTime: task.bufferTime ?? '1d',
+              backlogId: task.backlogId ?? '',
+              ticketNumber: task.ticketNumber ?? task.backlogId ?? '', // Use ticketNumber or fallback
+          }));
 
-     toast({ title: "Items Added", description: `${itemsToAdd.length} backlog item(s) added to the sprint plan.` });
-     setIsBacklogDialogOpen(false); 
-   };
-
-
-  const _finalizeTasks = (taskRows: TaskRow[], taskType: 'new' | 'spillover', sprintNumber: number | string | null): { tasks: Task[], errors: string[] } => {
-      const finalTasks: Task[] = [];
-      const errors: string[] = [];
-      taskRows.forEach((row, index) => {
-          const taskPrefix = `${taskType === 'new' ? 'New' : 'Spillover'} Task (Row ${index + 1})`;
-          if (
-              !row.ticketNumber?.trim() &&
-              !row.storyPoints?.toString().trim() &&
-              !row.devEstimatedTime?.trim() &&
-              !row.startDate
-          ) {
-              if (taskRows.length === 1 && !row.ticketNumber?.trim() && !row.storyPoints?.toString().trim()) return;
-              return;
-          }
-
-          const ticketNumber = row.ticketNumber?.trim();
-          const storyPointsRaw = row.storyPoints?.toString().trim();
-          let storyPoints: number | null = null; 
-            if (storyPointsRaw) {
-                const parsed = parseInt(storyPointsRaw, 10);
-                if (!isNaN(parsed) && parsed >= 0) {
-                    storyPoints = parsed;
-                } else {
-                    errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
-                }
-            }
-
-          const devEstimatedTime = row.devEstimatedTime?.trim() || null; 
-          const qaEstimatedTime = row.qaEstimatedTime?.trim() || '2d'; 
-          const bufferTime = row.bufferTime?.trim() || '1d'; 
-          const assignee = row.assignee?.trim() || ''; 
-          const reviewer = row.reviewer?.trim() || ''; 
-          const status = row.status?.trim() as Task['status'];
-          const startDate = row.startDate;
-          const completedDate = row.completedDate; 
-          const title = row.title?.trim(); 
-          const description = row.description?.trim(); 
-          const priority = row.priority; 
-
-          if (!ticketNumber) errors.push(`${taskPrefix}: Ticket # is required.`);
-          if (!startDate) errors.push(`${taskPrefix}: Start Date is required for timeline.`);
-
-           if (devEstimatedTime && parseEstimatedTimeToDays(devEstimatedTime) === null) {
-                errors.push(`${taskPrefix}: Invalid Dev Est. Time. Use formats like '2d', '1w 3d', '5'.`);
-           }
-           if (qaEstimatedTime && parseEstimatedTimeToDays(qaEstimatedTime) === null) {
-                errors.push(`${taskPrefix}: Invalid QA Est. Time. Use formats like '2d', '1w 3d', '5'.`);
-           }
-            if (bufferTime && parseEstimatedTimeToDays(bufferTime) === null) {
-                errors.push(`${taskPrefix}: Invalid Buffer Time. Use formats like '2d', '1w 3d', '5'.`);
-           }
-          if (!status || !taskStatuses.includes(status)) {
-              errors.push(`${taskPrefix}: Invalid status.`);
-          }
-           if (startDate && !isValid(parseISO(startDate))) errors.push(`${taskPrefix}: Invalid Start Date format (YYYY-MM-DD).`);
-           if (completedDate && !isValid(parseISO(completedDate))) errors.push(`${taskPrefix}: Invalid Completed Date format (YYYY-MM-DD).`);
-
-          if (errors.length > 0) return; 
-
-          finalTasks.push({
-              id: row.id || `task_${sprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
-              ticketNumber: ticketNumber || '',
-              backlogId: row.backlogId, 
-              title: title,
-              description: description,
-              storyPoints: storyPoints,
-              devEstimatedTime: devEstimatedTime,
-              qaEstimatedTime: qaEstimatedTime,
-              bufferTime: bufferTime,
-              assignee: assignee,
-              reviewer: reviewer,
-              status: status,
-              startDate: startDate,
-              completedDate: completedDate,
-              priority: priority,
-              acceptanceCriteria: row.acceptanceCriteria,
-              dependsOn: row.dependsOn,
-              taskType: row.taskType,
-              createdDate: row.createdDate,
-              initiator: row.initiator,
-              needsGrooming: row.needsGrooming,
-              readyForSprint: row.readyForSprint,
-              movedToSprint: row.movedToSprint,
-              historyStatus: row.historyStatus,
-              splitFromId: row.splitFromId,
-              mergeEventId: row.mergeEventId,
+          setNewTasks(prev => {
+              const filteredPrev = prev.filter(p => p.ticketNumber?.trim() || p.storyPoints?.toString().trim());
+              // Prevent duplicates just in case
+              const uniqueToAdd = itemsToAdd.filter(newItem => !filteredPrev.some(existing => existing.id === newItem.id));
+              return [...filteredPrev, ...uniqueToAdd];
           });
-      });
-      return { tasks: finalTasks, errors };
-  };
+      }
 
- const handleSaveExistingSprintPlanning = () => {
+      // Toast is handled within onAddBacklogItems/useBacklogActions
+      setIsBacklogDialogOpen(false); // Close dialog
+    };
+
+
+
+  const handleSaveExistingSprintPlanning = () => {
      if (!selectedSprintNumber) {
         toast({ variant: "destructive", title: "Error", description: "No sprint selected." });
         return;
@@ -589,8 +497,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
          return;
      }
 
-     const { tasks: finalNewTasks, errors: newErrors } = _finalizeTasks(newTasks, 'new', selectedSprintNumber);
-     const { tasks: finalSpilloverTasks, errors: spillErrors } = _finalizeTasks(spilloverTasks, 'spillover', selectedSprintNumber);
+     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks, 'new', selectedSprintNumber);
+     const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks, 'spillover', selectedSprintNumber);
      const allErrors = [...newErrors, ...spillErrors];
 
      if (allErrors.length > 0) {
@@ -632,8 +540,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
       if (!startDateStr || !isValid(parseISO(startDateStr))) formErrors.push("Valid Start Date is required.");
       if (!duration || !DURATION_OPTIONS.includes(duration)) formErrors.push("Valid Duration is required.");
 
-      const { tasks: finalNewTasks, errors: newErrors } = _finalizeTasks(newTasks, 'new', sprintNumInt);
-      const { tasks: finalSpilloverTasks, errors: spillErrors } = _finalizeTasks(spilloverTasks, 'spillover', sprintNumInt);
+      const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks, 'new', sprintNumInt);
+      const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks, 'spillover', sprintNumInt);
       const taskErrors = [...newErrors, ...spillErrors];
 
       if (formErrors.length > 0 || taskErrors.length > 0) {
@@ -678,8 +586,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
            return;
        }
 
-       const { tasks: finalNewTasks, errors: newErrors } = _finalizeTasks(newTasks, 'new', selectedSprint.sprintNumber);
-       const { tasks: finalSpilloverTasks, errors: spillErrors } = _finalizeTasks(spilloverTasks, 'spillover', selectedSprint.sprintNumber);
+       const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks, 'new', selectedSprint.sprintNumber);
+       const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks, 'spillover', selectedSprint.sprintNumber);
        const allErrors = [...newErrors, ...spillErrors];
 
        if (allErrors.length > 0) {
@@ -700,13 +608,19 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
 
    const handleCompleteSprintClick = () => {
       if (!selectedSprintNumber || !isSprintActive) return;
+       const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks, 'new', selectedSprintNumber);
+       const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks, 'spillover', selectedSprintNumber);
+
+       // We proceed even if there are validation errors, but might want to warn user?
+       // For now, just use the latest potentially unvalidated data from state if finalize fails
        const latestPlanningData: SprintPlanning = {
            goal: planningData.goal.trim(),
-           newTasks: newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0 })), 
-           spilloverTasks: spilloverTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0})),
+           newTasks: newErrors.length > 0 ? newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || null })) : finalNewTasks,
+           spilloverTasks: spillErrors.length > 0 ? spilloverTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || null })) : finalSpilloverTasks,
            definitionOfDone: planningData.definitionOfDone.trim(),
            testingStrategy: planningData.testingStrategy.trim(),
        };
+
       onCompleteSprint(selectedSprintNumber, latestPlanningData);
        setSelectedSprintNumber(null);
        resetForms();
@@ -959,11 +873,12 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                             variant="ghost"
                             size="icon"
                             onClick={() => removeTaskRow(type, row._internalId)}
-                            className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                            className={cn("h-9 w-9 text-muted-foreground hover:text-destructive", type === 'new' && !!row.backlogId && "hover:text-blue-600")} // Adjust hover color for revert
                             aria-label={type === 'new' && !!row.backlogId ? "Revert task to backlog" : `Remove ${type} task row`}
+                            title={type === 'new' && !!row.backlogId ? "Revert task to backlog" : `Remove ${type} task row`}
                             disabled={disabled}
                         >
-                           <Trash2 className="h-4 w-4" />
+                           {type === 'new' && !!row.backlogId ? <Undo className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
                         </Button>
                     </div>
                 </div>
@@ -1357,4 +1272,3 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
     </div>
   );
 }
-

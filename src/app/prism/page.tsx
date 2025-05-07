@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Added useRef, React
@@ -175,6 +176,7 @@ export default function Home() {
     handleSaveNewBacklogItems,
     handleUpdateSavedBacklogItem,
     handleMoveToSprint,
+    handleMoveSelectedBacklogItemsToSprint, // Get the updated function
     handleRevertTaskToBacklog,
     handleSplitBacklogItem,
     handleDeleteSavedBacklogItem,
@@ -435,19 +437,21 @@ export default function Home() {
                componentProps = { ...componentProps, sprintData: selectedProject.sprintData, onDeleteSprint: handleDeleteSprint };
                break;
             case 'sprints/planning':
-                componentProps = {
-                    ...componentProps,
-                    sprints: selectedProject.sprintData.sprints ?? [],
-                    onSavePlanning: handleSavePlanningAndUpdateStatus,
-                    onCreateAndPlanSprint: handleCreateAndPlanSprint,
-                    onCompleteSprint: handleCompleteSprint,
-                    members: selectedProject.members ?? [],
-                    holidayCalendars: selectedProject.holidayCalendars ?? [],
-                    teams: selectedProject.teams ?? [],
-                    backlog: selectedProject.backlog?.filter(task => !task.historyStatus && task.readyForSprint) ?? [], // Pass ready & non-historical items
-                    onRevertTask: handleRevertTaskToBacklog, // Pass revert function
-                 };
-                break;
+                 const availableBacklogItems = selectedProject.backlog?.filter(task => !task.movedToSprint && !task.historyStatus) ?? [];
+                 componentProps = {
+                     ...componentProps,
+                     sprints: selectedProject.sprintData.sprints ?? [],
+                     onSavePlanning: handleSavePlanningAndUpdateStatus,
+                     onCreateAndPlanSprint: handleCreateAndPlanSprint,
+                     onCompleteSprint: handleCompleteSprint,
+                     members: selectedProject.members ?? [],
+                     holidayCalendars: selectedProject.holidayCalendars ?? [],
+                     teams: selectedProject.teams ?? [],
+                     backlog: availableBacklogItems, // Pass only active backlog items
+                     onRevertTask: handleRevertTaskToBacklog,
+                     onAddBacklogItems: handleMoveSelectedBacklogItemsToSprint, // Pass the move function
+                  };
+                 break;
             case 'sprints/retrospective':
                  componentProps = { ...componentProps, sprints: selectedProject.sprintData.sprints ?? [] };
                  break;
