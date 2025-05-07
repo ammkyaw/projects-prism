@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Import AlertDialog components
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'; // Import AlertDialog components
 
 
 // Main Content Components (Tabs) - Renamed and New Placeholders
@@ -22,7 +22,6 @@ import SprintRetrospectiveTab from '@/components/sprints/sprint-retrospective-ta
 
 // Backlog Sub-Tab Components
 import BacklogTab from '@/components/backlog/backlog-tab'; // Updated path
-import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritization-tab'; // Updated path
 import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
 import HistoryTab from '@/components/backlog/history-tab'; // Import HistoryTab component
 
@@ -125,6 +124,11 @@ export default function Home() {
       analytics: 'charts',
       settings: 'members', // Default to 'members' under settings now
   };
+
+  // Derive activeMainTab from activeTab
+  const activeMainTab = useMemo(() => {
+    return activeTab.split('/')[0];
+  }, [activeTab]);
 
   // Update activeTab logic for main tabs
   const handleMainTabChange = (mainTabKey: string) => {
