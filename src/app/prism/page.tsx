@@ -51,7 +51,7 @@ import { handleExport } from '@/lib/export';
 import { auth } from '@/lib/firebase'; // Import auth
 import { onAuthStateChanged } from 'firebase/auth'; // Import onAuthStateChanged
 import { useRouter } from 'next/navigation'; // Import useRouter
-import { QueryProvider } from '@/components/query-provider'; // Import QueryProvider
+import QueryProvider from '@/components/query-provider'; // Import QueryProvider
 
 // Wrap the main export with QueryProvider
 export default function PrismPageWrapper() {
@@ -757,3 +757,5 @@ function PrismPage() {
   );
 
 }
+
+    
