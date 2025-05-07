@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Sprint } from '@/types/sprint-data';
@@ -26,11 +25,24 @@ export default function VelocityChart({ data }: VelocityChartProps) {
     return <div className="flex items-center justify-center h-full text-muted-foreground">No velocity data available.</div>;
   }
 
-   const chartData = data.map(sprint => ({
-    name: `Sprint ${sprint.sprintNumber}`,
-    committed: sprint.committedPoints,
-    completed: sprint.completedPoints,
-  }));
+   const chartData = data.map(sprint => {
+    let completedPointsValue = sprint.completedPoints || 0;
+
+    // If the sprint is Active or Planned, recalculate completed points from its tasks
+    // This makes the chart more "live" for ongoing sprints.
+    if ((sprint.status === 'Active' || sprint.status === 'Planned') && sprint.planning) {
+      const tasks = [...(sprint.planning.newTasks || []), ...(sprint.planning.spilloverTasks || [])];
+      completedPointsValue = tasks
+        .filter(task => task.status === 'Done')
+        .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+    }
+    
+    return {
+      name: `Sprint ${sprint.sprintNumber}`,
+      committed: sprint.committedPoints || 0,
+      completed: completedPointsValue,
+    };
+  });
 
 
   return (
