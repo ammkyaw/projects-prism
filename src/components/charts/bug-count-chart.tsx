@@ -1,9 +1,22 @@
 // src/components/charts/bug-count-chart.tsx
-"use client";
+'use client';
 
 import type { Sprint, Task } from '@/types/sprint-data';
-import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { ChartConfig, ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
+import {
+  BarChart,
+  Bar,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
+import {
+  ChartConfig,
+  ChartContainer,
+  ChartTooltipContent,
+} from '@/components/ui/chart';
 import { useMemo } from 'react';
 import { Info } from 'lucide-react';
 
@@ -13,8 +26,8 @@ interface BugCountChartProps {
 
 const chartConfig = {
   bugs: {
-    label: "Bugs",
-    color: "hsl(var(--destructive))", // Use destructive color for bugs
+    label: 'Bugs',
+    color: 'hsl(var(--destructive))', // Use destructive color for bugs
   },
 } satisfies ChartConfig;
 
@@ -25,33 +38,41 @@ export default function BugCountChart({ data }: BugCountChartProps) {
     }
 
     return data
-      .filter(sprint => sprint.status === 'Completed' || sprint.status === 'Active') // Ensure only completed sprints
-      .map(sprint => {
-        const tasks: Task[] = [...(sprint.planning?.newTasks || []), ...(sprint.planning?.spilloverTasks || [])];
-        const bugCount = tasks.filter(task => task.taskType === 'Bug').length;
+      .filter(
+        (sprint) => sprint.status === 'Completed' || sprint.status === 'Active'
+      ) // Ensure only completed sprints
+      .map((sprint) => {
+        const tasks: Task[] = [
+          ...(sprint.planning?.newTasks || []),
+          ...(sprint.planning?.spilloverTasks || []),
+        ];
+        const bugCount = tasks.filter((task) => task.taskType === 'Bug').length;
         return {
           name: `Sprint ${sprint.sprintNumber}`,
           bugs: bugCount,
         };
-    });
+      });
   }, [data]);
 
   if (!chartData || chartData.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
         <Info className="mr-2 h-5 w-5" />
         <span>No completed sprints to display bug counts.</span>
       </div>
     );
   }
 
-  const maxBugs = Math.max(...chartData.map(d => d.bugs), 0);
+  const maxBugs = Math.max(...chartData.map((d) => d.bugs), 0);
   const yAxisMax = maxBugs > 0 ? Math.ceil(maxBugs * 1.1) : 5; // Set a minimum axis height
 
   return (
     <ChartContainer config={chartConfig} className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={chartData} margin={{ top: 5, right: 10, left: -25, bottom: 5 }}>
+        <BarChart
+          data={chartData}
+          margin={{ top: 5, right: 10, left: -25, bottom: 5 }}
+        >
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis
             dataKey="name"

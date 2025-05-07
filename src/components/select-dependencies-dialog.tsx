@@ -1,8 +1,16 @@
-"use client";
+'use client';
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -42,7 +50,7 @@ export default function SelectDependenciesDialog({
   }, [isOpen, currentDependencies]);
 
   const handleDependencyToggle = (depId: string, isChecked: boolean) => {
-    setSelectedDeps(prev => {
+    setSelectedDeps((prev) => {
       const newSelection = new Set(prev);
       if (isChecked) {
         newSelection.add(depId);
@@ -62,28 +70,47 @@ export default function SelectDependenciesDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[450px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><LinkIcon className="h-5 w-5 text-primary" /> Select Dependencies</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <LinkIcon className="h-5 w-5 text-primary" /> Select Dependencies
+          </DialogTitle>
           <DialogDescription>
-            Select the backlog items that {currentTaskName ? `task '${currentTaskName} (${currentTaskId || ''})'` : 'this task'} depends on.
+            Select the backlog items that{' '}
+            {currentTaskName
+              ? `task '${currentTaskName} (${currentTaskId || ''})'`
+              : 'this task'}{' '}
+            depends on.
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
           {potentialDependencies.length === 0 ? (
-             <p className="text-sm text-muted-foreground text-center italic py-4">No other backlog items available to select as dependencies.</p>
+            <p className="py-4 text-center text-sm italic text-muted-foreground">
+              No other backlog items available to select as dependencies.
+            </p>
           ) : (
             <ScrollArea className="h-64 w-full rounded-md border p-4">
               <div className="space-y-2">
-                {potentialDependencies.map(dep => (
-                  <div key={dep.id} className="flex items-center justify-between">
-                    <Label htmlFor={`dep-${dep.id}`} className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+                {potentialDependencies.map((dep) => (
+                  <div
+                    key={dep.id}
+                    className="flex items-center justify-between"
+                  >
+                    <Label
+                      htmlFor={`dep-${dep.id}`}
+                      className="flex cursor-pointer items-center gap-2 text-sm font-normal"
+                    >
                       <Checkbox
                         id={`dep-${dep.id}`}
                         checked={selectedDeps.has(dep.id)}
-                        onCheckedChange={(checked) => handleDependencyToggle(dep.id, !!checked)}
+                        onCheckedChange={(checked) =>
+                          handleDependencyToggle(dep.id, !!checked)
+                        }
                         aria-label={`Select dependency ${dep.title} (${dep.id})`}
                       />
-                      {dep.title} <span className="text-xs text-muted-foreground">({dep.id})</span>
+                      {dep.title}{' '}
+                      <span className="text-xs text-muted-foreground">
+                        ({dep.id})
+                      </span>
                     </Label>
                   </div>
                 ))}
@@ -94,9 +121,15 @@ export default function SelectDependenciesDialog({
 
         <DialogFooter>
           <DialogClose asChild>
-            <Button type="button" variant="outline">Cancel</Button>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
           </DialogClose>
-          <Button type="button" onClick={handleSaveClick} disabled={potentialDependencies.length === 0}>
+          <Button
+            type="button"
+            onClick={handleSaveClick}
+            disabled={potentialDependencies.length === 0}
+          >
             Save Dependencies ({selectedDeps.size})
           </Button>
         </DialogFooter>

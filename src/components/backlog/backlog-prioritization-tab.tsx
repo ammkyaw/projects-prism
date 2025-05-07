@@ -1,12 +1,18 @@
-
-"use client";
+'use client';
 
 import React, { useState, useEffect, useCallback } from 'react'; // Added React import
 import type { Task } from '@/types/sprint-data';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Info, Layers, Save } from 'lucide-react'; // Use Layers icon or similar
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from '@/hooks/use-toast';
 import { taskPriorities } from '@/types/sprint-data';
 import {
   DndContext,
@@ -59,23 +65,30 @@ function SortableItem({ task }: { task: Task }) {
       {...attributes}
       {...listeners}
       className={cn(
-        "p-3 border rounded-md bg-card mb-2 shadow-sm touch-none", // Added touch-none
-        "flex justify-between items-center",
-        isDragging ? "cursor-grabbing shadow-lg" : "cursor-grab"
+        'mb-2 touch-none rounded-md border bg-card p-3 shadow-sm', // Added touch-none
+        'flex items-center justify-between',
+        isDragging ? 'cursor-grabbing shadow-lg' : 'cursor-grab'
       )}
     >
-      <div className="flex-1 min-w-0">
-        <span className="font-medium truncate block">{task.backlogId}</span>
-        <span className="text-sm text-muted-foreground truncate block">{task.title || '(No Title)'}</span>
+      <div className="min-w-0 flex-1">
+        <span className="block truncate font-medium">{task.backlogId}</span>
+        <span className="block truncate text-sm text-muted-foreground">
+          {task.title || '(No Title)'}
+        </span>
       </div>
-      <span className="text-xs px-2 py-0.5 rounded-full border bg-muted text-muted-foreground ml-2">
+      <span className="ml-2 rounded-full border bg-muted px-2 py-0.5 text-xs text-muted-foreground">
         {task.priority || 'Medium'}
       </span>
     </div>
   );
 }
 
-export default function BacklogPrioritizationTab({ projectId, projectName, initialBacklog, onSaveBacklog }: BacklogPrioritizationTabProps) {
+export default function BacklogPrioritizationTab({
+  projectId,
+  projectName,
+  initialBacklog,
+  onSaveBacklog,
+}: BacklogPrioritizationTabProps) {
   const [backlogItems, setBacklogItems] = useState<Task[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const { toast } = useToast();
@@ -89,14 +102,14 @@ export default function BacklogPrioritizationTab({ projectId, projectName, initi
 
   // Initialize state when initialBacklog changes
   useEffect(() => {
-      // Sort initial backlog by priority first
-      const sortedInitial = (initialBacklog || []).slice().sort((a, b) => {
-          const prioA = taskPriorities.indexOf(a.priority || 'Medium');
-          const prioB = taskPriorities.indexOf(b.priority || 'Medium');
-          return prioA - prioB;
-      });
-      setBacklogItems(sortedInitial);
-      setHasUnsavedChanges(false); // Reset changes on initial load
+    // Sort initial backlog by priority first
+    const sortedInitial = (initialBacklog || []).slice().sort((a, b) => {
+      const prioA = taskPriorities.indexOf(a.priority || 'Medium');
+      const prioB = taskPriorities.indexOf(b.priority || 'Medium');
+      return prioA - prioB;
+    });
+    setBacklogItems(sortedInitial);
+    setHasUnsavedChanges(false); // Reset changes on initial load
   }, [initialBacklog]);
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -115,8 +128,11 @@ export default function BacklogPrioritizationTab({ projectId, projectName, initi
         const itemsPerPriority = Math.ceil(numItems / numPriorities);
 
         const prioritizedItems = newOrder.map((item, index) => {
-            const priorityIndex = Math.min(Math.floor(index / itemsPerPriority), numPriorities - 1);
-            return { ...item, priority: taskPriorities[priorityIndex] };
+          const priorityIndex = Math.min(
+            Math.floor(index / itemsPerPriority),
+            numPriorities - 1
+          );
+          return { ...item, priority: taskPriorities[priorityIndex] };
         });
 
         setHasUnsavedChanges(true); // Mark changes as unsaved
@@ -130,30 +146,41 @@ export default function BacklogPrioritizationTab({ projectId, projectName, initi
     // In this tab, we assume initialBacklog contains only the items to be prioritized
     onSaveBacklog(backlogItems);
     setHasUnsavedChanges(false);
-    toast({ title: "Success", description: "Backlog prioritization saved." });
+    toast({ title: 'Success', description: 'Backlog prioritization saved.' });
   };
 
   return (
     <Card>
       <CardHeader>
-        <div className="flex justify-between items-center">
+        <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="flex items-center gap-2"><Layers className="h-5 w-5 text-primary" /> Backlog Prioritization</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Layers className="h-5 w-5 text-primary" /> Backlog Prioritization
+            </CardTitle>
             <CardDescription>
-              Drag and drop backlog items to reorder them. Priority will be assigned automatically based on order (Highest at top, Lowest at bottom).
+              Drag and drop backlog items to reorder them. Priority will be
+              assigned automatically based on order (Highest at top, Lowest at
+              bottom).
             </CardDescription>
           </div>
-          <Button onClick={handleSavePrioritization} disabled={!hasUnsavedChanges}>
+          <Button
+            onClick={handleSavePrioritization}
+            disabled={!hasUnsavedChanges}
+          >
             <Save className="mr-2 h-4 w-4" /> Save Prioritization
           </Button>
         </div>
       </CardHeader>
       <CardContent>
         {backlogItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center min-h-[200px] border-dashed border-2 rounded-md p-6">
-            <Info className="h-8 w-8 text-muted-foreground mb-2" />
-            <p className="text-muted-foreground">No backlog items to prioritize.</p>
-            <p className="text-sm text-muted-foreground">Add items in the 'Management' tab.</p>
+          <div className="flex min-h-[200px] flex-col items-center justify-center rounded-md border-2 border-dashed p-6">
+            <Info className="mb-2 h-8 w-8 text-muted-foreground" />
+            <p className="text-muted-foreground">
+              No backlog items to prioritize.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Add items in the 'Management' tab.
+            </p>
           </div>
         ) : (
           <DndContext
@@ -162,11 +189,11 @@ export default function BacklogPrioritizationTab({ projectId, projectName, initi
             onDragEnd={handleDragEnd}
           >
             <SortableContext
-              items={backlogItems.map(item => item.id)} // Pass IDs for SortableContext
+              items={backlogItems.map((item) => item.id)} // Pass IDs for SortableContext
               strategy={verticalListSortingStrategy}
             >
               <div className="space-y-2">
-                {backlogItems.map(task => (
+                {backlogItems.map((task) => (
                   <SortableItem key={task.id} task={task} />
                 ))}
               </div>
@@ -175,8 +202,11 @@ export default function BacklogPrioritizationTab({ projectId, projectName, initi
         )}
       </CardContent>
       {backlogItems.length > 0 && (
-        <CardFooter className="border-t pt-4 flex justify-end">
-          <Button onClick={handleSavePrioritization} disabled={!hasUnsavedChanges}>
+        <CardFooter className="flex justify-end border-t pt-4">
+          <Button
+            onClick={handleSavePrioritization}
+            disabled={!hasUnsavedChanges}
+          >
             <Save className="mr-2 h-4 w-4" /> Save Prioritization
           </Button>
         </CardFooter>

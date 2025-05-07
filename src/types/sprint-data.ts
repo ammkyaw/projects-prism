@@ -38,9 +38,28 @@ export interface Team {
 }
 
 // Task Types for Backlog items
-export type TaskType = 'New Feature' | 'Improvement' | 'Bug' | 'Hotfix' | 'Refactoring' | 'Documentation' | 'Security' | 'Infra' | 'CI/CD' | 'Compliance';
+export type TaskType =
+  | 'New Feature'
+  | 'Improvement'
+  | 'Bug'
+  | 'Hotfix'
+  | 'Refactoring'
+  | 'Documentation'
+  | 'Security'
+  | 'Infra'
+  | 'CI/CD'
+  | 'Compliance';
 export const taskTypes: TaskType[] = [
-    'New Feature', 'Improvement', 'Bug', 'Hotfix', 'Refactoring', 'Documentation', 'Security', 'Infra', 'CI/CD', 'Compliance'
+  'New Feature',
+  'Improvement',
+  'Bug',
+  'Hotfix',
+  'Refactoring',
+  'Documentation',
+  'Security',
+  'Infra',
+  'CI/CD',
+  'Compliance',
 ];
 
 // Represents the status of a backlog item in history
@@ -60,7 +79,14 @@ export interface Task {
   bufferTime?: string | null;
   assignee?: string;
   reviewer?: string;
-  status?: 'To Do' | 'In Progress' | 'In Review' | 'QA' | 'Done' | 'Blocked' | null;
+  status?:
+    | 'To Do'
+    | 'In Progress'
+    | 'In Review'
+    | 'QA'
+    | 'Done'
+    | 'Blocked'
+    | null;
   startDate?: string | null;
   completedDate?: string | null;
   priority?: 'Highest' | 'High' | 'Medium' | 'Low' | 'Lowest';
@@ -85,7 +111,6 @@ export interface SprintPlanning {
   definitionOfDone: string;
   testingStrategy: string;
 }
-
 
 export interface SprintDetailItem {
   id: string;
@@ -115,13 +140,13 @@ export interface SprintData {
 }
 
 export interface Project {
-    id: string;
-    name: string;
-    sprintData: SprintData;
-    members: Member[];
-    holidayCalendars?: HolidayCalendar[];
-    teams?: Team[];
-    backlog?: Task[];
+  id: string;
+  name: string;
+  sprintData: SprintData;
+  members: Member[];
+  holidayCalendars?: HolidayCalendar[];
+  teams?: Team[];
+  backlog?: Task[];
 }
 
 export type AppData = Project[];
@@ -152,46 +177,63 @@ export const predefinedRoles = [
   'Product Owner',
 ];
 
-export const taskStatuses: Array<Task['status']> = ['To Do', 'In Progress', 'In Review', 'QA', 'Done', 'Blocked'];
+export const taskStatuses: Array<Task['status']> = [
+  'To Do',
+  'In Progress',
+  'In Review',
+  'QA',
+  'Done',
+  'Blocked',
+];
 
-export const taskPriorities: Array<Task['priority']> = ['Highest', 'High', 'Medium' , 'Low', 'Lowest'];
-
+export const taskPriorities: Array<Task['priority']> = [
+  'Highest',
+  'High',
+  'Medium',
+  'Low',
+  'Lowest',
+];
 
 export const initialTeam: Omit<Team, 'id'> = {
-    name: '',
-    members: [],
-    leadMemberId: null,
+  name: '',
+  members: [],
+  leadMemberId: null,
 };
 
 export const initialBacklogTask: Omit<Task, 'id'> = {
-    backlogId: '',
-    ticketNumber: '',
-    title: '',
-    description: '',
-    acceptanceCriteria: '',
-    storyPoints: null,
-    priority: 'Medium',
-    taskType: 'New Feature',
-    createdDate: '',
-    initiator: '',
-    dependsOn: [],
-    needsGrooming: false,
-    readyForSprint: false,
-    movedToSprint: null,
-    historyStatus: null,
-    splitFromId: null,
-    mergeEventId: null,
-    completedDate: null,
-    devEstimatedTime: null,
-    qaEstimatedTime: null,
-    bufferTime: null,
-    assignee: '',
-    reviewer: '',
-    status: null,
-    startDate: null,
+  backlogId: '',
+  ticketNumber: '',
+  title: '',
+  description: '',
+  acceptanceCriteria: '',
+  storyPoints: null,
+  priority: 'Medium',
+  taskType: 'New Feature',
+  createdDate: '',
+  initiator: '',
+  dependsOn: [],
+  needsGrooming: false,
+  readyForSprint: false,
+  movedToSprint: null,
+  historyStatus: null,
+  splitFromId: null,
+  mergeEventId: null,
+  completedDate: null,
+  devEstimatedTime: null,
+  qaEstimatedTime: null,
+  bufferTime: null,
+  assignee: '',
+  reviewer: '',
+  status: null,
+  startDate: null,
 };
 
-export type ToastFun = (props: { title: string; description?: string; variant?: 'default' | 'destructive', duration?: number }) => void;
+export type ToastFun = (props: {
+  title: string;
+  description?: string;
+  variant?: 'default' | 'destructive';
+  duration?: number;
+}) => void;
 
 export interface DailyProgressDataPoint {
   date: string; // Formatted date e.g., "MM/dd"
