@@ -88,11 +88,12 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
               >
                 {isCompleted ? <Check className="h-5 w-5" /> : index + 1}
               </div>
+              {/* Display index number instead of status name */}
               <span className={cn(
-                    "text-xs mt-1 text-center break-words w-[60px]", // Allow text wrapping
+                    "text-xs mt-1 text-center break-words w-[60px]",
                     isActive ? "text-primary font-medium" : "text-muted-foreground"
                )}>
-                {status}
+                 {index + 1}
               </span>
                {/* Decorative lines below node - keep simple */}
               <div className="mt-1 space-y-0.5">
