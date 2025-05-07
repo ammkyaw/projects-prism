@@ -174,7 +174,7 @@ export default function AnalyticsChartsTab({
         {/* Velocity Chart */}
         <Card className="h-[400px] lg:col-span-1">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
               <LineChart className="h-5 w-5 text-primary" /> Velocity Chart
             </CardTitle>
             <CardDescription>
@@ -198,7 +198,7 @@ export default function AnalyticsChartsTab({
         {/* Burndown Chart */}
         <Card className="h-[400px] lg:col-span-1">
           <CardHeader>
-            <CardTitle className="flex items-center justify-center gap-2">
+            <CardTitle className="flex items-center justify-center gap-2 text-base">
               <TrendingDown className="h-5 w-5 text-primary" /> Burndown Chart
             </CardTitle>
             <CardDescription className="text-center">
@@ -272,7 +272,7 @@ export default function AnalyticsChartsTab({
         {/* Bug Count Chart */}
         <Card className="h-[450px] lg:col-span-1">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
               <Bug className="h-5 w-5 text-destructive" /> Bug Count per Sprint
             </CardTitle>
             <CardDescription>

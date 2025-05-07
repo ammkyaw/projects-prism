@@ -411,7 +411,7 @@ export default function DashboardTab({
 
       <Card className="h-[350px] lg:col-span-1">
         <CardHeader>
-          <CardTitle className="flex items-center justify-center gap-2">
+          <CardTitle className="flex items-center justify-center gap-2 text-base">
             <TrendingDown className="h-5 w-5 text-primary" /> Burndown Chart
           </CardTitle>
           <CardDescription className="text-center">
@@ -425,7 +425,7 @@ export default function DashboardTab({
 
       <Card className="h-[350px] lg:col-span-1">
         <CardHeader>
-          <CardTitle className="flex items-center justify-center gap-2">
+          <CardTitle className="flex items-center justify-center gap-2 text-base">
             <BarChartBig className="h-5 w-5 text-primary" /> Daily Progress
           </CardTitle>
           <CardDescription className="text-center">
@@ -446,7 +446,7 @@ export default function DashboardTab({
 
       <Card className="h-[350px] lg:col-span-2">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-base">
             <LineChart className="h-5 w-5 text-primary" /> Project Velocity
           </CardTitle>
           <CardDescription>
