@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Added useRef, React
@@ -420,7 +419,7 @@ export default function Home() {
 
     if (!mainConfig) return null; // Should not happen if activeTab is valid
 
-    let ActiveComponent;
+    let ActiveComponent: React.ElementType | undefined;
     let componentProps: any = { // Base props for all components
         projectId: selectedProject.id,
         projectName: selectedProject.name,
@@ -522,7 +521,7 @@ export default function Home() {
                  };
                  break;
             default:
-                ActiveComponent = () => <div>Unknown Tab</div>;
+                ActiveComponent = () => <div>Unknown Tab</div>; // Fallback if a specific case isn't matched but subConfig exists
                 componentProps = {};
                 break;
         }
@@ -535,6 +534,10 @@ export default function Home() {
         // Add props for other main tabs if needed
     }
 
+    if (!ActiveComponent) {
+      console.error(`Error: ActiveComponent is undefined for tab: ${activeTab}. MainKey: ${mainKey}, SubKey: ${subKey}`);
+      return <div>Error: Tab component not found. Please check configuration.</div>;
+    }
 
     return <ActiveComponent {...componentProps} />;
   };
@@ -738,4 +741,3 @@ export default function Home() {
   );
 
 }
-
