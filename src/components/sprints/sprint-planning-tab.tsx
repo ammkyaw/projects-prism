@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -11,23 +10,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info, PackagePlus, CheckCircle, Undo, View, User, Users, CheckSquare } from 'lucide-react'; // Added CheckSquare
-import type { Sprint, SprintPlanning, Task, Member, SprintStatus, HolidayCalendar, Team } from '@/types/sprint-data'; // Added HolidayCalendar, Team
-import { initialSprintPlanning, taskStatuses, predefinedRoles, taskPriorities } from '@/types/sprint-data'; // Added taskPriorities
+import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info, PackagePlus, CheckCircle, Undo, View, User, Users, CheckSquare } from 'lucide-react'; 
+import type { Sprint, SprintPlanning, Task, Member, SprintStatus, HolidayCalendar, Team } from '@/types/sprint-data'; 
+import { initialSprintPlanning, taskStatuses, predefinedRoles, taskPriorities } from '@/types/sprint-data'; 
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isValid, differenceInDays, getDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import SprintTimelineChart from '@/components/charts/sprint-timeline-chart';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"; // Added Dialog components
-import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox
-import { ScrollArea } from '@/components/ui/scroll-area'; // Added ScrollArea
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Updated import
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"; 
+import { Checkbox } from '@/components/ui/checkbox'; 
+import { ScrollArea } from '@/components/ui/scroll-area'; 
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; 
 
 const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
 
-// Helper to calculate working days and end date
 const calculateSprintMetrics = (startDateStr: string, duration: string): { totalDays: number, endDate: string } => {
     let totalDays = 0;
     let calendarDaysToAdd = 0;
@@ -54,7 +52,6 @@ const calculateSprintMetrics = (startDateStr: string, duration: string): { total
     }
 };
 
-// Helper function to parse estimated time string (e.g., "2d", "1w 3d") into days
 const parseEstimatedTimeToDays = (timeString: string | undefined | null): number | null => {
   if (!timeString) return null;
   timeString = timeString.trim().toLowerCase();
@@ -62,7 +59,6 @@ const parseEstimatedTimeToDays = (timeString: string | undefined | null): number
 
   const parts = timeString.match(/(\d+w)?\s*(\d+d)?/);
   if (!parts || (parts[1] === undefined && parts[2] === undefined)) {
-      // Try parsing as just days if no 'w' or 'd' found
       const simpleDays = parseInt(timeString, 10);
       if (!isNaN(simpleDays) && simpleDays >= 0) {
           return simpleDays;
@@ -76,7 +72,7 @@ const parseEstimatedTimeToDays = (timeString: string | undefined | null): number
   if (weekPart) {
     const weeks = parseInt(weekPart.replace('w', ''), 10);
     if (!isNaN(weeks)) {
-      totalDays += weeks * 5; // Assuming 5 working days per week
+      totalDays += weeks * 5; 
     }
   }
 
@@ -87,7 +83,6 @@ const parseEstimatedTimeToDays = (timeString: string | undefined | null): number
     }
   }
 
-  // Handle case where only a number is entered (treat as days)
   if (totalDays === 0 && /^\d+$/.test(timeString)) {
        const simpleDays = parseInt(timeString, 10);
        if (!isNaN(simpleDays) && simpleDays >= 0) {
@@ -95,22 +90,22 @@ const parseEstimatedTimeToDays = (timeString: string | undefined | null): number
        }
   }
 
-  return totalDays >= 0 ? totalDays : null; // Allow 0 days
+  return totalDays >= 0 ? totalDays : (timeString === '0' || timeString === '0d' ? 0 : null); 
 };
 
 
 interface SprintPlanningTabProps {
-  projectId: string; // Added projectId
+  projectId: string; 
   sprints: Sprint[];
   onSavePlanning: (sprintNumber: number, data: SprintPlanning, newStatus?: SprintStatus) => void;
   onCreateAndPlanSprint: (sprintDetails: Omit<Sprint, 'details' | 'planning' | 'status' | 'committedPoints' | 'completedPoints'>, planningData: SprintPlanning) => void;
   projectName: string;
   members: Member[];
-  holidayCalendars: HolidayCalendar[]; // Add holiday calendars prop
-  teams: Team[]; // Add teams prop
-  backlog: Task[]; // Add backlog prop
-  onRevertTask: (sprintNumber: number, taskId: string, taskBacklogId: string | null) => void; // Add revert callback
-  onCompleteSprint: (sprintNumber: number) => void; // Add complete callback
+  holidayCalendars: HolidayCalendar[]; 
+  teams: Team[]; 
+  backlog: Task[]; 
+  onRevertTask: (sprintNumber: number, taskId: string, taskBacklogId: string | null) => void; 
+  onCompleteSprint: (sprintNumber: number, latestPlanning: SprintPlanning) => void;
 }
 
 interface TaskRow extends Task {
@@ -127,19 +122,18 @@ interface NewSprintFormState {
 const createEmptyTaskRow = (): TaskRow => ({
   _internalId: `task_${Date.now()}_${Math.random()}`,
   id: '',
-  ticketNumber: '', // Changed from description
-  backlogId: '', // Initialize backlogId
+  ticketNumber: '', 
+  backlogId: '', 
   storyPoints: '',
-  devEstimatedTime: '', // Renamed
-  qaEstimatedTime: '2d', // Default QA time
-  bufferTime: '1d', // Default buffer time
+  devEstimatedTime: '', 
+  qaEstimatedTime: '2d', 
+  bufferTime: '1d', 
   assignee: '',
-  reviewer: '', // Added reviewer
+  reviewer: '', 
   status: 'To Do',
   startDate: null,
   startDateObj: null,
-  completedDate: null, // Initialize completedDate
-  // Ensure other fields possibly used by TaskRow are initialized
+  completedDate: null, 
   title: '',
   description: '',
   acceptanceCriteria: '',
@@ -164,15 +158,14 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
   const [spilloverTasks, setSpilloverTasks] = useState<TaskRow[]>([]);
   const [isCreatingNewSprint, setIsCreatingNewSprint] = useState(false);
   const [newSprintForm, setNewSprintForm] = useState<NewSprintFormState>({ sprintNumber: '', startDate: null, duration: '' });
-  const [isBacklogDialogOpen, setIsBacklogDialogOpen] = useState(false); // State for backlog dialog
-  const [selectedBacklogIds, setSelectedBacklogIds] = useState<Set<string>>(new Set()); // State for selected backlog item IDs
-  const [timelineViewMode, setTimelineViewMode] = useState<'task' | 'assignee'>('task'); // State for timeline view
+  const [isBacklogDialogOpen, setIsBacklogDialogOpen] = useState(false); 
+  const [selectedBacklogIds, setSelectedBacklogIds] = useState<Set<string>>(new Set()); 
+  const [timelineViewMode, setTimelineViewMode] = useState<'task' | 'assignee'>('task'); 
   const [isCompleteTaskDialogOpen, setIsCompleteTaskDialogOpen] = useState(false);
   const [completingTaskInfo, setCompletingTaskInfo] = useState<{ task: TaskRow | null; taskType: 'new' | 'spillover' | null }>({ task: null, taskType: null });
   const [selectedCompletedDate, setSelectedCompletedDate] = useState<Date | undefined>(new Date());
   const { toast } = useToast();
 
-  // Filter out completed sprints for selection
   const availableSprints = useMemo(() => {
       return sprints.filter(s => s.status !== 'Completed').sort((a, b) => a.sprintNumber - b.sprintNumber);
   }, [sprints]);
@@ -182,15 +175,13 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
   const isSprintActive = selectedSprint?.status === 'Active';
   const isSprintPlanned = selectedSprint?.status === 'Planned';
 
-  // Determine if the current form should be disabled
-  const isFormDisabled = isSprintCompleted; // Can edit active sprint, but completed is read-only
+  const isFormDisabled = isSprintCompleted; 
 
-   // Calculate sprint planning limits status
    const sprintLimits = useMemo(() => {
        const numPlanned = sprints.filter(s => s.status === 'Planned').length;
        const numActive = sprints.filter(s => s.status === 'Active').length;
        const canPlanNew = !(numPlanned >= 2 || (numPlanned >= 1 && numActive >= 1));
-       const canStartNew = numActive === 0; // Only allow starting if none are active
+       const canStartNew = numActive === 0; 
        return { numPlanned, numActive, canPlanNew, canStartNew };
    }, [sprints]);
 
@@ -208,7 +199,6 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
       return selectedSprint?.endDate;
   }, [isCreatingNewSprint, newSprintForm.startDate, newSprintForm.duration, selectedSprint]);
 
-   // Prepare tasks for the chart (only those with valid start date and estimates)
    const tasksForChart: Task[] = useMemo(() => {
        const allTaskRows = [...newTasks, ...spilloverTasks];
 
@@ -313,7 +303,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
             setSelectedSprintNumber(sprintNum);
           } else if (sprintToSelect && sprintToSelect.status === 'Completed') {
             toast({ title: "Sprint Completed", description: "This sprint is completed and cannot be planned."});
-            setSelectedSprintNumber(null); // Do not select if completed
+            setSelectedSprintNumber(null); 
           } else {
             setSelectedSprintNumber(null);
           }
@@ -390,7 +380,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
   const handleTaskInputChange = (
     type: 'new' | 'spillover',
     internalId: string,
-    field: keyof Omit<Task, 'id' | 'completedDate'>, // Exclude completedDate from direct input
+    field: keyof Omit<Task, 'id' | 'completedDate'>, 
     value: string | number | undefined
   ) => {
      if (isFormDisabled && !isCreatingNewSprint) return; 
@@ -420,7 +410,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
   const handleTaskDateChange = (
     type: 'new' | 'spillover',
     internalId: string,
-    field: 'startDate', // Only allow direct change for startDate
+    field: 'startDate', 
     date: Date | undefined
   ) => {
       if (isFormDisabled && !isCreatingNewSprint) return; 
@@ -496,7 +486,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
    };
 
 
-  const finalizeTasks = (taskRows: TaskRow[], taskType: 'new' | 'spillover'): { tasks: Task[], errors: string[] } => {
+  const _finalizeTasks = (taskRows: TaskRow[], taskType: 'new' | 'spillover'): { tasks: Task[], errors: string[] } => {
       const finalTasks: Task[] = [];
       const errors: string[] = [];
       taskRows.forEach((row, index) => {
@@ -513,15 +503,24 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
 
           const ticketNumber = row.ticketNumber?.trim();
           const storyPointsRaw = row.storyPoints?.toString().trim();
-          const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : undefined; // Changed null to undefined
-          const devEstimatedTime = row.devEstimatedTime?.trim() || null; // Changed undefined to null
+          let storyPoints: number | null = null; 
+            if (storyPointsRaw) {
+                const parsed = parseInt(storyPointsRaw, 10);
+                if (!isNaN(parsed) && parsed >= 0) {
+                    storyPoints = parsed;
+                } else {
+                    errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
+                }
+            }
+
+          const devEstimatedTime = row.devEstimatedTime?.trim() || null; 
           const qaEstimatedTime = row.qaEstimatedTime?.trim() || '2d'; 
           const bufferTime = row.bufferTime?.trim() || '1d'; 
-          const assignee = row.assignee?.trim() || ''; // Changed undefined to empty string
-          const reviewer = row.reviewer?.trim() || ''; // Changed undefined to empty string
+          const assignee = row.assignee?.trim() || ''; 
+          const reviewer = row.reviewer?.trim() || ''; 
           const status = row.status?.trim() as Task['status'];
           const startDate = row.startDate;
-          const completedDate = row.completedDate; // Include completedDate
+          const completedDate = row.completedDate; 
           const title = row.title?.trim(); 
           const description = row.description?.trim(); 
           const priority = row.priority; 
@@ -529,9 +528,6 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
           if (!ticketNumber) errors.push(`${taskPrefix}: Ticket # is required.`);
           if (!startDate) errors.push(`${taskPrefix}: Start Date is required for timeline.`);
 
-          if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
-               errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
-          }
            if (devEstimatedTime && parseEstimatedTimeToDays(devEstimatedTime) === null) {
                 errors.push(`${taskPrefix}: Invalid Dev Est. Time. Use formats like '2d', '1w 3d', '5'.`);
            }
@@ -547,6 +543,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
            if (startDate && !isValid(parseISO(startDate))) errors.push(`${taskPrefix}: Invalid Start Date format (YYYY-MM-DD).`);
            if (completedDate && !isValid(parseISO(completedDate))) errors.push(`${taskPrefix}: Invalid Completed Date format (YYYY-MM-DD).`);
 
+          if (errors.length > 0) return; 
 
           finalTasks.push({
               id: row.id || `task_${selectedSprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
@@ -566,7 +563,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
               priority: priority,
               acceptanceCriteria: row.acceptanceCriteria,
               dependsOn: row.dependsOn,
-              taskType: row.taskType,
+              taskType: task.taskType,
               createdDate: row.createdDate,
               initiator: row.initiator,
               needsGrooming: row.needsGrooming,
@@ -590,8 +587,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
          return;
      }
 
-     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks, 'new');
-     const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks, 'spillover');
+     const { tasks: finalNewTasks, errors: newErrors } = _finalizeTasks(newTasks, 'new');
+     const { tasks: finalSpilloverTasks, errors: spillErrors } = _finalizeTasks(spilloverTasks, 'spillover');
      const allErrors = [...newErrors, ...spillErrors];
 
      if (allErrors.length > 0) {
@@ -633,8 +630,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
       if (!startDateStr || !isValid(parseISO(startDateStr))) formErrors.push("Valid Start Date is required.");
       if (!duration || !DURATION_OPTIONS.includes(duration)) formErrors.push("Valid Duration is required.");
 
-      const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks, 'new');
-      const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks, 'spillover');
+      const { tasks: finalNewTasks, errors: newErrors } = _finalizeTasks(newTasks, 'new');
+      const { tasks: finalSpilloverTasks, errors: spillErrors } = _finalizeTasks(spilloverTasks, 'spillover');
       const taskErrors = [...newErrors, ...spillErrors];
 
       if (formErrors.length > 0 || taskErrors.length > 0) {
@@ -679,8 +676,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
            return;
        }
 
-       const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(newTasks, 'new');
-       const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(spilloverTasks, 'spillover');
+       const { tasks: finalNewTasks, errors: newErrors } = _finalizeTasks(newTasks, 'new');
+       const { tasks: finalSpilloverTasks, errors: spillErrors } = _finalizeTasks(spilloverTasks, 'spillover');
        const allErrors = [...newErrors, ...spillErrors];
 
        if (allErrors.length > 0) {
@@ -701,19 +698,24 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
 
    const handleCompleteSprintClick = () => {
       if (!selectedSprintNumber || !isSprintActive) return;
-      onCompleteSprint(selectedSprintNumber);
+       const latestPlanningData: SprintPlanning = {
+           goal: planningData.goal.trim(),
+           newTasks: newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0 })), // ensure storyPoints is number
+           spilloverTasks: spilloverTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0})),
+           definitionOfDone: planningData.definitionOfDone.trim(),
+           testingStrategy: planningData.testingStrategy.trim(),
+       };
+      onCompleteSprint(selectedSprintNumber, latestPlanningData);
        setSelectedSprintNumber(null);
        resetForms();
    };
 
-  // Handler for opening the "Complete Task" dialog
   const handleOpenCompleteTaskDialog = (task: TaskRow, taskType: 'new' | 'spillover') => {
     setCompletingTaskInfo({ task, taskType });
     setSelectedCompletedDate(task.completedDate ? parseDateString(task.completedDate) : new Date());
     setIsCompleteTaskDialogOpen(true);
   };
 
-  // Handler for confirming task completion
   const handleConfirmCompleteTask = () => {
     const { task, taskType } = completingTaskInfo;
     if (!task || !taskType || !selectedCompletedDate) return;
@@ -788,8 +790,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
 
    const renderTaskTable = (type: 'new' | 'spillover', taskRows: TaskRow[], disabled: boolean) => (
       <div className="overflow-x-auto"> 
-         <div className="min-w-[1350px] space-y-4"> {/* Increased min-width for actions */}
-            <div className="hidden md:grid grid-cols-[100px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] gap-x-2 items-center pb-2 border-b"> {/* Added Actions Header */}
+         <div className="min-w-[1350px] space-y-4"> 
+            <div className="hidden md:grid grid-cols-[100px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] gap-x-2 items-center pb-2 border-b"> 
                 <Label className="text-xs font-medium text-muted-foreground">Ticket #*</Label>
                 <Label className="text-xs font-medium text-muted-foreground">Backlog ID</Label> 
                 <Label className="text-xs font-medium text-muted-foreground text-right">Story Pts</Label>
@@ -800,7 +802,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                 <Label className="text-xs font-medium text-muted-foreground">Reviewer</Label>
                 <Label className="text-xs font-medium text-muted-foreground">Status</Label>
                 <Label className="text-xs font-medium text-muted-foreground text-center">Start Date*</Label>
-                <Label className="text-xs font-medium text-muted-foreground text-center">Actions</Label> {/* New Header */}
+                <Label className="text-xs font-medium text-muted-foreground text-center">Actions</Label> 
                 <div />
             </div>
             <div className="space-y-4 md:space-y-2">
@@ -933,7 +935,6 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                         <Label htmlFor={`startDate-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Start Date*</Label>
                         {renderDatePicker(type, row, 'startDate', disabled)}
                      </div>
-                      {/* Actions cell for Complete Task */}
                       <div className="md:col-span-1 col-span-1 flex items-center justify-center">
                          <Button
                              type="button"
@@ -1310,7 +1311,6 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
           </Card>
         )}
 
-      {/* Complete Task Dialog */}
       <AlertDialog open={isCompleteTaskDialogOpen} onOpenChange={setIsCompleteTaskDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1354,4 +1354,3 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
     </div>
   );
 }
-

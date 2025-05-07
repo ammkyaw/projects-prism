@@ -27,7 +27,6 @@ export interface Member {
 // Represents a member linked within a team, potentially with a specific role in that team
 export interface TeamMember {
   memberId: string; // Corresponds to the Member's id
-  // teamRole?: string; // Optional: Role specific to this team (e.g., Lead) - Future enhancement
 }
 
 // Represents a team within a project
@@ -49,98 +48,90 @@ export type HistoryStatus = 'Move' | 'Split' | 'Merge';
 
 // Represents a single task within a sprint plan or backlog
 export interface Task {
-  id: string; // Unique ID for the task item
-  backlogId?: string | ''; // Allow empty string for manual input
-  ticketNumber?: string | null; // Primary identifier for tasks *within* a sprint (e.g., JIRA key), can be same as backlogId initially
-  title?: string; // Optional: A more descriptive title for the task
-  description?: string; // Optional: Detailed description of the task
-  acceptanceCriteria?: string; // Optional: Acceptance criteria for the task
-  storyPoints?: number | string | null; // Can be number or empty string from input
-  devEstimatedTime?: string | null; // Optional: e.g., "2d", "4h", "1w 2d"
-  qaEstimatedTime?: string | null; // Optional: Defaults to "2d"
-  bufferTime?: string | null; // Optional: Defaults to "1d"
-  assignee?: string; // Optional: Stores the Member's name
-  reviewer?: string; // Optional: Stores the Member's name for review
-  status?: 'To Do' | 'In Progress' | 'In Review' | 'QA' | 'Done' | 'Blocked'; // Status applicable *within* a sprint or backlog
-  startDate?: string | null; // Optional: YYYY-MM-DD for Gantt chart (only relevant when planned in sprint)
-  completedDate?: string | null; // Optional: YYYY-MM-DD when the task was marked as Done
-  priority?: 'Highest' | 'High' | 'Medium' | 'Low' | 'Lowest'; // Optional: Priority level
-  dependsOn?: string[]; // Optional: Array of Backlog IDs this task depends on
-  // --- Backlog Specific Fields ---
-  taskType?: TaskType; // Type of task/work item
-  createdDate?: string; // YYYY-MM-DD, when the item was added to the backlog
-  initiator?: string; // Name or ID of the person who added the item
-  needsGrooming?: boolean; // Flag to indicate if item needs refinement
-  readyForSprint?: boolean; // Flag to indicate if item is ready to be pulled into a sprint
-  // --- History Tracking ---
-  movedToSprint?: number | null; // Optional: The sprint number this backlog item was moved to.
-  historyStatus?: HistoryStatus | null; // Optional: Status indicating how the item moved to history (Move, Split, Merge).
-  splitFromId?: string | null; // Optional: ID of the original task this was split from.
-  mergeEventId?: string | null; // Optional: An ID linking items involved in the same merge event.
-  // Legacy fields - keep if needed for migration or detail view, but planning uses new fields
-  devTime?: string; // Legacy, replaced by devEstimatedTime
+  id: string; 
+  backlogId?: string | ''; 
+  ticketNumber?: string | null; 
+  title?: string; 
+  description?: string; 
+  acceptanceCriteria?: string; 
+  storyPoints?: number | string | null; 
+  devEstimatedTime?: string | null; 
+  qaEstimatedTime?: string | null; 
+  bufferTime?: string | null; 
+  assignee?: string; 
+  reviewer?: string; 
+  status?: 'To Do' | 'In Progress' | 'In Review' | 'QA' | 'Done' | 'Blocked'; 
+  startDate?: string | null; 
+  completedDate?: string | null; 
+  priority?: 'Highest' | 'High' | 'Medium' | 'Low' | 'Lowest'; 
+  dependsOn?: string[]; 
+  taskType?: TaskType; 
+  createdDate?: string; 
+  initiator?: string; 
+  needsGrooming?: boolean; 
+  readyForSprint?: boolean; 
+  movedToSprint?: number | null; 
+  historyStatus?: HistoryStatus | null; 
+  splitFromId?: string | null; 
+  mergeEventId?: string | null; 
+  devTime?: string; 
 }
 
 // Represents the planning data for a single sprint
 export interface SprintPlanning {
   goal: string;
-  newTasks: Task[]; // Tasks newly planned for this sprint (can come from backlog)
-  spilloverTasks: Task[]; // Tasks carried over from the previous sprint
+  newTasks: Task[]; 
+  spilloverTasks: Task[]; 
   definitionOfDone: string;
   testingStrategy: string;
 }
 
 
 export interface SprintDetailItem {
-  id: string; // Unique ID for the detail item (legacy)
+  id: string; 
   ticketNumber: string;
-  developer: string; // Stores the Member's name
+  developer: string; 
   storyPoints: number;
-  devTime: string; // e.g., "2d", "4h", "1w" // Kept for legacy details
+  devTime: string; 
 }
 
 export interface Sprint {
   sprintNumber: number;
-  committedPoints: number; // Sum of story points from newTasks + spilloverTasks at sprint start? Or manually set?
-  completedPoints: number; // Sum of story points of tasks marked 'Done' at sprint end
-  totalDays: number; // Derived from duration (working days)
-  startDate: string; // YYYY-MM-DD format
-  endDate: string; // YYYY-MM-DD format, derived from startDate and duration
-  duration: string; // e.g., "1 Week", "2 Weeks"
-  status: SprintStatus; // Added sprint status
-  details?: SprintDetailItem[]; // Optional array for detailed ticket info (LEGACY - prefer planning.tasks)
-  planning?: SprintPlanning; // Optional object for planning details (tasks, goal, DoD etc.)
+  committedPoints: number; 
+  completedPoints: number; 
+  totalDays: number; 
+  startDate: string; 
+  endDate: string; 
+  duration: string; 
+  status: SprintStatus; 
+  details?: SprintDetailItem[]; 
+  planning?: SprintPlanning; 
 }
 
-// Represents the data specific to a single sprint cycle within a project
 export interface SprintData {
-  sprints: Sprint[]; // Array of sprint objects for this project
-  totalStoryPoints: number; // Sum of completedPoints across all completed sprints in this project
-  daysInSprint: number; // Max totalDays across all sprints in this project (might be less relevant now)
+  sprints: Sprint[]; 
+  totalStoryPoints: number; 
+  daysInSprint: number; 
 }
 
-// Represents a single project containing its own sprint data, members, and backlog
 export interface Project {
-    id: string; // Unique identifier for the project (e.g., UUID or timestamp-based)
+    id: string; 
     name: string;
     sprintData: SprintData;
-    members: Member[]; // Array of team members associated with the project
-    holidayCalendars?: HolidayCalendar[]; // Optional: Array of holiday calendars specific to this project
-    teams?: Team[]; // Optional: Array of teams within the project
-    backlog?: Task[]; // Array of tasks not yet assigned to a sprint (the backlog)
+    members: Member[]; 
+    holidayCalendars?: HolidayCalendar[]; 
+    teams?: Team[]; 
+    backlog?: Task[]; 
 }
 
-// The top-level data structure stored will be an array of Project objects
 export type AppData = Project[];
 
-// Initial empty state for SprintData within a new project
 export const initialSprintData: SprintData = {
   sprints: [],
   totalStoryPoints: 0,
   daysInSprint: 0,
 };
 
-// Initial empty state for SprintPlanning within a sprint
 export const initialSprintPlanning: SprintPlanning = {
   goal: '',
   newTasks: [],
@@ -149,7 +140,6 @@ export const initialSprintPlanning: SprintPlanning = {
   testingStrategy: '',
 };
 
-// Predefined roles for team members
 export const predefinedRoles = [
   'Project Manager',
   'Business Analyst',
@@ -162,46 +152,43 @@ export const predefinedRoles = [
   'Product Owner',
 ];
 
-// Predefined Task Statuses - applicable IN a sprint
-export const taskStatuses: Array<Task['status']> = ['To Do', 'In Progress', 'In Review', 'QA', 'Done', 'Blocked']; // Removed Backlog
+export const taskStatuses: Array<Task['status']> = ['To Do', 'In Progress', 'In Review', 'QA', 'Done', 'Blocked']; 
 
-// Predefined Task Priorities
-export const taskPriorities: Array<Task['priority']> = ['Highest', 'High', 'Medium', 'Low', 'Lowest'];
+export const taskPriorities: Array<Task['priority']> = ['Highest', 'High', 'Medium' | null, 'Low', 'Lowest'];
 
 
-// Initial empty state for a new Team
 export const initialTeam: Omit<Team, 'id'> = {
     name: '',
     members: [],
     leadMemberId: null,
 };
 
-// Initial empty state for a new Task in the backlog
-// Note: 'status' is implicitly 'Backlog' when an item is in the backlog array.
 export const initialBacklogTask: Omit<Task, 'id'> = {
-    backlogId: '', // Allow manual entry
+    backlogId: '', 
     ticketNumber: '',
     title: '',
     description: '',
-    acceptanceCriteria: '', // Initialize acceptance criteria
+    acceptanceCriteria: '', 
     storyPoints: null,
     priority: 'Medium',
-    taskType: 'New Feature', // Default task type
-    createdDate: '', // Will be set on creation
-    initiator: '', // Will be set (maybe manually for now)
+    taskType: 'New Feature', 
+    createdDate: '', 
+    initiator: '', 
     dependsOn: [],
-    needsGrooming: false, // Default new items to NOT need grooming
+    needsGrooming: false, 
     readyForSprint: false,
-    movedToSprint: null, // Initialize as not moved
-    historyStatus: null, // Initialize history status
-    splitFromId: null, // Initialize split tracking
-    mergeEventId: null, // Initialize merge tracking
-    completedDate: null, // Initialize completed date
-    // Fields typically set during sprint planning:
+    movedToSprint: null, 
+    historyStatus: null, 
+    splitFromId: null, 
+    mergeEventId: null, 
+    completedDate: null, 
     devEstimatedTime: null,
-    qaEstimatedTime: null, // Don't default these in backlog
+    qaEstimatedTime: null, 
     bufferTime: null,
     assignee: '',
     reviewer: '',
+    status: null, 
     startDate: null,
 };
+
+export type ToastFun = (props: { title: string; description?: string; variant?: 'default' | 'destructive', duration?: number }) => void;
