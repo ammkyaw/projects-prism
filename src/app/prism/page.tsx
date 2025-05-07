@@ -26,17 +26,16 @@ import BacklogPrioritizationTab from '@/components/backlog/backlog-prioritizatio
 import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
 import HistoryTab from '@/components/backlog/history-tab'; // Import HistoryTab component
 
-// Teams Sub-tab Components
+// Settings Sub-tab Components (Moved from Teams)
 import MembersTab from '@/components/teams/members-tab'; // Updated path
 import TeamsTab from '@/components/teams/teams-tab'; // Updated path
+import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
 import AddMembersDialog from '@/components/add-members-dialog';
 
 // Analytics Sub-Tab Components
 import AnalyticsChartsTab from '@/components/analytics-charts-tab';
 import AnalyticsReportsTab from '@/components/analytics/analytics-reports-tab'; // Updated path
 
-// Settings Sub-tab Components
-import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
 
 import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember, HistoryStatus, ToastFun } from '@/types/sprint-data'; // Added HistoryStatus, ToastFun
 import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam, initialBacklogTask, taskPriorities } from '@/types/sprint-data'; // Import taskPriorities
@@ -124,8 +123,7 @@ export default function Home() {
       sprints: 'summary',
       backlog: 'management',
       analytics: 'charts',
-      teams: 'members',
-      settings: 'holidays',
+      settings: 'members', // Default to 'members' under settings now
   };
 
   // Update activeTab logic for main tabs
@@ -137,9 +135,6 @@ export default function Home() {
          setActiveTab(`${mainTabKey}/${defaultSub}`);
       }
   };
-
-  // Get the active main tab key from the combined state
-  const activeMainTab = useMemo(() => activeTab.split('/')[0], [activeTab]);
 
    // Helper function to update project data via mutation
    const updateProjectData = useCallback((updatedProject: Project) => {
@@ -391,7 +386,7 @@ export default function Home() {
           label: "Backlog", icon: Layers, subTabs: {
               management: { label: "Management", icon: Package, component: BacklogTab },
               grooming: { label: "Grooming", icon: Edit, component: BacklogGroomingTab },
-              history: { label: "History", icon: History, component: HistoryTab }, // Added History Sub-Tab
+              history: { label: "History", icon: History, component: HistoryTab },
           }
       },
       analytics: {
@@ -400,14 +395,10 @@ export default function Home() {
               reports: { label: "Reports", icon: ListPlus, component: AnalyticsReportsTab },
           }
       },
-      teams: {
-          label: "Team Directory", icon: Users, subTabs: {
-              members: { label: "Members", icon: Users, component: MembersTab },
-              teams: { label: "Teams", icon: UsersRound, component: TeamsTab },
-          }
-      },
       settings: {
           label: "Settings", icon: Settings, subTabs: {
+              members: { label: "Members", icon: Users, component: MembersTab },
+              teams: { label: "Teams", icon: UsersRound, component: TeamsTab },
               holidays: { label: "Holidays", icon: CalendarDays, component: HolidaysTab },
           }
       },
@@ -534,10 +525,12 @@ export default function Home() {
             case 'backlog/grooming':
                 componentProps = {
                      ...componentProps,
-                     initialBacklog: selectedProject.backlog ?? [], // Pass full backlog
-                      // Grooming usually modifies existing items, requires saving the whole project
+                     initialBacklog: selectedProject.backlog?.filter(task => !task.historyStatus) ?? [], // Pass only non-historical items to grooming
                       onSaveBacklog: (groomedBacklog: Task[]) => {
-                           const updatedProject: Project = { ...selectedProject, backlog: groomedBacklog };
+                           // Combine groomed items with historical items before saving
+                           const historicalItems = (selectedProject.backlog ?? []).filter(task => task.historyStatus);
+                           const fullBacklog = [...groomedBacklog, ...historicalItems];
+                           const updatedProject: Project = { ...selectedProject, backlog: fullBacklog };
                            updateProjectData(updatedProject);
                            toast({ title: "Backlog Groomed", description: "Changes saved." });
                       },
@@ -548,7 +541,7 @@ export default function Home() {
                      allProjectBacklogItems: selectedProject.backlog ?? [], // Pass all items for uniqueness check
                  };
                 break;
-             case 'backlog/history': // Updated sub-tab path
+             case 'backlog/history':
                 componentProps = {
                     ...componentProps,
                     historyItems: selectedProject.backlog?.filter(task => !!task.historyStatus) ?? [], // Pass items with history status
@@ -561,7 +554,7 @@ export default function Home() {
             case 'analytics/reports':
                  componentProps = { ...componentProps, sprintData: selectedProject.sprintData };
                  break;
-            case 'teams/members':
+            case 'settings/members': // Updated path
                 componentProps = {
                     ...componentProps,
                     initialMembers: selectedProject.members ?? [],
@@ -569,7 +562,7 @@ export default function Home() {
                     holidayCalendars: selectedProject.holidayCalendars ?? [],
                  };
                 break;
-            case 'teams/teams':
+            case 'settings/teams': // Updated path
                  componentProps = {
                     ...componentProps,
                     initialTeams: selectedProject.teams ?? [],
@@ -577,7 +570,7 @@ export default function Home() {
                     onSaveTeams: handleSaveTeams,
                  };
                  break;
-            case 'settings/holidays':
+            case 'settings/holidays': // Updated path
                  componentProps = {
                     ...componentProps,
                     initialCalendars: selectedProject.holidayCalendars ?? [],
@@ -758,8 +751,8 @@ export default function Home() {
              </Card>
          ) : (
              <Tabs value={activeMainTab} onValueChange={handleMainTabChange} className="w-full">
-                {/* Main Tabs List - Updated grid cols (now 6 main tabs) */}
-               <TabsList className="grid w-full grid-cols-6 mb-6">
+                {/* Main Tabs List - Updated grid cols (now 5 main tabs) */}
+               <TabsList className="grid w-full grid-cols-5 mb-6">
                  {Object.entries(tabsConfig).map(([key, config]) => (
                      <TabsTrigger key={key} value={key}>
                         <config.icon className="mr-2 h-4 w-4" /> {config.label}
