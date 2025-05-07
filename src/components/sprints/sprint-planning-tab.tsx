@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -13,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info, PackagePlus, CheckCircle, Undo, View, User, Users, CheckSquare } from 'lucide-react'; 
 import type { Sprint, SprintPlanning, Task, Member, SprintStatus, HolidayCalendar, Team } from '@/types/sprint-data'; 
-import { initialSprintPlanning, taskStatuses, predefinedRoles, taskPriorities } from '@/types/sprint-data'; 
+import { initialSprintPlanning, taskStatuses, predefinedRoles, taskPriorities, initialBacklogTask } from '@/types/sprint-data'; 
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isValid, differenceInDays, getDay } from 'date-fns';
@@ -23,7 +22,7 @@ import SprintTimelineChart from '@/components/charts/sprint-timeline-chart';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"; 
 import { Checkbox } from '@/components/ui/checkbox'; 
 import { ScrollArea } from '@/components/ui/scroll-area'; 
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; 
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; 
 
 const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
 
@@ -181,7 +180,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
    const sprintLimits = useMemo(() => {
        const numPlanned = sprints.filter(s => s.status === 'Planned').length;
        const numActive = sprints.filter(s => s.status === 'Active').length;
-       const canPlanNew = !(numPlanned >= 2 || (numPlanned >= 1 && numActive >= 1));
+       const canPlanNew = !((numPlanned >= 2) || (numPlanned >= 1 && numActive >=1));
        const canStartNew = numActive === 0; 
        return { numPlanned, numActive, canPlanNew, canStartNew };
    }, [sprints]);
@@ -349,9 +348,10 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
   };
 
  const removeTaskRow = (type: 'new' | 'spillover', internalId: string) => {
-     if (isFormDisabled && !isCreatingNewSprint) return; 
+     if (isFormDisabled && !isCreatingNewSprint) return;
      const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
-     const taskToRemove = (type === 'new' ? newTasks : spilloverTasks).find(row => row._internalId === internalId);
+     const taskList = type === 'new' ? newTasks : spilloverTasks;
+     const taskToRemove = taskList.find(row => row._internalId === internalId);
 
      if (type === 'new' && taskToRemove && taskToRemove.backlogId && selectedSprintNumber) {
           setTimeout(() => {
@@ -487,7 +487,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
    };
 
 
-  const _finalizeTasks = (taskRows: TaskRow[], taskType: 'new' | 'spillover'): { tasks: Task[], errors: string[] } => {
+  const _finalizeTasks = (taskRows: TaskRow[], taskType: 'new' | 'spillover', sprintNumber: number | string | null): { tasks: Task[], errors: string[] } => {
       const finalTasks: Task[] = [];
       const errors: string[] = [];
       taskRows.forEach((row, index) => {
@@ -547,7 +547,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
           if (errors.length > 0) return; 
 
           finalTasks.push({
-              id: row.id || `task_${selectedSprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
+              id: row.id || `task_${sprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
               ticketNumber: ticketNumber || '',
               backlogId: row.backlogId, 
               title: title,
@@ -588,8 +588,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
          return;
      }
 
-     const { tasks: finalNewTasks, errors: newErrors } = _finalizeTasks(newTasks, 'new');
-     const { tasks: finalSpilloverTasks, errors: spillErrors } = _finalizeTasks(spilloverTasks, 'spillover');
+     const { tasks: finalNewTasks, errors: newErrors } = _finalizeTasks(newTasks, 'new', selectedSprintNumber);
+     const { tasks: finalSpilloverTasks, errors: spillErrors } = _finalizeTasks(spilloverTasks, 'spillover', selectedSprintNumber);
      const allErrors = [...newErrors, ...spillErrors];
 
      if (allErrors.length > 0) {
@@ -631,8 +631,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
       if (!startDateStr || !isValid(parseISO(startDateStr))) formErrors.push("Valid Start Date is required.");
       if (!duration || !DURATION_OPTIONS.includes(duration)) formErrors.push("Valid Duration is required.");
 
-      const { tasks: finalNewTasks, errors: newErrors } = _finalizeTasks(newTasks, 'new');
-      const { tasks: finalSpilloverTasks, errors: spillErrors } = _finalizeTasks(spilloverTasks, 'spillover');
+      const { tasks: finalNewTasks, errors: newErrors } = _finalizeTasks(newTasks, 'new', sprintNumInt);
+      const { tasks: finalSpilloverTasks, errors: spillErrors } = _finalizeTasks(spilloverTasks, 'spillover', sprintNumInt);
       const taskErrors = [...newErrors, ...spillErrors];
 
       if (formErrors.length > 0 || taskErrors.length > 0) {
@@ -677,8 +677,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
            return;
        }
 
-       const { tasks: finalNewTasks, errors: newErrors } = _finalizeTasks(newTasks, 'new');
-       const { tasks: finalSpilloverTasks, errors: spillErrors } = _finalizeTasks(spilloverTasks, 'spillover');
+       const { tasks: finalNewTasks, errors: newErrors } = _finalizeTasks(newTasks, 'new', selectedSprint.sprintNumber);
+       const { tasks: finalSpilloverTasks, errors: spillErrors } = _finalizeTasks(spilloverTasks, 'spillover', selectedSprint.sprintNumber);
        const allErrors = [...newErrors, ...spillErrors];
 
        if (allErrors.length > 0) {
@@ -701,7 +701,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
       if (!selectedSprintNumber || !isSprintActive) return;
        const latestPlanningData: SprintPlanning = {
            goal: planningData.goal.trim(),
-           newTasks: newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0 })), // ensure storyPoints is number
+           newTasks: newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0 })), 
            spilloverTasks: spilloverTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0})),
            definitionOfDone: planningData.definitionOfDone.trim(),
            testingStrategy: planningData.testingStrategy.trim(),
@@ -734,7 +734,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
   };
 
 
-   const getStatusBadgeVariant = (status: Sprint['status']): "default" | "secondary" | "outline" | "destructive" | null | undefined => {
+   const getStatusBadgeVariant = (status: Sprint['status'] | undefined): "default" | "secondary" | "outline" | "destructive" | null | undefined => {
+        if (!status) return 'secondary';
         switch (status) {
            case 'Active': return 'default';
            case 'Planned': return 'secondary';
@@ -743,7 +744,8 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
         }
      };
 
-      const getStatusColorClass = (status: Sprint['status']): string => {
+      const getStatusColorClass = (status: Sprint['status'] | undefined): string => {
+        if (!status) return 'text-muted-foreground';
         switch (status) {
           case 'Active': return 'text-primary';
           case 'Planned': return 'text-muted-foreground';
@@ -957,11 +959,10 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                             size="icon"
                             onClick={() => removeTaskRow(type, row._internalId)}
                             className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                            aria-label={`Remove ${type} task row`}
-                             disabled={disabled || (type === 'new' && !!row.backlogId)} 
-                             title={type === 'new' && !!row.backlogId ? "Revert task to backlog instead" : `Remove ${type} task row`}
+                            aria-label={type === 'new' && !!row.backlogId ? "Revert task to backlog" : `Remove ${type} task row`}
+                            disabled={disabled}
                         >
-                            {type === 'new' && !!row.backlogId ? <Undo className="h-4 w-4 text-blue-500" /> : <Trash2 className="h-4 w-4" />}
+                           <Trash2 className="h-4 w-4" />
                         </Button>
                     </div>
                 </div>
@@ -1196,7 +1197,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                                        <Calendar
                                            mode="single"
                                            selected={newSprintForm.startDate}
-                                           onSelect={(date) => handleNewSprintFormChange('startDate', date)}
+                                           onSelect={(date) => handleNewSprintFormChange('startDate', date as Date)}
                                            initialFocus
                                        />
                                    </PopoverContent>
@@ -1232,7 +1233,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
       {!isCreatingNewSprint && (
           <Card>
             <CardHeader>
-              <CardTitle>View & Plan Existing Sprints: {projectName}</CardTitle>
+              <CardTitle>View &amp; Plan Existing Sprints: {projectName}</CardTitle>
                <CardDescription>Select a sprint below to view or edit its plan. Completed sprints are read-only. Use the 'Start Sprint' button for 'Planned' sprints.</CardDescription>
             </CardHeader>
             <CardContent>
