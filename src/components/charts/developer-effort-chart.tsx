@@ -190,7 +190,10 @@ export default function DeveloperEffortChart({ sprintData, members, selectedDeve
                         allowDecimals={false}
                     />
                     <Tooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--muted) / 0.3)' }} />
-                    <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', overflow: 'hidden' }} iconSize={8}/>
+                    {/* Only show Legend for specific developer view */}
+                    {selectedDeveloperId && selectedDeveloperId !== "all" && (
+                        <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px' }} />
+                    )}
                     {selectedDeveloperId && selectedDeveloperId !== "all" ? (
                         // Specific developer view: one bar for 'points'
                         <Bar dataKey="points" fill={chartConfig.points?.color || baseChartColors[0]} radius={4} barSize={20} />
@@ -205,7 +208,7 @@ export default function DeveloperEffortChart({ sprintData, members, selectedDeve
                                     radius={4}
                                     barSize={15}
                                     stackId="a" // All bars for a developer stack together
-                                    name={chartConfig[ticketKey]?.label?.toString()} // For legend
+                                    name={chartConfig[ticketKey]?.label?.toString()} // For tooltip/legend if shown
                                 />
                                 : null
                         ))
@@ -215,4 +218,3 @@ export default function DeveloperEffortChart({ sprintData, members, selectedDeve
         </ChartContainer>
     );
 }
-
