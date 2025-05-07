@@ -59,7 +59,7 @@ export default function DeveloperEffortChart({ sprintData, members, selectedDeve
             }
 
             const completedSprints = sprintData.sprints
-                .filter(s => s.status === 'Completed')
+                .filter(s => s.status === 'Completed' || s.status === 'Active')
                 .sort((a, b) => b.sprintNumber - a.sprintNumber)
                 .slice(0, 10) // Last 10 completed
                 .sort((a, b) => a.sprintNumber - b.sprintNumber); // Sort ascending for chart
