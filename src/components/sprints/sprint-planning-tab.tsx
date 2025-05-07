@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -22,7 +23,7 @@ import SprintTimelineChart from '@/components/charts/sprint-timeline-chart';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"; // Added Dialog components
 import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox
 import { ScrollArea } from '@/components/ui/scroll-area'; // Added ScrollArea
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; // Updated import
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Updated import
 
 const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
 
@@ -288,7 +289,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
             setSelectedSprintNumber(null); 
           }
       }
-  }, [selectedSprintNumber, isCreatingNewSprint, resetForms, sprints]); 
+  }, [selectedSprintNumber, isCreatingNewSprint, resetForms, sprints, selectedSprint]); 
 
 
   useEffect(() => {
@@ -877,7 +878,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                         <Label htmlFor={`assignee-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Assignee</Label>
                          <Select
                              value={row.assignee ?? ''} 
-                             onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'assignee', value === 'unassigned' ? undefined : value)}
+                             onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'assignee', value === 'unassigned' ? '' : value)}
                              disabled={disabled || members.length === 0}
                          >
                             <SelectTrigger id={`assignee-${type}-${row._internalId}`} className="h-9 w-full">
@@ -896,7 +897,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                        <Label htmlFor={`reviewer-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Reviewer</Label>
                         <Select
                             value={row.reviewer ?? ''} 
-                            onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'reviewer', value === 'unassigned' ? undefined : value)}
+                            onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'reviewer', value === 'unassigned' ? '' : value)}
                             disabled={disabled || members.length === 0}
                         >
                            <SelectTrigger id={`reviewer-${type}-${row._internalId}`} className="h-9 w-full">
@@ -1353,3 +1354,4 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
     </div>
   );
 }
+
