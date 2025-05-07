@@ -6,9 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import VelocityChart from '@/components/charts/velocity-chart';
 import BurndownChart from '@/components/charts/burndown-chart';
 import DeveloperEffortChart from '@/components/charts/developer-effort-chart';
-import { Info, LineChart, TrendingDown, Users, AreaChart } from 'lucide-react'; // Added AreaChart for consistency
+import { Info, LineChart, TrendingDown, Users, AreaChart, User } from 'lucide-react'; // Added User icon
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
-import React, { useMemo, useState, useEffect } from 'react'; // Added useState and useEffect
+import React, { useMemo, useState, useEffect } from 'react';
 
 interface AnalyticsChartsTabProps {
   sprintData: SprintData | null;
@@ -18,6 +18,11 @@ interface AnalyticsChartsTabProps {
 
 export default function AnalyticsChartsTab({ sprintData, members, projectName }: AnalyticsChartsTabProps) {
   const [selectedAnalyticSprintNumber, setSelectedAnalyticSprintNumber] = useState<number | null>(null);
+  const [selectedDeveloperId, setSelectedDeveloperId] = useState<string | null>("all"); // "all" or member.id
+
+  const softwareEngineers = useMemo(() => {
+    return members.filter(member => member.role === 'Software Engineer');
+  }, [members]);
 
   const availableSprintsForSelection = useMemo(() => {
     if (!sprintData || !sprintData.sprints) return [];
@@ -28,7 +33,6 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
 
   useEffect(() => {
     if (availableSprintsForSelection.length > 0 && selectedAnalyticSprintNumber === null) {
-      // Default to the active sprint if available, otherwise the latest completed
       const active = availableSprintsForSelection.find(s => s.status === 'Active');
       if (active) {
         setSelectedAnalyticSprintNumber(active.sprintNumber);
@@ -119,21 +123,50 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
           </CardContent>
         </Card>
 
-        {/* Story Points per Developer - Shows data across all sprints */}
-        <Card className="lg:col-span-1 h-[400px]">
+        {/* Story Points per Developer */}
+        <Card className="lg:col-span-1 h-[450px]"> {/* Increased height for dropdown */}
           <CardHeader>
-            <CardTitle className="flex items-center justify-center gap-2">
-              <Users className="h-5 w-5 text-primary" /> Story Points / Developer
-            </CardTitle>
-            <CardDescription className="text-center">Completed story points per developer across sprints.</CardDescription>
+             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                 <div>
+                    <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5 text-primary" /> Story Points / Developer
+                    </CardTitle>
+                    <CardDescription>Completed story points by developer for the last 5 completed sprints.</CardDescription>
+                 </div>
+                {softwareEngineers.length > 0 && (
+                    <Select
+                        value={selectedDeveloperId ?? "all"}
+                        onValueChange={(value) => setSelectedDeveloperId(value === "all" ? null : value)}
+                    >
+                        <SelectTrigger className="w-full sm:w-[200px]">
+                            <SelectValue placeholder="Select Developer..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                <SelectLabel>Developers</SelectLabel>
+                                <SelectItem value="all">All Developers</SelectItem>
+                                {softwareEngineers.map(dev => (
+                                <SelectItem key={dev.id} value={dev.id}>
+                                    {dev.name}
+                                </SelectItem>
+                                ))}
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
+                )}
+            </div>
           </CardHeader>
-          <CardContent className="h-[calc(100%-100px)] pl-2">
-            <DeveloperEffortChart sprintData={sprintData} members={members} />
+          <CardContent className="h-[calc(100%-124px)] pl-2"> {/* Adjusted height calculation */}
+            <DeveloperEffortChart
+                sprintData={sprintData}
+                members={members}
+                selectedDeveloperId={selectedDeveloperId === "all" ? null : selectedDeveloperId}
+            />
           </CardContent>
         </Card>
 
         {/* Add more chart placeholders as needed */}
-        <Card className="lg:col-span-1 h-[400px] flex flex-col items-center justify-center border-dashed border-2">
+        <Card className="lg:col-span-1 h-[450px] flex flex-col items-center justify-center border-dashed border-2">
           <CardHeader className="text-center">
             <CardTitle className="flex items-center justify-center gap-2">
               <Info className="h-5 w-5 text-muted-foreground" /> Future Chart
@@ -149,3 +182,4 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
     </div>
   );
 }
+
