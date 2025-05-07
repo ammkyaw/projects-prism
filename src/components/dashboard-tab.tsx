@@ -1,15 +1,16 @@
+
 "use client";
 
 import type { SprintData, Sprint, Task, DailyProgressDataPoint } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { PieChart, Pie, Cell } from 'recharts';
-import { Info, LineChart, Activity, CheckCircle, ListChecks, TrendingDown, CalendarCheck, CalendarRange, BarChartBig } from 'lucide-react'; // Added BarChartBig for Daily Progress
+import { Info, LineChart, Activity, CheckCircle, ListChecks, TrendingDown, CalendarCheck, CalendarRange, BarChartBig, Clock } from 'lucide-react'; // Added Clock icon
 import VelocityChart from '@/components/charts/velocity-chart';
 import BurndownChart from '@/components/charts/burndown-chart';
 import DailyProgressChart from '@/components/charts/daily-progress-chart'; // Import DailyProgressChart
-import { useMemo } from 'react';
-import { format, parseISO, isValid, eachDayOfInterval, isWithinInterval, getDay } from 'date-fns';
+import { useMemo, useState, useEffect } from 'react'; // Import useState, useEffect
+import { format, parseISO, isValid, eachDayOfInterval, isWithinInterval, getDay, differenceInDays, isBefore, isSameDay } from 'date-fns'; // Added differenceInDays, isBefore, isSameDay
 
 interface DashboardTabProps {
   sprintData: SprintData | null;
@@ -55,6 +56,11 @@ const isWorkingDay = (date: Date): boolean => {
 };
 
 export default function DashboardTab({ sprintData, projectName, projectId }: DashboardTabProps) {
+  const [clientNow, setClientNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+      setClientNow(new Date());
+  }, []);
 
   const activeSprint = sprintData?.sprints.find(s => s.status === 'Active');
 
@@ -106,8 +112,11 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
         const completedOn = parseISO(task.completedDate);
         if (isWithinInterval(completedOn, { start: sprintStart, end: sprintEnd })) {
           const formattedDate = format(completedOn, 'yyyy-MM-dd');
-          dailyDataMap[formattedDate].points += (Number(task.storyPoints) || 0);
-          dailyDataMap[formattedDate].tasksCompleted += 1;
+          // Ensure the date exists in the map before adding
+          if (dailyDataMap[formattedDate]) {
+              dailyDataMap[formattedDate].points += (Number(task.storyPoints) || 0);
+              dailyDataMap[formattedDate].tasksCompleted += 1;
+          }
         }
       }
     });
@@ -119,9 +128,8 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
         tasksCompleted: data.tasksCompleted,
       }))
       .sort((a, b) => {
-         // To sort by date "MM/dd", we need to parse them back considering a year (e.g., current year or sprint year)
-         // Assuming sprint year for simplicity or if dates can span years, more robust parsing is needed.
          const year = sprintStart.getFullYear();
+         // Construct full date strings for reliable parsing and comparison
          const dateA = parseISO(`${year}-${a.date.replace('/', '-')}`);
          const dateB = parseISO(`${year}-${b.date.replace('/', '-')}`);
          return dateA.getTime() - dateB.getTime();
@@ -137,6 +145,31 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
      ? format(parseISO(activeSprint.endDate), 'MMM d, yyyy')
      : 'N/A';
 
+   // Calculate remaining working days
+   const remainingWorkingDays = useMemo(() => {
+       if (!activeSprint || !clientNow || !activeSprint.endDate || !isValid(parseISO(activeSprint.endDate))) {
+           return null;
+       }
+       const sprintEnd = parseISO(activeSprint.endDate);
+       // Ensure end date is today or in the future
+       if (isBefore(sprintEnd, clientNow) && !isSameDay(sprintEnd, clientNow)) {
+           return 0; // Sprint already ended
+       }
+
+       const today = clientNow;
+       try {
+            // Calculate interval from tomorrow (or today if sprint starts today) to sprint end
+            const intervalStart = isBefore(today, parseISO(activeSprint.startDate)) ? parseISO(activeSprint.startDate) : today;
+            const interval = eachDayOfInterval({ start: intervalStart, end: sprintEnd });
+            // Filter for working days within the interval (including today if it's a working day and part of the interval)
+            return interval.filter(day => isWorkingDay(day) && (isSameDay(day, today) || isBefore(today, day))).length;
+       } catch (e) {
+          console.error("Error calculating remaining days:", e);
+          return null; // Return null on error
+       }
+
+   }, [activeSprint, clientNow]);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
@@ -147,12 +180,22 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
              Active Sprint: {activeSprint ? `Sprint ${activeSprint.sprintNumber}` : 'None'}
            </CardTitle>
             {activeSprint && (
-               <CardDescription className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <CalendarRange className="h-4 w-4" />
-                  {formattedStartDate} - {formattedEndDate}
-               </CardDescription>
+              <>
+                 <CardDescription className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-2">
+                      <CalendarRange className="h-4 w-4" />
+                      {formattedStartDate} - {formattedEndDate}
+                    </span>
+                     {remainingWorkingDays !== null && (
+                       <span className="flex items-center gap-2 font-medium text-foreground">
+                         <Clock className="h-4 w-4" />
+                         Countdown: {remainingWorkingDays} working {remainingWorkingDays === 1 ? 'day' : 'days'} left
+                       </span>
+                     )}
+                 </CardDescription>
+                 <CardDescription>Status and key metrics for the current sprint in '{projectName}'.</CardDescription>
+               </>
             )}
-           <CardDescription>Status and key metrics for the current sprint in '{projectName}'.</CardDescription>
          </CardHeader>
          {!activeSprint && (
            <CardContent className="flex flex-col items-center justify-center text-muted-foreground p-8 border border-dashed rounded-md min-h-[150px]">
@@ -334,3 +377,5 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
     </div>
   );
 }
+
+    
