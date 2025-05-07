@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Added useRef, React
@@ -37,12 +38,13 @@ import AnalyticsReportsTab from '@/components/analytics/analytics-reports-tab'; 
 
 
 import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember, HistoryStatus, ToastFun } from '@/types/sprint-data'; // Added HistoryStatus, ToastFun
-import { initialSprintData, initialSprintPlanning, taskStatuses, initialTeam, initialBacklogTask, taskPriorities } from '@/types/sprint-data'; // Import taskPriorities
+import { initialSprintData, initialSprintPlanning, taskStatuses, initialBacklogTask, taskPriorities } from '@/types/sprint-data'; // Import taskPriorities
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isPast, isValid, getYear } from 'date-fns'; // Added getYear
 import { useSprintsActions } from '@/hooks/use-sprints-actions'; // Import the new hook
 import { useBacklogActions } from '@/hooks/use-backlog-actions';
+import { useSettingsActions } from '@/hooks/use-settings-actions'; // Import the new hook for settings
 import { generateNextBacklogIdHelper } from '@/lib/utils'; // Import the helper function
 import { ModeToggle } from '@/components/mode-toggle'; // Import ModeToggle
 import { useProjects, useUpdateProject, useDeleteProject } from '@/hooks/use-projects'; // Import React Query hooks
@@ -188,79 +190,17 @@ export default function Home() {
         selectedProjectId,
       });
 
+  // Use the custom hook for settings actions
+  const {
+    handleSaveMembers,
+    handleSaveHolidayCalendars,
+    handleSaveTeams,
+  } = useSettingsActions({
+    selectedProject,
+    updateProjectData,
+    toast,
+  });
 
-  // Handler to save members for the *selected* project
-  const handleSaveMembers = useCallback((updatedMembers: Member[]) => {
-    if (!selectedProject) {
-      toast({ variant: "destructive", title: "Error", description: "No project selected." });
-      return;
-    }
-    const updatedProject: Project = { ...selectedProject, members: updatedMembers };
-    updateProjectData(updatedProject);
-    toast({ title: "Success", description: `Members updated for project '${selectedProject.name}'.` });
-  }, [selectedProject, updateProjectData, toast]);
-
-   // Handler to save holiday calendars for the *selected* project
-   const handleSaveHolidayCalendars = useCallback((updatedCalendars: HolidayCalendar[]) => {
-       if (!selectedProject) {
-           toast({ variant: "destructive", title: "Error", description: "No project selected." });
-           return;
-       }
-
-       const currentProjectName = selectedProject.name;
-       let membersToUpdate: Member[] = [];
-
-       // Check which members might lose their assigned calendar
-       const updatedMembers = (selectedProject.members || []).map(member => {
-           const calendarExists = updatedCalendars.some(cal => cal.id === member.holidayCalendarId);
-           if (member.holidayCalendarId && !calendarExists) {
-               membersToUpdate.push(member); // Track members whose calendar was removed
-               return { ...member, holidayCalendarId: null }; // Unassign calendar
-           }
-           return member;
-       });
-
-       const updatedProject: Project = {
-           ...selectedProject,
-           holidayCalendars: updatedCalendars,
-           members: updatedMembers,
-       };
-
-       updateProjectData(updatedProject);
-
-       // Show toasts *after* the mutation call (optimistically)
-       setTimeout(() => {
-           toast({ title: "Success", description: `Holiday calendars updated for project '${currentProjectName}'.` });
-           membersToUpdate.forEach(member => {
-               toast({ variant: "warning", title: "Calendar Unassigned", description: `Holiday calendar assigned to ${member.name} was deleted or is no longer available.` });
-           });
-       }, 0);
-
-   }, [selectedProject, updateProjectData, toast]);
-
-   // Handler to save teams for the *selected* project
-   const handleSaveTeams = useCallback((updatedTeams: Team[]) => {
-       if (!selectedProject) {
-           toast({ variant: "destructive", title: "Error", description: "No project selected." });
-           return;
-       }
-       const currentProjectName = selectedProject.name;
-
-       // Optionally, add validation here to ensure team members and leads still exist
-       const validTeams = updatedTeams.map(team => {
-           const validMembers = team.members.filter(tm => (selectedProject.members || []).some(m => m.id === tm.memberId));
-           let validLead = team.leadMemberId;
-           if (validLead && !(selectedProject.members || []).some(m => m.id === validLead)) {
-                console.warn(`Lead member ID ${validLead} for team ${team.name} not found. Resetting.`);
-                validLead = null;
-           }
-           return { ...team, members: validMembers, leadMemberId: validLead };
-       });
-
-       const updatedProject: Project = { ...selectedProject, teams: validTeams };
-       updateProjectData(updatedProject);
-       toast({ title: "Success", description: `Teams updated for project '${currentProjectName}'.` });
-   }, [selectedProject, updateProjectData, toast]);
 
   // Handler to add members to the *newly created* project (from dialog)
    const handleAddMembersToNewProject = useCallback((addedMembers: Member[]) => {
@@ -798,3 +738,4 @@ export default function Home() {
   );
 
 }
+
