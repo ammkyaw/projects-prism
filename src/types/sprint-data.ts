@@ -48,80 +48,80 @@ export type HistoryStatus = 'Move' | 'Split' | 'Merge';
 
 // Represents a single task within a sprint plan or backlog
 export interface Task {
-  id: string; 
-  backlogId?: string | ''; 
-  ticketNumber?: string | null; 
-  title?: string; 
-  description?: string; 
-  acceptanceCriteria?: string; 
-  storyPoints?: number | string | null; 
-  devEstimatedTime?: string | null; 
-  qaEstimatedTime?: string | null; 
-  bufferTime?: string | null; 
-  assignee?: string; 
-  reviewer?: string; 
-  status?: 'To Do' | 'In Progress' | 'In Review' | 'QA' | 'Done' | 'Blocked'; 
-  startDate?: string | null; 
-  completedDate?: string | null; 
-  priority?: 'Highest' | 'High' | 'Medium' | 'Low' | 'Lowest'; 
-  dependsOn?: string[]; 
-  taskType?: TaskType; 
-  createdDate?: string; 
-  initiator?: string; 
-  needsGrooming?: boolean; 
-  readyForSprint?: boolean; 
-  movedToSprint?: number | null; 
-  historyStatus?: HistoryStatus | null; 
-  splitFromId?: string | null; 
-  mergeEventId?: string | null; 
-  devTime?: string; 
+  id: string;
+  backlogId?: string | '';
+  ticketNumber?: string | null;
+  title?: string;
+  description?: string;
+  acceptanceCriteria?: string;
+  storyPoints?: number | string | null;
+  devEstimatedTime?: string | null;
+  qaEstimatedTime?: string | null;
+  bufferTime?: string | null;
+  assignee?: string;
+  reviewer?: string;
+  status?: 'To Do' | 'In Progress' | 'In Review' | 'QA' | 'Done' | 'Blocked' | null;
+  startDate?: string | null;
+  completedDate?: string | null;
+  priority?: 'Highest' | 'High' | 'Medium' | 'Low' | 'Lowest';
+  dependsOn?: string[];
+  taskType?: TaskType;
+  createdDate?: string;
+  initiator?: string;
+  needsGrooming?: boolean;
+  readyForSprint?: boolean;
+  movedToSprint?: number | null;
+  historyStatus?: HistoryStatus | null;
+  splitFromId?: string | null;
+  mergeEventId?: string | null;
+  devTime?: string; // This seems like a legacy/duplicate of devEstimatedTime, consider removing or aligning
 }
 
 // Represents the planning data for a single sprint
 export interface SprintPlanning {
   goal: string;
-  newTasks: Task[]; 
-  spilloverTasks: Task[]; 
+  newTasks: Task[];
+  spilloverTasks: Task[];
   definitionOfDone: string;
   testingStrategy: string;
 }
 
 
 export interface SprintDetailItem {
-  id: string; 
+  id: string;
   ticketNumber: string;
-  developer: string; 
+  developer: string;
   storyPoints: number;
-  devTime: string; 
+  devTime: string;
 }
 
 export interface Sprint {
   sprintNumber: number;
-  committedPoints: number; 
-  completedPoints: number; 
-  totalDays: number; 
-  startDate: string; 
-  endDate: string; 
-  duration: string; 
-  status: SprintStatus; 
-  details?: SprintDetailItem[]; 
-  planning?: SprintPlanning; 
+  committedPoints: number;
+  completedPoints: number;
+  totalDays: number;
+  startDate: string;
+  endDate: string;
+  duration: string;
+  status: SprintStatus;
+  details?: SprintDetailItem[];
+  planning?: SprintPlanning;
 }
 
 export interface SprintData {
-  sprints: Sprint[]; 
-  totalStoryPoints: number; 
-  daysInSprint: number; 
+  sprints: Sprint[];
+  totalStoryPoints: number;
+  daysInSprint: number;
 }
 
 export interface Project {
-    id: string; 
+    id: string;
     name: string;
     sprintData: SprintData;
-    members: Member[]; 
-    holidayCalendars?: HolidayCalendar[]; 
-    teams?: Team[]; 
-    backlog?: Task[]; 
+    members: Member[];
+    holidayCalendars?: HolidayCalendar[];
+    teams?: Team[];
+    backlog?: Task[];
 }
 
 export type AppData = Project[];
@@ -152,7 +152,7 @@ export const predefinedRoles = [
   'Product Owner',
 ];
 
-export const taskStatuses: Array<Task['status']> = ['To Do', 'In Progress', 'In Review', 'QA', 'Done', 'Blocked']; 
+export const taskStatuses: Array<Task['status']> = ['To Do', 'In Progress', 'In Review', 'QA', 'Done', 'Blocked'];
 
 export const taskPriorities: Array<Task['priority']> = ['Highest', 'High', 'Medium' , 'Low', 'Lowest'];
 
@@ -164,30 +164,30 @@ export const initialTeam: Omit<Team, 'id'> = {
 };
 
 export const initialBacklogTask: Omit<Task, 'id'> = {
-    backlogId: '', 
+    backlogId: '',
     ticketNumber: '',
     title: '',
     description: '',
-    acceptanceCriteria: '', 
+    acceptanceCriteria: '',
     storyPoints: null,
     priority: 'Medium',
-    taskType: 'New Feature', 
-    createdDate: '', 
-    initiator: '', 
+    taskType: 'New Feature',
+    createdDate: '',
+    initiator: '',
     dependsOn: [],
-    needsGrooming: false, 
+    needsGrooming: false,
     readyForSprint: false,
-    movedToSprint: null, 
-    historyStatus: null, 
-    splitFromId: null, 
-    mergeEventId: null, 
-    completedDate: null, 
+    movedToSprint: null,
+    historyStatus: null,
+    splitFromId: null,
+    mergeEventId: null,
+    completedDate: null,
     devEstimatedTime: null,
-    qaEstimatedTime: null, 
+    qaEstimatedTime: null,
     bufferTime: null,
     assignee: '',
     reviewer: '',
-    status: null, 
+    status: null,
     startDate: null,
 };
 
@@ -196,4 +196,5 @@ export type ToastFun = (props: { title: string; description?: string; variant?: 
 export interface DailyProgressDataPoint {
   date: string; // Formatted date e.g., "MM/dd"
   points: number;
+  tasksCompleted?: number; // Add optional field for tasks completed
 }

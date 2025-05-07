@@ -3,10 +3,10 @@
 import type { SprintData, Sprint, Task, DailyProgressDataPoint } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { PieChart, Pie, Cell } from 'recharts'; 
+import { PieChart, Pie, Cell } from 'recharts';
 import { Info, LineChart, Activity, CheckCircle, ListChecks, TrendingDown, CalendarCheck, CalendarRange, BarChartBig } from 'lucide-react'; // Added BarChartBig for Daily Progress
 import VelocityChart from '@/components/charts/velocity-chart';
-import BurndownChart from '@/components/charts/burndown-chart'; 
+import BurndownChart from '@/components/charts/burndown-chart';
 import DailyProgressChart from '@/components/charts/daily-progress-chart'; // Import DailyProgressChart
 import { useMemo } from 'react';
 import { format, parseISO, isValid, eachDayOfInterval, isWithinInterval, getDay } from 'date-fns';
@@ -30,17 +30,21 @@ const chartConfig = {
      label: "Committed",
      color: "hsl(var(--secondary))",
    },
-   ideal: { 
+   ideal: {
     label: "Ideal",
     color: "hsl(var(--chart-2))",
   },
-  actual: { 
+  actual: {
     label: "Actual",
     color: "hsl(var(--chart-1))",
   },
   points: { // Added for DailyProgressChart legend consistency
     label: "Points Completed",
     color: "hsl(var(--chart-1))",
+  },
+  tasksCompleted: { // Added for task completion in DailyProgressChart
+    label: "Tasks Completed",
+    color: "hsl(var(--chart-2))", // Using a different chart color
   }
 } satisfies ChartConfig;
 
@@ -65,8 +69,8 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
 
     const remaining = Math.max(0, committed - completed);
     return [
-      { name: 'Completed', value: completed, fill: chartConfig.completed.color }, 
-      { name: 'Remaining', value: remaining, fill: chartConfig.remaining.color }, 
+      { name: 'Completed', value: completed, fill: chartConfig.completed.color },
+      { name: 'Remaining', value: remaining, fill: chartConfig.remaining.color },
     ];
   }, [activeSprint]);
 
@@ -77,8 +81,8 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
                            .filter(task => task.status === 'Done').length;
     const remainingTasks = totalTasks - completedTasks;
     return [
-      { name: 'Completed', value: completedTasks, fill: chartConfig.completed.color }, 
-      { name: 'Remaining', value: remainingTasks, fill: chartConfig.remaining.color }, 
+      { name: 'Completed', value: completedTasks, fill: chartConfig.completed.color },
+      { name: 'Remaining', value: remainingTasks, fill: chartConfig.remaining.color },
     ];
   }, [activeSprint]);
 
@@ -90,38 +94,38 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
     const sprintStart = parseISO(activeSprint.startDate);
     const sprintEnd = parseISO(activeSprint.endDate);
     const allTasks = [...(activeSprint.planning?.newTasks || []), ...(activeSprint.planning?.spilloverTasks || [])];
-    const dailyDataMap: { [date: string]: number } = {};
+    const dailyDataMap: { [date: string]: { points: number, tasksCompleted: number } } = {};
 
-    // Initialize all working days in the sprint with 0 points
     const sprintDaysArray = eachDayOfInterval({ start: sprintStart, end: sprintEnd });
     sprintDaysArray.forEach(day => {
-      // Only include working days in the initial map if you want to skip weekends on X-axis
-      // if (isWorkingDay(day)) {
-        dailyDataMap[format(day, 'yyyy-MM-dd')] = 0;
-      // }
+      dailyDataMap[format(day, 'yyyy-MM-dd')] = { points: 0, tasksCompleted: 0 };
     });
 
     allTasks.forEach(task => {
       if (task.status === 'Done' && task.completedDate && isValid(parseISO(task.completedDate))) {
         const completedOn = parseISO(task.completedDate);
-        // Ensure the completion date is within the sprint range
         if (isWithinInterval(completedOn, { start: sprintStart, end: sprintEnd })) {
           const formattedDate = format(completedOn, 'yyyy-MM-dd');
-          // if (isWorkingDay(completedOn)) { // Optional: only count points for working days
-            dailyDataMap[formattedDate] = (dailyDataMap[formattedDate] || 0) + (Number(task.storyPoints) || 0);
-          // }
+          dailyDataMap[formattedDate].points += (Number(task.storyPoints) || 0);
+          dailyDataMap[formattedDate].tasksCompleted += 1;
         }
       }
     });
 
     return Object.entries(dailyDataMap)
-      .map(([date, points]) => ({
-        date: format(parseISO(date), 'MM/dd'), // Format for display
-        points,
+      .map(([date, data]) => ({
+        date: format(parseISO(date), 'MM/dd'),
+        points: data.points,
+        tasksCompleted: data.tasksCompleted,
       }))
-      .sort((a, b) => parseISO(a.date.split('/').reverse().join('-')).getTime() - parseISO(b.date.split('/').reverse().join('-')).getTime()); // Sort by date before returning
-      // The above sort is a bit complex because date is "MM/dd". A better way is to sort by original date objects before mapping.
-      // Or, ensure sprintDaysArray is sorted and map from that.
+      .sort((a, b) => {
+         // To sort by date "MM/dd", we need to parse them back considering a year (e.g., current year or sprint year)
+         // Assuming sprint year for simplicity or if dates can span years, more robust parsing is needed.
+         const year = sprintStart.getFullYear();
+         const dateA = parseISO(`${year}-${a.date.replace('/', '-')}`);
+         const dateB = parseISO(`${year}-${b.date.replace('/', '-')}`);
+         return dateA.getTime() - dateB.getTime();
+       });
 
   }, [activeSprint]);
 
