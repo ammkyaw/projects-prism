@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Added useRef, React
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Added CardContent
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History, CheckCircle, Undo, ArrowUpDown, ListChecks } from 'lucide-react'; // Added ArrowUpDown, ListChecks icons
+import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History, CheckCircle, Undo, ArrowUpDown, ListChecks, Loader2 } from 'lucide-react'; // Added ArrowUpDown, ListChecks icons, Loader2
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -375,7 +375,7 @@ export default function Home() {
           }
       },
       teams: {
-          label: "Teams", icon: Users, subTabs: {
+          label: "Team Directory", icon: Users, subTabs: {
               members: { label: "Members", icon: Users, component: MembersTab },
               teams: { label: "Teams", icon: UsersRound, component: TeamsTab },
           }
@@ -398,6 +398,9 @@ export default function Home() {
                       <CardTitle>Loading Project Data...</CardTitle>
                       <CardDescription>Please wait while the application loads.</CardDescription>
                   </CardHeader>
+                  <CardContent className="flex items-center justify-center">
+                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </CardContent>
               </Card>
           );
       }
@@ -563,9 +566,9 @@ export default function Home() {
     <div className="flex flex-col min-h-screen bg-background">
       <header className="sticky top-0 z-10 flex items-center justify-between p-4 bg-card border-b shadow-sm">
         <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-semibold text-primary">Projects Prism</h1>
+            <h1 className="text-2xl font-semibold text-primary">Project Prism</h1>
              <Select
-               value={selectedProjectId ?? null}
+               value={selectedProjectId ?? undefined} // Use undefined if null for Select
                onValueChange={(value) => {
                   if (value === 'loading' || value === 'no-projects') return; // Prevent selecting placeholder items
                    console.log(`Project selected: ${value}`);
@@ -708,8 +711,8 @@ export default function Home() {
                      <CardTitle>Loading Project Data...</CardTitle>
                      <CardDescription>Please wait while the application loads.</CardDescription>
                  </CardHeader>
-                  <CardContent>
-                     {/* Optional: Add a spinner or loading indicator here */}
+                  <CardContent className="flex items-center justify-center">
+                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                  </CardContent>
              </Card>
          ) : (
