@@ -1,19 +1,25 @@
+// src/components/analytics/analytics-charts-tab.tsx
 "use client";
 
-import type { SprintData, Member } from '@/types/sprint-data';
+import type { SprintData, Member, Sprint } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import VelocityChart from '@/components/charts/velocity-chart';
-// import BurndownChart from '@/components/charts/burndown-chart'; // Import when created
-// import DeveloperEffortChart from '@/components/charts/developer-effort-chart'; // Import when created
-import { Info, LineChart, BarChart, Users } from 'lucide-react';
+import BurndownChart from '@/components/charts/burndown-chart';
+import DeveloperEffortChart from '@/components/charts/developer-effort-chart'; // Import DeveloperEffortChart
+import { Info, LineChart, TrendingDown, Users } from 'lucide-react';
+import { useMemo } from 'react';
 
 interface AnalyticsChartsTabProps {
   sprintData: SprintData | null;
-  members: Member[]; // Pass members if needed for dev effort chart
+  members: Member[];
   projectName: string;
 }
 
 export default function AnalyticsChartsTab({ sprintData, members, projectName }: AnalyticsChartsTabProps) {
+  const activeSprint: Sprint | null | undefined = useMemo(() => {
+    if (!sprintData || !sprintData.sprints) return null;
+    return sprintData.sprints.find(s => s.status === 'Active') || sprintData.sprints.filter(s => s.status === 'Completed').sort((a,b) => b.sprintNumber - a.sprintNumber)[0];
+  }, [sprintData]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -36,38 +42,45 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
         </CardContent>
       </Card>
 
-       {/* Burndown Chart Placeholder */}
-       <Card className="lg:col-span-1 h-[400px] flex flex-col items-center justify-center border-dashed border-2">
-          <CardHeader className="text-center">
+       {/* Burndown Chart */}
+       <Card className="lg:col-span-1 h-[400px]">
+          <CardHeader>
              <CardTitle className="flex items-center justify-center gap-2">
-                <BarChart className="h-5 w-5 text-muted-foreground" /> Burndown Chart
+                <TrendingDown className="h-5 w-5 text-primary" /> Burndown Chart
              </CardTitle>
-             <CardDescription>(Sprint Burndown chart will be displayed here)</CardDescription>
+             <CardDescription className="text-center">Ideal vs. Actual burndown for {activeSprint ? `Sprint ${activeSprint.sprintNumber}` : 'latest/active sprint'}.</CardDescription>
           </CardHeader>
-          <CardContent className="flex items-center justify-center text-muted-foreground">
-             <Info className="mr-2 h-5 w-5" />
-             (Placeholder)
+          <CardContent className="h-[calc(100%-100px)] pl-2">
+             <BurndownChart activeSprint={activeSprint} />
           </CardContent>
        </Card>
 
-        {/* Story Points per Developer Placeholder */}
-       <Card className="lg:col-span-1 h-[400px] flex flex-col items-center justify-center border-dashed border-2">
-          <CardHeader className="text-center">
+        {/* Story Points per Developer */}
+       <Card className="lg:col-span-1 h-[400px]">
+          <CardHeader>
              <CardTitle className="flex items-center justify-center gap-2">
-                <Users className="h-5 w-5 text-muted-foreground" /> Story Points / Dev
+                <Users className="h-5 w-5 text-primary" /> Story Points / Developer
              </CardTitle>
-             <CardDescription>(Chart showing completed points per developer per sprint)</CardDescription>
+             <CardDescription className="text-center">Completed story points per developer across sprints.</CardDescription>
           </CardHeader>
-          <CardContent className="flex items-center justify-center text-muted-foreground">
-             <Info className="mr-2 h-5 w-5" />
-             (Placeholder)
+          <CardContent className="h-[calc(100%-100px)] pl-2">
+             <DeveloperEffortChart sprintData={sprintData} members={members} />
           </CardContent>
        </Card>
 
         {/* Add more chart placeholders as needed */}
-
+         <Card className="lg:col-span-1 h-[400px] flex flex-col items-center justify-center border-dashed border-2">
+          <CardHeader className="text-center">
+             <CardTitle className="flex items-center justify-center gap-2">
+                <Info className="h-5 w-5 text-muted-foreground" /> Future Chart
+             </CardTitle>
+             <CardDescription>(Another insightful chart will be displayed here)</CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center justify-center text-muted-foreground">
+             <Info className="mr-2 h-5 w-5" />
+             (Placeholder)
+          </CardContent>
+       </Card>
     </div>
   );
 }
-
-
