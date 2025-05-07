@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast";
-import { XCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff icons
+import { XCircle, Eye, EyeOff, Loader2 } from 'lucide-react'; // Import Eye, EyeOff, and Loader2 icons
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -33,8 +33,8 @@ export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: Log
         console.log("Attempting login with:", email);
         await signInWithEmailAndPassword(auth, email, password);
         console.log("Firebase login successful");
-        toast({ title: "Login Successful", description: "Redirecting..." });
-        onLoginSuccess(); // Call the success callback
+        // Toast will be shown by the parent upon successful redirection or data load
+        onLoginSuccess(); // Call the success callback, parent will handle redirect and toast
     } catch (err: any) {
         console.error("Firebase login failed:", err);
         let errorMessage = "An unexpected error occurred. Please try again.";
@@ -58,7 +58,11 @@ export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: Log
         setError(errorMessage);
         toast({ variant: "destructive", title: "Login Failed", description: errorMessage });
     } finally {
-        setIsLoading(false);
+        // Only set isLoading to false if there was an error.
+        // If successful, the modal will close and unmount, so no need to set isLoading to false.
+        if (error || (err as any)?.code) { // Check if there was an error
+             setIsLoading(false);
+        }
     }
   };
 
@@ -67,7 +71,16 @@ export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: Log
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+        onOpenChange(open);
+        if (!open) { // Reset state if dialog is closed externally
+            setEmail('');
+            setPassword('');
+            setError(null);
+            setIsLoading(false);
+            setShowPassword(false);
+        }
+    }}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Login to Project Prism</DialogTitle>
@@ -87,31 +100,33 @@ export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: Log
                </Alert>
              )}
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="email" className="text-right">
+              <Label htmlFor="email-login" className="text-right"> {/* Ensure unique id for label */}
                 Email
               </Label>
               <Input
-                id="email"
+                id="email-login" 
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="col-span-3"
                 required
                 autoComplete="email"
+                disabled={isLoading}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4 relative"> {/* Added relative positioning */}
-              <Label htmlFor="password" className="text-right">
+              <Label htmlFor="password-login" className="text-right"> {/* Ensure unique id for label */}
                 Password
               </Label>
               <Input
-                id="password"
+                id="password-login"
                 type={showPassword ? 'text' : 'password'} // Toggle input type
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="col-span-3 pr-10" // Add padding for the icon
                 required
                 autoComplete="current-password"
+                disabled={isLoading}
               />
               <Button
                   type="button"
@@ -120,6 +135,7 @@ export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: Log
                   className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground" // Position the icon button
                   onClick={togglePasswordVisibility}
                   aria-label={showPassword ? "Hide password" : "Show password"}
+                  disabled={isLoading}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
@@ -127,10 +143,17 @@ export default function LoginModal({ isOpen, onOpenChange, onLoginSuccess }: Log
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button type="button" variant="outline">Cancel</Button>
+              <Button type="button" variant="outline" disabled={isLoading}>Cancel</Button>
             </DialogClose>
-            <Button type="submit" disabled={isLoading}> {/* Change to type="submit" */}
-              {isLoading ? 'Logging in...' : 'Login'}
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Logging in...
+                </>
+              ) : (
+                'Login'
+              )}
             </Button>
           </DialogFooter>
         </form> {/* Close form element */}

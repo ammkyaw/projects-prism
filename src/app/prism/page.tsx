@@ -49,8 +49,12 @@ import { generateNextBacklogIdHelper } from '@/lib/utils'; // Import the helper 
 import { ModeToggle } from '@/components/mode-toggle'; // Import ModeToggle
 import { useProjects, useUpdateProject, useDeleteProject } from '@/hooks/use-projects'; // Import React Query hooks
 import { handleExport } from '@/lib/export';
+import { auth } from '@/lib/firebase'; // Import auth
+import { onAuthStateChanged } from 'firebase/auth'; // Import onAuthStateChanged
+import { useRouter } from 'next/navigation'; // Import useRouter
 
 export default function Home() {
+  const router = useRouter(); // Initialize router
   // Local UI state
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("dashboard");
@@ -63,11 +67,26 @@ export default function Home() {
   const [confirmProjectName, setConfirmProjectName] = useState<string>('');
   const [clientNow, setClientNow] = useState<Date | null>(null);
   const { toast } = useToast();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null); // Track auth state
 
   // React Query hooks for data management
-  const { data: projects = [], isLoading: isLoadingProjects, error: projectsError } = useProjects();
+  const { data: projects = [], isLoading: isLoadingProjects, error: projectsError, isSuccess: isProjectsSuccess } = useProjects();
   const updateProjectMutation = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
+
+  // Check auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
+        router.push('/'); // Redirect to landing if not authenticated
+      }
+    });
+    return () => unsubscribe(); // Cleanup subscription
+  }, [router]);
+
 
   // Get current date on client mount to avoid hydration issues
   useEffect(() => {
@@ -75,7 +94,14 @@ export default function Home() {
   }, []);
 
    // Effect to select the first project when data loads or changes, if none selected
+   // Also show login success toast when projects are successfully loaded for the first time after auth
+   const [loginToastShown, setLoginToastShown] = useState(false);
    useEffect(() => {
+     if (isAuthenticated && isProjectsSuccess && !loginToastShown) {
+       toast({ title: "Login Successful", description: "Welcome to Project Prism!" });
+       setLoginToastShown(true); // Ensure toast is shown only once per session
+     }
+
      if (!isLoadingProjects && projects.length > 0 && !selectedProjectId) {
        setSelectedProjectId(projects[0].id);
        console.log("No project selected, defaulting to first project:", projects[0].id);
@@ -83,7 +109,7 @@ export default function Home() {
         setSelectedProjectId(null); // Clear selection if no projects exist
      }
      // Do NOT reset selectedProjectId if it already exists and is valid within the loaded projects
-   }, [isLoadingProjects, projects, selectedProjectId]);
+   }, [isLoadingProjects, projects, selectedProjectId, isAuthenticated, isProjectsSuccess, loginToastShown, toast]);
 
 
   // Find the currently selected project object
@@ -389,6 +415,21 @@ export default function Home() {
 
   // Render the currently active tab content
   const renderActiveTabContent = () => {
+    // Handle initial loading state for authentication check
+    if (isAuthenticated === null) {
+        return (
+            <Card className="flex flex-col items-center justify-center min-h-[400px] border-dashed border-2">
+                <CardHeader className="text-center">
+                    <CardTitle>Authenticating...</CardTitle>
+                    <CardDescription>Please wait.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-center">
+                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </CardContent>
+            </Card>
+        );
+    }
+
     if (!selectedProject) {
       // Initial loading state from React Query
       if (isLoadingProjects) {

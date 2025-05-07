@@ -1,15 +1,24 @@
 'use client';
 
-import { useState } from 'react'; // Import useState
+import { useState, useEffect } from 'react'; // Import useState, useEffect
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button'; // Import ShadCN Button
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { TrendingUp, BarChart, LayoutDashboard } from 'lucide-react';
 import LoginModal from '@/components/login-modal'; // Import the LoginModal component
+import { useToast } from '@/hooks/use-toast'; // Import useToast for other potential uses
 
 const LandingPage = () => {
   const router = useRouter();
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); // State for modal visibility
+  const { toast } = useToast(); // Initialize toast if needed elsewhere
+  const [clientTime, setClientTime] = useState<string | null>(null); // State for client-side time
+
+  useEffect(() => {
+    // Get client-side time on mount to avoid hydration issues if displaying current year
+    setClientTime(new Date().toLocaleTimeString());
+  }, []);
+
 
   const handlePrismButtonClick = () => {
     // Instead of navigating directly, open the login modal
@@ -18,7 +27,10 @@ const LandingPage = () => {
 
   // Function to handle successful login (passed to the modal)
   const handleSuccessfulLogin = () => {
-    setIsLoginModalOpen(false); // Close the modal
+    setIsLoginModalOpen(false); // Close the modal first
+    // The LoginModal will handle showing "Logging in..."
+    // The dashboard page will handle showing "Loading project data..."
+    // and "Login Successful" upon successful data fetch.
     router.push('/prism'); // Navigate to the main app page after successful login
   };
 
@@ -79,7 +91,7 @@ const LandingPage = () => {
 
         {/* Footer can be part of the layout if needed */}
         <footer className="mt-16 text-center text-sm text-muted-foreground">
-          © {new Date().getFullYear()} Project Prism. All rights reserved.
+          © {clientTime ? new Date().getFullYear() : 'Loading year...'} Project Prism. All rights reserved.
         </footer>
       </div>
 
