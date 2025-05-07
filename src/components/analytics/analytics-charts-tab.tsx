@@ -123,13 +123,13 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
           </CardContent>
         </Card>
 
-        {/* Story Points per Developer */}
+        {/* Dev Team Contribution Chart */}
         <Card className="lg:col-span-1 h-[450px]"> {/* Increased height for dropdown */}
           <CardHeader>
              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                  <div>
                     <CardTitle className="flex items-center gap-2">
-                        <Users className="h-5 w-5 text-primary" /> Story Points / Developer
+                        <Users className="h-5 w-5 text-primary" /> Dev Team Contribution
                     </CardTitle>
                     <CardDescription>Completed story points by developer for the last 5 completed sprints.</CardDescription>
                  </div>
