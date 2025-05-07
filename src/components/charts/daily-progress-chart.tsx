@@ -31,13 +31,16 @@ export default function DailyProgressChart({ data }: DailyProgressChartProps) {
     );
   }
 
-  // Calculate max points for Y-axis domain for points
+  // Calculate max value for Y-axis domain, considering both points and tasks
+  // This assumes they will be on the same Y-axis or a primary Y-axis.
+  // If using a secondary Y-axis for tasks, this would need to be split.
   const maxPoints = Math.max(...data.map(d => d.points), 0);
-  const yAxisPointsMax = maxPoints > 0 ? Math.ceil(maxPoints * 1.1) : 10;
+  const maxTasks = Math.max(...data.map(d => d.tasksCompleted || 0), 0); // Consider tasksCompleted if present
+  
+  // For now, let's assume points are primary and determine Y-axis based on points.
+  // If tasks are also plotted on this axis, and scales are very different, it might not look good.
+  const yAxisPrimaryMax = maxPoints > 0 ? Math.ceil(maxPoints * 1.1) : 10;
 
-  // Calculate max tasks for Y-axis domain for tasksCompleted (if you decide to show it)
-  // For now, we assume the chart primarily shows points.
-  // If you want to show tasks, you might need a secondary Y-axis or a toggle.
 
   return (
     <ChartContainer config={chartConfig} className="h-full w-full">
@@ -53,26 +56,34 @@ export default function DailyProgressChart({ data }: DailyProgressChartProps) {
             interval="preserveStartEnd"
           />
           <YAxis
-            yAxisId="points" // Assign an ID for clarity if you add another Y-axis later
+            yAxisId="left" // Give an ID to the primary Y-axis
             tickLine={false}
             axisLine={false}
             tickMargin={8}
             fontSize={10}
             allowDecimals={false}
-            domain={[0, yAxisPointsMax]}
+            domain={[0, yAxisPrimaryMax]}
           />
-          {/* If displaying tasks on a secondary axis, you'd add another YAxis here with a different yAxisId */}
+          {/* If you want a secondary Y-axis for tasks, you'd define it here:
+           <YAxis
+            yAxisId="right"
+            orientation="right"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            fontSize={10}
+            allowDecimals={false}
+            domain={[0, Math.ceil(maxTasks * 1.1) || 5]} // Example domain for tasks
+          /> 
+          */}
           <Tooltip
-            content={<ChartTooltipContent />} // Allow it to show both points and tasksCompleted if present in payload
+            content={<ChartTooltipContent />} 
             cursor={{ fill: 'hsl(var(--muted) / 0.3)' }}
           />
           <Legend verticalAlign="top" height={36} />
-          <Bar yAxisId="points" dataKey="points" fill="var(--color-points)" radius={4} name="Points Completed" />
-          {/* Example for tasks completed bar, if you want to show both:
-          <Bar yAxisId="tasks" dataKey="tasksCompleted" fill="var(--color-tasksCompleted)" radius={4} name="Tasks Completed" />
-          This would require a second Y-axis and adjustments to the overall chart layout.
-          For now, only points are rendered, but the data prop `tasksCompleted` is available in tooltip.
-          */}
+          <Bar yAxisId="left" dataKey="points" fill="var(--color-points)" radius={4} name="Points Completed" />
+          {/* Render tasks completed bar. If scales are too different, this might not look great on same axis. */}
+          <Bar yAxisId="left" dataKey="tasksCompleted" fill="var(--color-tasksCompleted)" radius={4} name="Tasks Completed" />
         </BarChart>
       </ResponsiveContainer>
     </ChartContainer>
