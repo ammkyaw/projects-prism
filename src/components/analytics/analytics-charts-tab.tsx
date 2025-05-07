@@ -1,10 +1,11 @@
 // src/components/analytics/analytics-charts-tab.tsx
 import React, { useMemo, useState, useEffect } from 'react';
-import { AreaChart, Info, LineChart, TrendingDown, Users, BarChartBig, User } from 'lucide-react'; // Added User icon
+import { AreaChart, Info, LineChart, TrendingDown, Users, BarChartBig, User, Bug } from 'lucide-react'; // Added Bug icon
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import VelocityChart from '@/components/charts/velocity-chart';
 import BurndownChart from '@/components/charts/burndown-chart';
 import DeveloperEffortChart from '@/components/charts/developer-effort-chart';
+import BugCountChart from '@/components/charts/bug-count-chart'; // Import the new BugCountChart
 import type { SprintData, Member, Sprint } from '@/types/sprint-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -24,28 +25,51 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
 
     const availableSprintsForSelection = useMemo(() => {
         if (!sprintData || !sprintData.sprints) return [];
+        // Include Active sprints for burndown selection, Completed for others
         return sprintData.sprints
             .filter(s => s.status === 'Active' || s.status === 'Completed')
             .sort((a, b) => b.sprintNumber - a.sprintNumber);
     }, [sprintData]);
 
+     const completedSprints = useMemo(() => {
+        if (!sprintData || !sprintData.sprints) return [];
+        return sprintData.sprints.filter(s => s.status === 'Completed').sort((a, b) => a.sprintNumber - b.sprintNumber);
+     }, [sprintData]);
+
     useEffect(() => {
+        // Default to the active sprint if available, otherwise the latest completed sprint
         if (availableSprintsForSelection.length > 0 && selectedAnalyticSprintNumber === null) {
             const active = availableSprintsForSelection.find(s => s.status === 'Active');
             if (active) {
                 setSelectedAnalyticSprintNumber(active.sprintNumber);
-            } else if (availableSprintsForSelection.length > 0) { // Ensure there are sprints to select from
-                setSelectedAnalyticSprintNumber(availableSprintsForSelection[0].sprintNumber);
+            } else {
+                // Find the most recent completed sprint
+                const latestCompleted = availableSprintsForSelection.find(s => s.status === 'Completed');
+                if (latestCompleted) {
+                  setSelectedAnalyticSprintNumber(latestCompleted.sprintNumber);
+                } else if (availableSprintsForSelection.length > 0) {
+                    // Fallback to the first available sprint if no active or completed found (shouldn't usually happen with the filter)
+                    setSelectedAnalyticSprintNumber(availableSprintsForSelection[0].sprintNumber);
+                }
             }
         } else if (availableSprintsForSelection.length === 0) {
             setSelectedAnalyticSprintNumber(null);
         }
     }, [availableSprintsForSelection, selectedAnalyticSprintNumber]);
 
+
     const displayedSprintForBurndown: Sprint | null | undefined = useMemo(() => {
         if (!sprintData || !sprintData.sprints || selectedAnalyticSprintNumber === null) return null;
+        // Burndown can show active or completed sprints
         return sprintData.sprints.find(s => s.sprintNumber === selectedAnalyticSprintNumber);
     }, [sprintData, selectedAnalyticSprintNumber]);
+
+    const activeSprintForDevContribution = useMemo(() => {
+        if (!sprintData || !sprintData.sprints) return null;
+        return sprintData.sprints.find(s => s.status === "Active");
+    }, [sprintData]);
+
+     const activeSprintNumber = activeSprintForDevContribution?.sprintNumber;
 
     return (
         <div className="space-y-6">
@@ -56,7 +80,7 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
                             <CardTitle className="flex items-center gap-2">
                                 <AreaChart className="h-5 w-5 text-primary" /> Sprint-Specific Analytics
                             </CardTitle>
-                            <CardDescription>View burndown charts for a selected sprint.</CardDescription>
+                            <CardDescription>Select a sprint to view its Burndown chart.</CardDescription>
                         </div>
                         {availableSprintsForSelection.length > 0 && (
                             <Select
@@ -89,6 +113,7 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
             </Card>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Velocity Chart */}
                 <Card className="lg:col-span-1 h-[400px]">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
@@ -107,6 +132,7 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
                     </CardContent>
                 </Card>
 
+                {/* Burndown Chart */}
                 <Card className="lg:col-span-1 h-[400px]">
                     <CardHeader>
                         <CardTitle className="flex items-center justify-center gap-2">
@@ -119,6 +145,7 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
                     </CardContent>
                 </Card>
 
+                {/* Dev Contribution Chart */}
                 <Card className="lg:col-span-1 h-[450px]">
                     <CardHeader>
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
@@ -128,7 +155,7 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
                                 </CardTitle>
                                 <CardDescription>
                                     {selectedDeveloperIdForContribution === "all" || !selectedDeveloperIdForContribution
-                                        ? `Completed story points by developer (stacked by task type) for Sprint ${selectedAnalyticSprintNumber || 'N/A'}.`
+                                        ? `Completed story points by developer (stacked by task type) for Sprint ${activeSprintNumber || 'N/A'}.`
                                         : `Completed story points by ${members.find(m => m.id === selectedDeveloperIdForContribution)?.name || 'selected developer'} for the last 10 completed sprints.`}
                                 </CardDescription>
                             </div>
@@ -143,7 +170,7 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
                                     <SelectContent>
                                         <SelectGroup>
                                             <SelectLabel>Developers</SelectLabel>
-                                            <SelectItem value="all">All Developers (Sprint {selectedAnalyticSprintNumber || 'N/A'})
+                                            <SelectItem value="all">All Developers (Sprint {activeSprintNumber || 'N/A'})
                                             </SelectItem>
                                             {softwareEngineers.map(dev => (
                                                 <SelectItem key={dev.id} value={dev.id}>
@@ -161,23 +188,30 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
                             sprintData={sprintData}
                             members={members}
                             selectedDeveloperId={selectedDeveloperIdForContribution}
-                            selectedSprintNumber={selectedAnalyticSprintNumber}
+                            selectedSprintNumber={activeSprintNumber}
                         />
                     </CardContent>
                 </Card>
 
-                <Card className="lg:col-span-1 h-[450px] flex flex-col items-center justify-center border-dashed border-2">
-                    <CardHeader className="text-center">
-                        <CardTitle className="flex items-center justify-center gap-2">
-                            <Info className="h-5 w-5 text-muted-foreground" /> Future Chart
+                 {/* Bug Count Chart */}
+                <Card className="lg:col-span-1 h-[450px]">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Bug className="h-5 w-5 text-destructive" /> Bug Count per Sprint
                         </CardTitle>
-                        <CardDescription>(Another insightful chart will be displayed here)</CardDescription>
+                        <CardDescription>Number of tasks marked as 'Bug' in completed sprints.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex items-center justify-center text-muted-foreground">
-                        <Info className="mr-2 h-5 w-5" />
-                        (Placeholder)
+                    <CardContent className="h-[calc(100%-100px)] pl-2">
+                         {completedSprints.length > 0 ? (
+                             <BugCountChart data={completedSprints} />
+                         ) : (
+                             <div className="flex items-center justify-center h-full text-muted-foreground">
+                                 <Info className="mr-2 h-5 w-5" /> No completed sprints found to display bug counts.
+                             </div>
+                         )}
                     </CardContent>
                 </Card>
+
             </div>
         </div>
     );
