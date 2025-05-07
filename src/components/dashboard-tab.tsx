@@ -1,3 +1,4 @@
+
 'use client';
 
 import type {
@@ -109,23 +110,28 @@ export default function DashboardTab({
 
   // Recalculate points chart data and completion percentage
   const { pointsChartData, pointsCompletionPercentage } = useMemo(() => {
-    if (!activeSprint)
+    if (!activeSprint || !activeSprint.planning)
       return { pointsChartData: [], pointsCompletionPercentage: 0 };
-    const committed = activeSprint.committedPoints || 0;
-    const completed =
-      (activeSprint.status === 'Active' || activeSprint.status === 'Planned') &&
-      activeSprint.planning
-        ? [
-            ...(activeSprint.planning.newTasks || []),
-            ...(activeSprint.planning.spilloverTasks || []),
-          ]
-            .filter((task) => task.status === 'Done')
-            .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0)
-        : activeSprint.completedPoints || 0;
 
+    // Committed points only include NEW tasks planned for this sprint
+    const committed = (activeSprint.planning.newTasks || []).reduce(
+      (sum, task) => sum + (Number(task.storyPoints) || 0),
+      0
+    );
+
+    // Completed points include DONE tasks from BOTH new and spillover for this sprint
+    const completed = [
+      ...(activeSprint.planning.newTasks || []),
+      ...(activeSprint.planning.spilloverTasks || []),
+    ]
+      .filter((task) => task.status === 'Done')
+      .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+
+    // Remaining is based on the original commitment (new tasks only)
     const remaining = Math.max(0, committed - completed);
     const percentage =
       committed > 0 ? Math.round((completed / committed) * 100) : 0;
+
     const chartData = [
       {
         name: 'Completed',
@@ -275,7 +281,10 @@ export default function DashboardTab({
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <Card className="lg:col-span-2">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle
+            className="flex items-center gap-2"
+            style={{ fontSize: '1.2em' }}
+          >
             <Activity className="h-5 w-5 text-primary" />
             Active Sprint:{' '}
             {activeSprint ? `Sprint ${activeSprint.sprintNumber}` : 'None'}
@@ -318,20 +327,19 @@ export default function DashboardTab({
               Progress
             </CardTitle>
             <CardDescription className="text-xs">
-              Committed vs. Completed points.
+              Committed (New Tasks Only) vs. Completed points.
             </CardDescription>
           </CardHeader>
           <CardContent className="-mt-4 flex flex-1 items-center justify-center pb-0">
-            {pointsChartData.reduce((acc, curr) => acc + curr.value, 0) > 0 ? (
+            {pointsChartData.reduce((acc, curr) => acc + curr.value, 0) > 0 ||
+            activeSprint.committedPoints > 0 ? ( // Show chart even if only commitment exists
               <ChartContainer config={chartConfig} className="h-[250px] w-full">
                 <ChartPieChart>
-                  {' '}
-                  {/* Changed from PieChart */}
                   <ChartTooltip
                     cursor={false}
                     content={<ChartTooltipContent hideLabel nameKey="name" />}
                   />
-                  <ChartPie // Changed from Pie
+                  <ChartPie
                     data={pointsChartData}
                     dataKey="value"
                     nameKey="name"
@@ -340,7 +348,7 @@ export default function DashboardTab({
                     strokeWidth={5}
                   >
                     {pointsChartData.map((entry, index) => (
-                      <ChartCell key={`cell-${index}`} fill={entry.fill} /> // Changed from Cell
+                      <ChartCell key={`cell-${index}`} fill={entry.fill} />
                     ))}
                   </ChartPie>
                   {/* Center Text */}
@@ -351,20 +359,19 @@ export default function DashboardTab({
                     dominantBaseline="middle"
                     className="fill-foreground text-2xl font-semibold"
                   >
-                    {pointsCompletionPercentage}% {/* Display percentage */}
+                    {pointsCompletionPercentage}%
                   </text>
                   <text
                     x="50%"
                     y="50%"
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    dy="1.5em" // Adjusted dy for more padding
+                    dy="1.5em" // Keep padding
                     className="fill-muted-foreground text-xs"
                   >
-                    Completed {/* Update label */}
+                    Completed
                   </text>
-                </ChartPieChart>{' '}
-                {/* Changed from PieChart */}
+                </ChartPieChart>
               </ChartContainer>
             ) : (
               <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
@@ -468,3 +475,4 @@ export default function DashboardTab({
     </div>
   );
 }
+
