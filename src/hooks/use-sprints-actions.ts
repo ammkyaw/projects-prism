@@ -1,3 +1,4 @@
+
 import { useCallback } from 'react';
 import type { SprintPlanning, SprintStatus, Project, Task, ToastFun, Sprint, Member, HolidayCalendar, Team } from '@/types/sprint-data';
 import { initialSprintPlanning, initialSprintData, taskPriorities } from '@/types/sprint-data';
@@ -31,14 +32,14 @@ const finalizeTasks = (taskRows: Task[], taskType: 'new' | 'spillover', sprintNu
       const ticketNumber = row.ticketNumber?.trim();
       const storyPointsRaw = row.storyPoints?.toString().trim();
       let storyPoints: number | null = null;
-      if (storyPointsRaw) {
-          const parsed = parseInt(storyPointsRaw, 10);
-          if (!isNaN(parsed) && parsed >= 0) {
-              storyPoints = parsed;
-          } else {
-              errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
-          }
-      }
+            if (storyPointsRaw) {
+                const parsed = parseInt(storyPointsRaw, 10);
+                if (!isNaN(parsed) && parsed >= 0) {
+                    storyPoints = parsed;
+                } else {
+                    errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
+                }
+            }
 
       const devEstimatedTime = row.devEstimatedTime?.trim() || null;
       const qaEstimatedTime = row.qaEstimatedTime?.trim() || '2d';
@@ -90,7 +91,7 @@ const finalizeTasks = (taskRows: Task[], taskType: 'new' | 'spillover', sprintNu
           priority: priority,
           acceptanceCriteria: row.acceptanceCriteria,
           dependsOn: row.dependsOn,
-          taskType: task.taskType,
+          taskType: row.taskType,
           createdDate: row.createdDate,
           initiator: row.initiator,
           needsGrooming: row.needsGrooming,
@@ -125,7 +126,7 @@ const parseEstimatedTimeToDays = (timeString: string | undefined | null): number
   if (weekPart) {
     const weeks = parseInt(weekPart.replace('w', ''), 10);
     if (!isNaN(weeks)) {
-      totalDays += weeks * 5; 
+      totalDays += weeks * 5;
     }
   }
 
@@ -143,7 +144,7 @@ const parseEstimatedTimeToDays = (timeString: string | undefined | null): number
        }
   }
 
-  return totalDays >= 0 ? totalDays : (timeString === '0' || timeString === '0d' ? 0 : null); 
+  return totalDays >= 0 ? totalDays : (timeString === '0' || timeString === '0d' ? 0 : null);
 };
 
 // Predefined Task Statuses - applicable IN a sprint
@@ -158,11 +159,11 @@ export const useSprintsActions = ({ selectedProject, updateProjectData, toast, c
       return;
     }
 
-    const currentProjectName = selectedProject.name; 
+    const currentProjectName = selectedProject.name;
     let statusUpdateMessage = '';
     let otherActiveSprintExists = false;
 
-    const tempSprints = [...(selectedProject.sprintData.sprints ?? [])]; 
+    const tempSprints = [...(selectedProject.sprintData.sprints ?? [])];
 
     if (newStatus === 'Active') {
       otherActiveSprintExists = tempSprints.some(s => s.sprintNumber !== sprintNumber && s.status === 'Active');
@@ -172,7 +173,7 @@ export const useSprintsActions = ({ selectedProject, updateProjectData, toast, c
           title: "Active Sprint Limit",
           description: `Only one sprint can be active at a time. Another sprint is already active.`,
         });
-        return; 
+        return;
       }
     }
 
@@ -215,12 +216,12 @@ export const useSprintsActions = ({ selectedProject, updateProjectData, toast, c
       },
     };
 
-    updateProjectData(updatedProject); 
+    updateProjectData(updatedProject);
 
     if (!otherActiveSprintExists) {
       setTimeout(() => {
         toast({ title: "Success", description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'` });
-      }, 50); 
+      }, 50);
     }
 
   }, [selectedProject, updateProjectData, toast, clientNow]);
@@ -246,7 +247,7 @@ export const useSprintsActions = ({ selectedProject, updateProjectData, toast, c
         title: "Sprint Limit Reached",
         description: "Cannot plan new sprint. Limit is 2 Planned or 1 Planned + 1 Active.",
       });
-      return; 
+      return;
     }
 
     if (currentSprints.some(s => s.sprintNumber === sprintDetails.sprintNumber)) {
@@ -274,10 +275,10 @@ export const useSprintsActions = ({ selectedProject, updateProjectData, toast, c
 
     const newSprint: Sprint = {
       ...sprintDetails,
-      committedPoints: committedPoints, 
-      completedPoints: 0, 
+      committedPoints: committedPoints,
+      completedPoints: 0,
       status: 'Planned',
-      details: [], 
+      details: [],
       planning: validatedPlanning,
     };
 
@@ -293,7 +294,7 @@ export const useSprintsActions = ({ selectedProject, updateProjectData, toast, c
       },
     };
 
-    updateProjectData(updatedProject); 
+    updateProjectData(updatedProject);
 
     setTimeout(() => {
       toast({ title: "Success", description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.` });
