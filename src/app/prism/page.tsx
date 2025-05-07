@@ -1,15 +1,16 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'; // Added useRef, React
 import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Added CardContent
-import { Download, HomeIcon, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Activity, Eye, Filter, GitCommitVertical, History, CheckCircle, Undo, ArrowUpDown, ListChecks, Loader2 } from 'lucide-react'; // Added ArrowUpDown, ListChecks icons, Loader2
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Download, BarChart, ListPlus, PlusCircle, NotebookPen, Users, Trash2, CalendarDays, Edit, UsersRound, Package, LayoutDashboard, IterationCw, Layers, BarChartBig, Settings, Eye, GitCommitVertical, History, Loader2 } from 'lucide-react'; // Added ArrowUpDown, ListChecks icons, Loader2
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'; // Import AlertDialog components
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'; // Import AlertDialog components
 
 
 // Main Content Components (Tabs) - Renamed and New Placeholders
@@ -36,11 +37,10 @@ import AnalyticsChartsTab from '@/components/analytics-charts-tab';
 import AnalyticsReportsTab from '@/components/analytics/analytics-reports-tab'; // Updated path
 
 
-import type { SprintData, Sprint, AppData, Project, SprintDetailItem, SprintPlanning, Member, SprintStatus, Task, HolidayCalendar, PublicHoliday, Team, TeamMember, HistoryStatus, ToastFun } from '@/types/sprint-data'; // Added HistoryStatus, ToastFun
-import { initialSprintData, initialSprintPlanning, taskStatuses, initialBacklogTask, taskPriorities } from '@/types/sprint-data'; // Import taskPriorities
+import type { Project, Member, Task, ToastFun } from '@/types/sprint-data'; // Added HistoryStatus, ToastFun
+import { initialSprintData } from '@/types/sprint-data'; // Import taskPriorities
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { addDays, format, parseISO, isPast, isValid, getYear } from 'date-fns'; // Added getYear
 import { useSprintsActions } from '@/hooks/use-sprints-actions'; // Import the new hook
 import { useBacklogActions } from '@/hooks/use-backlog-actions';
 import { useSettingsActions } from '@/hooks/use-settings-actions'; // Import the new hook for settings
@@ -320,7 +320,7 @@ export default function Home() {
       dashboard: { label: "Dashboard", icon: LayoutDashboard, component: DashboardTab },
       sprints: {
           label: "Sprints", icon: IterationCw, subTabs: {
-              summary: { label: "Summary", icon: Eye, component: SprintSummaryTab },
+              summary: { label: "Overview", icon: Eye, component: SprintSummaryTab },
               planning: { label: "Planning", icon: NotebookPen, component: SprintPlanningTab },
               retrospective: { label: "Retrospective", icon: GitCommitVertical, component: SprintRetrospectiveTab },
           }
@@ -741,3 +741,4 @@ export default function Home() {
   );
 
 }
+
