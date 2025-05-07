@@ -914,7 +914,7 @@ export default function BacklogTab({
                                   </Button>
                               </TableHead>
                               <TableHead className="w-[80px] text-center">Actions</TableHead>
-                              <TableHead className="w-[40px]"></TableHead> {/* Delete column */}
+                              <TableHead className="w-[40px]"></TableHead>
                           </TableRow>
                      </TableHeader>
                      <TableBody>

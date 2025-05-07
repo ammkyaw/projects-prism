@@ -1,0 +1,20 @@
+
+# Build output
+.next/
+node_modules/
+
+# Environment files
+.env*.local
+*.env
+
+# Lock files
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Firebase specific
+.firebase/
+firebase.json
+
+# IDX specific
+.idx/
