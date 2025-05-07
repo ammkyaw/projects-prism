@@ -18,7 +18,7 @@ interface AnalyticsChartsTabProps {
 
 export default function AnalyticsChartsTab({ sprintData, members, projectName }: AnalyticsChartsTabProps) {
   const [selectedAnalyticSprintNumber, setSelectedAnalyticSprintNumber] = useState<number | null>(null);
-  const [selectedDeveloperId, setSelectedDeveloperId] = useState<string | null>("all"); // "all" or member.id
+  const [selectedDeveloperIdForContribution, setSelectedDeveloperIdForContribution] = useState<string | null>("all"); 
 
   const softwareEngineers = useMemo(() => {
     return members.filter(member => member.role === 'Software Engineer');
@@ -28,7 +28,7 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
     if (!sprintData || !sprintData.sprints) return [];
     return sprintData.sprints
       .filter(s => s.status === 'Active' || s.status === 'Completed')
-      .sort((a, b) => b.sprintNumber - a.sprintNumber); // Show latest first
+      .sort((a, b) => b.sprintNumber - a.sprintNumber); 
   }, [sprintData]);
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
     }
   }, [availableSprintsForSelection, selectedAnalyticSprintNumber]);
 
-  const displayedSprint: Sprint | null | undefined = useMemo(() => {
+  const displayedSprintForBurndown: Sprint | null | undefined = useMemo(() => {
     if (!sprintData || !sprintData.sprints || selectedAnalyticSprintNumber === null) return null;
     return sprintData.sprints.find(s => s.sprintNumber === selectedAnalyticSprintNumber);
   }, [sprintData, selectedAnalyticSprintNumber]);
@@ -116,27 +116,31 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
             <CardTitle className="flex items-center justify-center gap-2">
               <TrendingDown className="h-5 w-5 text-primary" /> Burndown Chart
             </CardTitle>
-            <CardDescription className="text-center">Ideal vs. Actual burndown for {displayedSprint ? `Sprint ${displayedSprint.sprintNumber}` : 'selected sprint'}.</CardDescription>
+            <CardDescription className="text-center">Ideal vs. Actual burndown for {displayedSprintForBurndown ? `Sprint ${displayedSprintForBurndown.sprintNumber}` : 'selected sprint'}.</CardDescription>
           </CardHeader>
           <CardContent className="h-[calc(100%-100px)] pl-2">
-            <BurndownChart activeSprint={displayedSprint} />
+            <BurndownChart activeSprint={displayedSprintForBurndown} />
           </CardContent>
         </Card>
 
         {/* Dev Team Contribution Chart */}
-        <Card className="lg:col-span-1 h-[450px]"> {/* Increased height for dropdown */}
+        <Card className="lg:col-span-1 h-[450px]"> 
           <CardHeader>
              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                  <div>
                     <CardTitle className="flex items-center gap-2">
                         <Users className="h-5 w-5 text-primary" /> Dev Team Contribution
                     </CardTitle>
-                    <CardDescription>Completed story points by developer for the last 5 completed sprints.</CardDescription>
+                    <CardDescription>
+                      {selectedDeveloperIdForContribution === "all" || !selectedDeveloperIdForContribution 
+                        ? "Completed story points by developer (stacked by task type) for the active sprint." 
+                        : `Completed story points by ${members.find(m=>m.id === selectedDeveloperIdForContribution)?.name || 'selected developer'} for the last 5 completed sprints.`}
+                    </CardDescription>
                  </div>
                 {softwareEngineers.length > 0 && (
                     <Select
-                        value={selectedDeveloperId ?? "all"}
-                        onValueChange={(value) => setSelectedDeveloperId(value === "all" ? null : value)}
+                        value={selectedDeveloperIdForContribution ?? "all"}
+                        onValueChange={(value) => setSelectedDeveloperIdForContribution(value === "all" ? null : value)}
                     >
                         <SelectTrigger className="w-full sm:w-[200px]">
                             <SelectValue placeholder="Select Developer..." />
@@ -144,7 +148,7 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
                         <SelectContent>
                             <SelectGroup>
                                 <SelectLabel>Developers</SelectLabel>
-                                <SelectItem value="all">All Developers</SelectItem>
+                                <SelectItem value="all">All Developers (Active Sprint)</SelectItem>
                                 {softwareEngineers.map(dev => (
                                 <SelectItem key={dev.id} value={dev.id}>
                                     {dev.name}
@@ -156,11 +160,11 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
                 )}
             </div>
           </CardHeader>
-          <CardContent className="h-[calc(100%-124px)] pl-2"> {/* Adjusted height calculation */}
+          <CardContent className="h-[calc(100%-124px)] pl-2"> 
             <DeveloperEffortChart
                 sprintData={sprintData}
                 members={members}
-                selectedDeveloperId={selectedDeveloperId === "all" ? null : selectedDeveloperId}
+                selectedDeveloperId={selectedDeveloperIdForContribution}
             />
           </CardContent>
         </Card>
@@ -182,4 +186,3 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
     </div>
   );
 }
-

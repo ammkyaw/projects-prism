@@ -1,11 +1,12 @@
 // src/components/charts/developer-effort-chart.tsx
 "use client";
 
-import type { SprintData, Member, Sprint, Task } from '@/types/sprint-data';
+import type { SprintData, Member, Sprint, Task, TaskType } from '@/types/sprint-data';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ChartConfig, ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { useMemo } from 'react';
 import { Info } from 'lucide-react';
+import { taskTypes as allTaskTypes } from '@/types/sprint-data'; // Import available task types
 
 interface DeveloperEffortChartProps {
   sprintData: SprintData | null;
@@ -13,108 +14,126 @@ interface DeveloperEffortChartProps {
   selectedDeveloperId?: string | null; // Optional: ID of a specific developer to filter by
 }
 
+// Define base colors for task types (can be expanded or made more dynamic)
+const taskTypeColors: { [key in TaskType]?: string } = {
+  'New Feature': "hsl(var(--chart-1))",
+  'Improvement': "hsl(var(--chart-2))",
+  'Bug': "hsl(var(--chart-3))",
+  'Refactoring': "hsl(var(--chart-4))",
+  'Documentation': "hsl(var(--chart-5))",
+  'Security': "hsl(var(--destructive))", // Example for a distinct color
+  'Infra': "hsl(var(--muted))",
+  'CI/CD': "hsl(var(--primary))",
+  'Compliance': "hsl(var(--secondary))",
+};
+
+
 export default function DeveloperEffortChart({ sprintData, members, selectedDeveloperId }: DeveloperEffortChartProps) {
-  const { chartData, chartConfig, noDataMessage } = useMemo(() => {
+  const { chartData, chartConfig, noDataMessage, xAxisDataKey } = useMemo(() => {
     if (!sprintData || !sprintData.sprints || sprintData.sprints.length === 0) {
-      return { chartData: [], chartConfig: {}, noDataMessage: "No sprint data available." };
+      return { chartData: [], chartConfig: {}, noDataMessage: "No sprint data available.", xAxisDataKey: "name" };
     }
     if (!members || members.length === 0) {
-      return { chartData: [], chartConfig: {}, noDataMessage: "No members found in the project." };
+      return { chartData: [], chartConfig: {}, noDataMessage: "No members found in the project.", xAxisDataKey: "name" };
     }
 
     const softwareEngineers = members.filter(m => m.role === 'Software Engineer');
-    if (softwareEngineers.length === 0 && !selectedDeveloperId) { // If no SEs and not filtering for a specific (potentially non-SE) dev
-        return { chartData: [], chartConfig: {}, noDataMessage: "No Software Engineers found in the project." };
-    }
-
-
-    // Get the last 5 completed sprints
-    const completedSprints = (sprintData.sprints || [])
-      .filter(s => s.status === 'Completed')
-      .sort((a, b) => b.sprintNumber - a.sprintNumber) // Sort descending by sprint number
-      .slice(0, 5)
-      .sort((a,b) => a.sprintNumber - b.sprintNumber); // Sort back to ascending for chart display
-
-    if (completedSprints.length === 0) {
-        return { chartData: [], chartConfig: {}, noDataMessage: "No completed sprints to display." };
-    }
-
-
-    const dataBySprint: { [sprintName: string]: { sprint: string; [developerNameOrPoints: string]: number | string } } = {};
-    const themeChartColors = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
-    let dynamicChartConfig: ChartConfig = {};
 
     if (selectedDeveloperId) {
-        // --- Specific Developer View ---
-        const developer = members.find(m => m.id === selectedDeveloperId);
-        if (!developer) {
-            return { chartData: [], chartConfig: {}, noDataMessage: `Developer with ID ${selectedDeveloperId} not found.` };
-        }
+      // --- Specific Developer View: Last 5 Completed Sprints ---
+      const developer = members.find(m => m.id === selectedDeveloperId);
+      if (!developer) {
+        return { chartData: [], chartConfig: {}, noDataMessage: `Developer with ID ${selectedDeveloperId} not found.`, xAxisDataKey: "sprintName" };
+      }
 
-        dynamicChartConfig["points"] = { // Use a generic "points" key for the single developer
-            label: developer.name,
-            color: themeChartColors[0], // Use first color for the selected developer
-        };
+      const completedSprints = (sprintData.sprints || [])
+        .filter(s => s.status === 'Completed')
+        .sort((a, b) => b.sprintNumber - a.sprintNumber)
+        .slice(0, 5)
+        .sort((a, b) => a.sprintNumber - b.sprintNumber);
 
-        completedSprints.forEach(sprint => {
-            const sprintName = `Sprint ${sprint.sprintNumber}`;
-            dataBySprint[sprintName] = { sprint: sprintName, points: 0 };
+      if (completedSprints.length === 0) {
+        return { chartData: [], chartConfig: {}, noDataMessage: `No completed sprints for ${developer.name}.`, xAxisDataKey: "sprintName" };
+      }
 
-            const tasks: Task[] = [...(sprint.planning?.newTasks || []), ...(sprint.planning?.spilloverTasks || [])];
-            tasks.forEach(task => {
-                if (task.status === 'Done' && task.assignee === developer.name && task.storyPoints) {
-                    const points = Number(task.storyPoints);
-                    if (!isNaN(points)) {
-                        (dataBySprint[sprintName]["points"] as number) += points;
-                    }
-                }
-            });
-        });
+      const specificDevChartData = completedSprints.map(sprint => {
+        const tasks: Task[] = [...(sprint.planning?.newTasks || []), ...(sprint.planning?.spilloverTasks || [])];
+        const points = tasks.reduce((sum, task) => {
+          if (task.status === 'Done' && task.assignee === developer.name && task.storyPoints) {
+            const taskPoints = Number(task.storyPoints);
+            if (!isNaN(taskPoints)) {
+              return sum + taskPoints;
+            }
+          }
+          return sum;
+        }, 0);
+        return { sprintName: `Sprint ${sprint.sprintNumber}`, points: points };
+      });
+
+      if (specificDevChartData.every(d => d.points === 0)) {
+          return { chartData: [], chartConfig: {}, noDataMessage: `No completed story points by ${developer.name} in the last 5 completed sprints.`, xAxisDataKey: "sprintName"};
+      }
+
+      const dynamicChartConfig: ChartConfig = {
+        points: {
+          label: developer.name,
+          color: taskTypeColors['New Feature'] || "hsl(var(--chart-1))", // Default color if New Feature isn't in taskTypeColors
+        },
+      };
+      return { chartData: specificDevChartData, chartConfig: dynamicChartConfig, noDataMessage: "", xAxisDataKey: "sprintName" };
 
     } else {
-        // --- All Developers View (for the last 5 completed sprints) ---
-        const developerColors: { [developerName: string]: string } = {};
-        let colorIndex = 0;
+      // --- All Developers View: Active Sprint, Stacked by Task Type ---
+      const activeSprint = sprintData.sprints.find(s => s.status === 'Active');
+      if (!activeSprint) {
+        return { chartData: [], chartConfig: {}, noDataMessage: "No active sprint to display contributions.", xAxisDataKey: "developerName" };
+      }
+      if (softwareEngineers.length === 0) {
+        return { chartData: [], chartConfig: {}, noDataMessage: "No Software Engineers found in the project for active sprint view.", xAxisDataKey: "developerName" };
+      }
 
-        softwareEngineers.forEach(member => { // Only SEs for "All Developers" view
-            developerColors[member.name] = themeChartColors[colorIndex % themeChartColors.length];
-            dynamicChartConfig[member.name] = {
-                label: member.name,
-                color: developerColors[member.name],
-            };
-            colorIndex++;
+      const tasksInActiveSprint: Task[] = [...(activeSprint.planning?.newTasks || []), ...(activeSprint.planning?.spilloverTasks || [])];
+      const dataByDeveloper: { [devName: string]: { developerName: string } & { [taskTypeKey: string]: number } } = {};
+      const activeSprintChartConfig: ChartConfig = {};
+      let colorIdx = 0;
+
+      softwareEngineers.forEach(dev => {
+        dataByDeveloper[dev.name] = { developerName: dev.name };
+        allTaskTypes.forEach(type => {
+          dataByDeveloper[dev.name][type.replace(/\s+/g, '')] = 0; // Initialize task types with 0 points
         });
+      });
 
+      tasksInActiveSprint.forEach(task => {
+        if (task.status === 'Done' && task.assignee && task.storyPoints && task.taskType) {
+          const assignee = members.find(m => m.name === task.assignee);
+          if (assignee && softwareEngineers.some(se => se.id === assignee.id)) { // Ensure assignee is an SE
+            const points = Number(task.storyPoints);
+            const taskTypeKey = task.taskType.replace(/\s+/g, ''); // e.g., NewFeature
+            if (!isNaN(points) && dataByDeveloper[task.assignee]) {
+              dataByDeveloper[task.assignee][taskTypeKey] = (dataByDeveloper[task.assignee][taskTypeKey] || 0) + points;
 
-        completedSprints.forEach(sprint => {
-            const sprintName = `Sprint ${sprint.sprintNumber}`;
-            if (!dataBySprint[sprintName]) {
-                dataBySprint[sprintName] = { sprint: sprintName };
-                softwareEngineers.forEach(member => {
-                    dataBySprint[sprintName][member.name] = 0; // Initialize points for all SEs
-                });
+              // Dynamically build chartConfig for task types if not already present
+              if (!activeSprintChartConfig[taskTypeKey]) {
+                activeSprintChartConfig[taskTypeKey] = {
+                  label: task.taskType,
+                  color: taskTypeColors[task.taskType] || `hsl(var(--chart-${(colorIdx % 5) + 1}))`, // Cycle through chart-1 to chart-5
+                };
+                colorIdx++;
+              }
             }
+          }
+        }
+      });
+      
+      const allDevsChartData = Object.values(dataByDeveloper);
 
-            const tasks: Task[] = [...(sprint.planning?.newTasks || []), ...(sprint.planning?.spilloverTasks || [])];
-            tasks.forEach(task => {
-                if (task.status === 'Done' && task.assignee && task.storyPoints) {
-                    const points = Number(task.storyPoints);
-                    // Ensure the assignee is a software engineer for this view and has an entry in developerColors
-                    if (!isNaN(points) && softwareEngineers.some(se => se.name === task.assignee) && developerColors[task.assignee]) {
-                         (dataBySprint[sprintName][task.assignee] as number) += points;
-                    }
-                }
-            });
-        });
+      if (allDevsChartData.every(devData => allTaskTypes.every(type => (devData[type.replace(/\s+/g, '')] || 0) === 0))) {
+        return { chartData: [], chartConfig: {}, noDataMessage: "No completed story points by developers in the active sprint.", xAxisDataKey: "developerName" };
+      }
+
+      return { chartData: allDevsChartData, chartConfig: activeSprintChartConfig, noDataMessage: "", xAxisDataKey: "developerName" };
     }
-
-    const finalChartData = Object.values(dataBySprint);
-
-    if (finalChartData.every(sprintEntry => selectedDeveloperId ? sprintEntry.points === 0 : softwareEngineers.every(se => (sprintEntry[se.name] as number) === 0))) {
-       return { chartData: [], chartConfig: {}, noDataMessage: selectedDeveloperId ? "No completed story points by the selected developer in the last 5 completed sprints." : "No completed story points by developers in the last 5 completed sprints." };
-    }
-
-    return { chartData: finalChartData, chartConfig: dynamicChartConfig, noDataMessage: "" };
   }, [sprintData, members, selectedDeveloperId]);
 
 
@@ -134,7 +153,7 @@ export default function DeveloperEffortChart({ sprintData, members, selectedDeve
         <BarChart data={chartData} margin={{ top: 5, right: 10, left: -25, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis
-            dataKey="sprint"
+            dataKey={xAxisDataKey}
             tickLine={false}
             axisLine={false}
             tickMargin={8}
@@ -150,11 +169,21 @@ export default function DeveloperEffortChart({ sprintData, members, selectedDeve
           <Tooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--muted) / 0.3)' }} />
           <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px' }}/>
           {selectedDeveloperId ? (
-            <Bar dataKey="points" fill={`var(--color-points)`} radius={4} barSize={20}/>
+            // Specific developer view: one bar for 'points'
+            <Bar dataKey="points" fill={chartConfig.points?.color || "hsl(var(--chart-1))"} radius={4} barSize={20}/>
           ) : (
-            members.filter(m=>m.role === 'Software Engineer').map(member => ( // Only render bars for SEs in "All" view
-              chartConfig[member.name] ? // Ensure config exists
-                <Bar key={member.id} dataKey={member.name} fill={`var(--color-${member.name})`} radius={4} barSize={15} stackId="a"/>
+            // All developers view: stacked bars by task type
+            Object.keys(chartConfig).map(taskTypeKey => (
+              chartConfig[taskTypeKey] ? // Ensure config exists for this task type
+                <Bar 
+                  key={taskTypeKey} 
+                  dataKey={taskTypeKey} 
+                  fill={chartConfig[taskTypeKey]?.color || "hsl(var(--muted))"} 
+                  radius={4} 
+                  barSize={15} 
+                  stackId="a" // All bars for a developer stack together
+                  name={chartConfig[taskTypeKey]?.label?.toString()} // For legend
+                />
               : null
             ))
           )}
@@ -163,4 +192,3 @@ export default function DeveloperEffortChart({ sprintData, members, selectedDeve
     </ChartContainer>
   );
 }
-
