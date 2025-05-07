@@ -1,7 +1,7 @@
 // src/components/charts/bug-count-chart.tsx
 'use client';
 
-import type { Sprint, Task } from '@/types/sprint-data';
+import type { Sprint, Task, TaskType } from '@/types/sprint-data'; // Added TaskType
 import {
   BarChart,
   Bar,
@@ -18,7 +18,7 @@ import {
   ChartTooltipContent,
 } from '@/components/ui/chart';
 import { useMemo } from 'react';
-import { Info } from 'lucide-react';
+import { Info, Bug, Wrench } from 'lucide-react'; // Added Wrench for Hotfix
 
 interface BugCountChartProps {
   data: Sprint[]; // Expects an array of completed sprints
@@ -28,6 +28,10 @@ const chartConfig = {
   bugs: {
     label: 'Bugs',
     color: 'hsl(var(--destructive))', // Use destructive color for bugs
+  },
+  hotfixes: { // Added config for hotfixes
+    label: 'Hotfixes',
+    color: 'hsl(0 100% 50%)', // Bright red color
   },
 } satisfies ChartConfig;
 
@@ -40,16 +44,18 @@ export default function BugCountChart({ data }: BugCountChartProps) {
     return data
       .filter(
         (sprint) => sprint.status === 'Completed' || sprint.status === 'Active'
-      ) // Ensure only completed sprints
+      ) // Include completed and active sprints
       .map((sprint) => {
         const tasks: Task[] = [
           ...(sprint.planning?.newTasks || []),
           ...(sprint.planning?.spilloverTasks || []),
         ];
         const bugCount = tasks.filter((task) => task.taskType === 'Bug').length;
+        const hotfixCount = tasks.filter((task) => task.taskType === 'Hotfix').length; // Count hotfixes
         return {
           name: `Sprint ${sprint.sprintNumber}`,
           bugs: bugCount,
+          hotfixes: hotfixCount, // Add hotfix count to data
         };
       });
   }, [data]);
@@ -58,13 +64,15 @@ export default function BugCountChart({ data }: BugCountChartProps) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
         <Info className="mr-2 h-5 w-5" />
-        <span>No completed sprints to display bug counts.</span>
+        <span>No completed or active sprints to display issue counts.</span>
       </div>
     );
   }
 
-  const maxBugs = Math.max(...chartData.map((d) => d.bugs), 0);
-  const yAxisMax = maxBugs > 0 ? Math.ceil(maxBugs * 1.1) : 5; // Set a minimum axis height
+  // Calculate max value based on the higher count between bugs and hotfixes per sprint
+  const maxCountPerSprint = chartData.map(d => Math.max(d.bugs, d.hotfixes));
+  const maxCountOverall = Math.max(...maxCountPerSprint, 0);
+  const yAxisMax = maxCountOverall > 0 ? Math.ceil(maxCountOverall * 1.1) : 5; // Set a minimum axis height
 
   return (
     <ChartContainer config={chartConfig} className="h-full w-full">
@@ -72,6 +80,7 @@ export default function BugCountChart({ data }: BugCountChartProps) {
         <BarChart
           data={chartData}
           margin={{ top: 5, right: 10, left: -25, bottom: 5 }}
+          barGap={4} // Add a small gap between bars for the same sprint
         >
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis
@@ -95,7 +104,20 @@ export default function BugCountChart({ data }: BugCountChartProps) {
             cursor={{ fill: 'hsl(var(--muted) / 0.3)' }}
           />
           <Legend verticalAlign="top" height={36} />
-          <Bar dataKey="bugs" fill="var(--color-bugs)" radius={4} name="Bugs" />
+          <Bar
+            dataKey="bugs"
+            fill="var(--color-bugs)"
+            radius={4}
+            name="Bugs"
+            barSize={15} // Adjust bar size if needed
+          />
+          <Bar
+            dataKey="hotfixes" // Add bar for hotfixes
+            fill="var(--color-hotfixes)" // Use the new color
+            radius={4}
+            name="Hotfixes"
+            barSize={15} // Adjust bar size if needed
+          />
         </BarChart>
       </ResponsiveContainer>
     </ChartContainer>

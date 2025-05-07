@@ -9,7 +9,8 @@ import {
   BarChartBig,
   User,
   Bug,
-} from 'lucide-react'; // Added Bug icon
+  Wrench, // Import Wrench for Hotfix
+} from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -22,7 +23,7 @@ import {
 import VelocityChart from '@/components/charts/velocity-chart';
 import BurndownChart from '@/components/charts/burndown-chart';
 import DeveloperEffortChart from '@/components/charts/developer-effort-chart';
-import BugCountChart from '@/components/charts/bug-count-chart'; // Import the new BugCountChart
+import BugCountChart from '@/components/charts/bug-count-chart'; // Import the BugCountChart
 import type { SprintData, Member, Sprint } from '@/types/sprint-data';
 import {
   Card,
@@ -62,7 +63,7 @@ export default function AnalyticsChartsTab({
       .sort((a, b) => b.sprintNumber - a.sprintNumber);
   }, [sprintData]);
 
-  const completedSprints = useMemo(() => {
+  const completedOrActiveSprints = useMemo(() => { // Renamed for clarity
     if (!sprintData || !sprintData.sprints) return [];
     return sprintData.sprints
       .filter((s) => s.status === 'Completed' || s.status === 'Active')
@@ -226,7 +227,7 @@ export default function AnalyticsChartsTab({
                 <CardDescription>
                   {selectedDeveloperIdForContribution === 'all' ||
                   !selectedDeveloperIdForContribution
-                    ? `Completed story points by developer (stacked by task type) for Sprint ${activeSprintNumber || 'N/A'}.`
+                    ? `Completed story points by developer (stacked by task type) for Sprint ${selectedAnalyticSprintNumber || 'N/A'}.` // Updated description for clarity
                     : `Completed story points by ${members.find((m) => m.id === selectedDeveloperIdForContribution)?.name || 'selected developer'} for the last 10 completed sprints.`}
                 </CardDescription>
               </div>
@@ -235,7 +236,7 @@ export default function AnalyticsChartsTab({
                   value={selectedDeveloperIdForContribution ?? 'all'}
                   onValueChange={(value) =>
                     setSelectedDeveloperIdForContribution(
-                      value === 'all' ? null : value
+                      value === 'all' ? null : value // Use null when "All Developers" is selected for the hook
                     )
                   }
                 >
@@ -246,7 +247,7 @@ export default function AnalyticsChartsTab({
                     <SelectGroup>
                       <SelectLabel>Developers</SelectLabel>
                       <SelectItem value="all">
-                        All Developers (Sprint {activeSprintNumber || 'N/A'})
+                        All Developers (Sprint {selectedAnalyticSprintNumber || 'N/A'}) {/* Show selected sprint number */}
                       </SelectItem>
                       {softwareEngineers.map((dev) => (
                         <SelectItem key={dev.id} value={dev.id}>
@@ -264,7 +265,7 @@ export default function AnalyticsChartsTab({
               sprintData={sprintData}
               members={members}
               selectedDeveloperId={selectedDeveloperIdForContribution}
-              selectedSprintNumber={activeSprintNumber}
+              selectedSprintNumber={selectedAnalyticSprintNumber} // Pass the selected sprint number
             />
           </CardContent>
         </Card>
@@ -273,19 +274,21 @@ export default function AnalyticsChartsTab({
         <Card className="h-[450px] lg:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Bug className="h-5 w-5 text-destructive" /> Bug Count per Sprint
+              <Bug className="h-5 w-5 text-destructive" />{' '}
+              <Wrench className="h-5 w-5 text-red-500" /> {/* Added Hotfix icon */}
+              Bugs & Hotfixes per Sprint
             </CardTitle>
             <CardDescription>
-              Number of tasks marked as 'Bug' in completed sprints.
+              Number of tasks marked as 'Bug' or 'Hotfix' in completed/active sprints.
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[calc(100%-100px)] pl-2">
-            {completedSprints.length > 0 ? (
-              <BugCountChart data={completedSprints} />
+            {completedOrActiveSprints.length > 0 ? (
+              <BugCountChart data={completedOrActiveSprints} />
             ) : (
               <div className="flex h-full items-center justify-center text-muted-foreground">
-                <Info className="mr-2 h-5 w-5" /> No completed sprints found to
-                display bug counts.
+                <Info className="mr-2 h-5 w-5" /> No completed or active sprints found
+                to display issue counts.
               </div>
             )}
           </CardContent>

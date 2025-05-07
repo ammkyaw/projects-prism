@@ -42,7 +42,7 @@ export type TaskType =
   | 'New Feature'
   | 'Improvement'
   | 'Bug'
-  | 'Hotfix'
+  | 'Hotfix' // Added Hotfix
   | 'Refactoring'
   | 'Documentation'
   | 'Security'
@@ -53,7 +53,7 @@ export const taskTypes: TaskType[] = [
   'New Feature',
   'Improvement',
   'Bug',
-  'Hotfix',
+  'Hotfix', // Added Hotfix
   'Refactoring',
   'Documentation',
   'Security',
@@ -73,12 +73,12 @@ export interface Task {
   title?: string;
   description?: string;
   acceptanceCriteria?: string;
-  storyPoints?: number | string | null;
+  storyPoints?: number | null; // Changed storyPoints to number | null
   devEstimatedTime?: string | null;
   qaEstimatedTime?: string | null;
   bufferTime?: string | null;
-  assignee?: string;
-  reviewer?: string;
+  assignee?: string | null; // Allow null for unassigned
+  reviewer?: string | null; // Allow null for unassigned
   status?:
     | 'To Do'
     | 'In Progress'
@@ -93,7 +93,7 @@ export interface Task {
   dependsOn?: string[];
   taskType?: TaskType;
   createdDate?: string;
-  initiator?: string;
+  initiator?: string | null; // Allow null
   needsGrooming?: boolean;
   readyForSprint?: boolean;
   movedToSprint?: number | null;
@@ -200,6 +200,7 @@ export const initialTeam: Omit<Team, 'id'> = {
   leadMemberId: null,
 };
 
+// Define initial state for a backlog task, ensuring all fields match Task interface
 export const initialBacklogTask: Omit<Task, 'id'> = {
   backlogId: '',
   ticketNumber: '',
@@ -210,7 +211,7 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
   priority: 'Medium',
   taskType: 'New Feature',
   createdDate: '',
-  initiator: '',
+  initiator: null,
   dependsOn: [],
   needsGrooming: false,
   readyForSprint: false,
@@ -218,14 +219,15 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
   historyStatus: null,
   splitFromId: null,
   mergeEventId: null,
-  completedDate: null,
   devEstimatedTime: null,
   qaEstimatedTime: null,
   bufferTime: null,
-  assignee: '',
-  reviewer: '',
+  assignee: null,
+  reviewer: null,
   status: null,
   startDate: null,
+  completedDate: null,
+  devTime: undefined, // Remove or align devTime
 };
 
 export type ToastFun = (props: {
