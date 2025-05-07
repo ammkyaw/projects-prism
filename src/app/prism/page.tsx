@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'; // Import AlertDialog components
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; // Import AlertDialog components
 
 
 // Main Content Components (Tabs) - Renamed and New Placeholders
@@ -51,8 +51,19 @@ import { handleExport } from '@/lib/export';
 import { auth } from '@/lib/firebase'; // Import auth
 import { onAuthStateChanged } from 'firebase/auth'; // Import onAuthStateChanged
 import { useRouter } from 'next/navigation'; // Import useRouter
+import { QueryProvider } from '@/components/query-provider'; // Import QueryProvider
 
-export default function Home() {
+// Wrap the main export with QueryProvider
+export default function PrismPageWrapper() {
+  return (
+    <QueryProvider>
+      <PrismPage />
+    </QueryProvider>
+  );
+}
+
+
+function PrismPage() {
   const router = useRouter(); // Initialize router
   // Local UI state
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -697,7 +708,7 @@ export default function Home() {
                  </CardHeader>
                   <CardContent className="flex items-center justify-center">
                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                 </CardContent>
+                  </CardContent>
              </Card>
          ) : (
              <Tabs value={activeMainTab} onValueChange={handleMainTabChange} className="w-full">
@@ -705,7 +716,8 @@ export default function Home() {
                <TabsList className="grid w-full grid-cols-5 mb-6">
                  {Object.entries(tabsConfig).map(([key, config]) => (
                      <TabsTrigger key={key} value={key}>
-                        <config.icon className="mr-2 h-4 w-4" /> {config.label}
+                        <config.icon className="h-4 w-4 md:mr-2" /> {/* Icon always visible, margin only on larger screens */}
+                        <span className="hidden md:inline">{config.label}</span> {/* Text hidden on mobile */}
                      </TabsTrigger>
                  ))}
                </TabsList>
@@ -722,7 +734,8 @@ export default function Home() {
                             )}>
                                 {Object.entries(tabsConfig[activeMainTab as keyof typeof tabsConfig].subTabs!).map(([subKey, subConfig]) => (
                                     <TabsTrigger key={`${activeMainTab}/${subKey}`} value={`${activeMainTab}/${subKey}`}>
-                                       <subConfig.icon className="mr-2 h-4 w-4" /> {subConfig.label}
+                                       <subConfig.icon className="h-4 w-4 md:mr-2" /> {/* Icon always visible, margin only on larger screens */}
+                                       <span className="hidden md:inline">{subConfig.label}</span> {/* Text hidden on mobile */}
                                     </TabsTrigger>
                                 ))}
                             </TabsList>
