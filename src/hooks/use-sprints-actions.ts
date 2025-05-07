@@ -1,7 +1,7 @@
 
 import { useCallback } from 'react';
-import type { SprintPlanning, SprintStatus, Project, Task, ToastFun, Sprint, Member, HolidayCalendar, Team } from '@/types/sprint-data';
-import { initialSprintPlanning, initialSprintData, taskPriorities, taskStatuses } from '@/types/sprint-data'; // Import taskStatuses
+import type { SprintPlanning, SprintStatus, Project, Task, ToastFun, Sprint, Member, HolidayCalendar, Team, TaskType } from '@/types/sprint-data';
+import { initialSprintPlanning, initialSprintData, taskPriorities, taskStatuses, taskTypes } from '@/types/sprint-data'; // Added taskTypes
 import { isValid, parseISO, isPast } from 'date-fns';
 
 interface UseSprintsActionsProps {
@@ -12,98 +12,6 @@ interface UseSprintsActionsProps {
   projects: Project[];
   selectedProjectId: string | null;
 }
-
-// Helper function to finalize tasks, ensuring storyPoints are number or null
-const finalizeTasks = (taskRows: Task[], taskType: 'new' | 'spillover', sprintNumber: number | string | null): { tasks: Task[], errors: string[] } => {
-  const finalTasks: Task[] = [];
-  const errors: string[] = [];
-  taskRows.forEach((row, index) => {
-      const taskPrefix = `${taskType === 'new' ? 'New' : 'Spillover'} Task (Row ${index + 1})`;
-      if (
-          !row.ticketNumber?.trim() &&
-          !row.storyPoints?.toString().trim() &&
-          !row.devEstimatedTime?.trim() &&
-          !row.startDate
-      ) {
-          if (taskRows.length === 1 && !row.ticketNumber?.trim() && !row.storyPoints?.toString().trim()) return;
-          return;
-      }
-
-      const ticketNumber = row.ticketNumber?.trim();
-      const storyPointsRaw = row.storyPoints?.toString().trim();
-      let storyPoints: number | null = null;
-            if (storyPointsRaw) {
-                const parsed = parseInt(storyPointsRaw, 10);
-                if (!isNaN(parsed) && parsed >= 0) {
-                    storyPoints = parsed;
-                } else {
-                    errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
-                }
-            }
-
-      const devEstimatedTime = row.devEstimatedTime?.trim() || null;
-      const qaEstimatedTime = row.qaEstimatedTime?.trim() || '2d';
-      const bufferTime = row.bufferTime?.trim() || '1d';
-      const assignee = row.assignee?.trim() || '';
-      const reviewer = row.reviewer?.trim() || '';
-      const status = row.status?.trim() as Task['status'];
-      const startDate = row.startDate;
-      const completedDate = row.completedDate;
-      const title = row.title?.trim();
-      const description = row.description?.trim();
-      const priority = row.priority;
-
-      if (!ticketNumber) errors.push(`${taskPrefix}: Ticket # is required.`);
-      if (!startDate) errors.push(`${taskPrefix}: Start Date is required for timeline.`);
-
-       if (devEstimatedTime && parseEstimatedTimeToDays(devEstimatedTime) === null) {
-            errors.push(`${taskPrefix}: Invalid Dev Est. Time. Use formats like '2d', '1w 3d', '5'.`);
-       }
-       if (qaEstimatedTime && parseEstimatedTimeToDays(qaEstimatedTime) === null) {
-            errors.push(`${taskPrefix}: Invalid QA Est. Time. Use formats like '2d', '1w 3d', '5'.`);
-       }
-        if (bufferTime && parseEstimatedTimeToDays(bufferTime) === null) {
-            errors.push(`${taskPrefix}: Invalid Buffer Time. Use formats like '2d', '1w 3d', '5'.`);
-       }
-      if (!status || !taskStatuses.includes(status)) {
-          errors.push(`${taskPrefix}: Invalid status.`);
-      }
-       if (startDate && !isValid(parseISO(startDate))) errors.push(`${taskPrefix}: Invalid Start Date format (YYYY-MM-DD).`);
-       if (completedDate && !isValid(parseISO(completedDate))) errors.push(`${taskPrefix}: Invalid Completed Date format (YYYY-MM-DD).`);
-
-      if (errors.length > 0) return; // Stop processing this row if errors found for it
-
-      finalTasks.push({
-          id: row.id || `task_${sprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
-          ticketNumber: ticketNumber || '',
-          backlogId: row.backlogId,
-          title: title,
-          description: description,
-          storyPoints: storyPoints,
-          devEstimatedTime: devEstimatedTime,
-          qaEstimatedTime: qaEstimatedTime,
-          bufferTime: bufferTime,
-          assignee: assignee,
-          reviewer: reviewer,
-          status: status,
-          startDate: startDate,
-          completedDate: completedDate,
-          priority: priority,
-          acceptanceCriteria: row.acceptanceCriteria,
-          dependsOn: row.dependsOn,
-          taskType: row.taskType,
-          createdDate: row.createdDate,
-          initiator: row.initiator,
-          needsGrooming: row.needsGrooming,
-          readyForSprint: row.readyForSprint,
-          movedToSprint: row.movedToSprint,
-          historyStatus: row.historyStatus,
-          splitFromId: row.splitFromId,
-          mergeEventId: row.mergeEventId,
-      });
-  });
-  return { tasks: finalTasks, errors };
-};
 
 // Helper function to parse estimated time string (e.g., "2d", "1w 3d") into days
 const parseEstimatedTimeToDays = (timeString: string | undefined | null): number | null => {
@@ -145,6 +53,103 @@ const parseEstimatedTimeToDays = (timeString: string | undefined | null): number
   }
 
   return totalDays >= 0 ? totalDays : (timeString === '0' || timeString === '0d' ? 0 : null);
+};
+
+
+// Helper function to finalize tasks, ensuring storyPoints are number or null
+const finalizeTasks = (taskRows: Task[], taskType: 'new' | 'spillover', sprintNumber: number | string | null): { tasks: Task[], errors: string[] } => {
+  const finalTasks: Task[] = [];
+  const errors: string[] = [];
+  taskRows.forEach((row, index) => {
+      const taskPrefix = `${taskType === 'new' ? 'New' : 'Spillover'} Task (Row ${index + 1})`;
+      if (
+          !row.ticketNumber?.trim() &&
+          !row.storyPoints?.toString().trim() &&
+          !row.devEstimatedTime?.trim() &&
+          !row.startDate
+      ) {
+          if (taskRows.length === 1 && !row.ticketNumber?.trim() && !row.storyPoints?.toString().trim()) return;
+          return;
+      }
+
+      const ticketNumber = row.ticketNumber?.trim();
+      const storyPointsRaw = row.storyPoints?.toString().trim();
+      let storyPoints: number | null = null;
+            if (storyPointsRaw) {
+                const parsed = parseInt(storyPointsRaw, 10);
+                if (!isNaN(parsed) && parsed >= 0) {
+                    storyPoints = parsed;
+                } else {
+                    errors.push(`${taskPrefix}: Invalid Story Points. Must be a non-negative number.`);
+                }
+            }
+
+      const devEstimatedTime = row.devEstimatedTime?.trim() || null;
+      const qaEstimatedTime = row.qaEstimatedTime?.trim() || '2d';
+      const bufferTime = row.bufferTime?.trim() || '1d';
+      const assignee = row.assignee?.trim() || '';
+      const reviewer = row.reviewer?.trim() || '';
+      const status = row.status?.trim() as Task['status'];
+      const startDate = row.startDate;
+      const completedDate = row.completedDate;
+      const title = row.title?.trim();
+      const description = row.description?.trim();
+      const priority = row.priority;
+      const currentTaskType = row.taskType ?? 'New Feature'; // Get task type
+
+      if (!ticketNumber) errors.push(`${taskPrefix}: Ticket # is required.`);
+      if (!startDate) errors.push(`${taskPrefix}: Start Date is required for timeline.`);
+      if (!currentTaskType || !taskTypes.includes(currentTaskType as any)) { // Validate task type
+          errors.push(`${taskPrefix}: Invalid Task Type.`);
+      }
+
+       if (devEstimatedTime && parseEstimatedTimeToDays(devEstimatedTime) === null) {
+            errors.push(`${taskPrefix}: Invalid Dev Est. Time. Use formats like '2d', '1w 3d', '5'.`);
+       }
+       if (qaEstimatedTime && parseEstimatedTimeToDays(qaEstimatedTime) === null) {
+            errors.push(`${taskPrefix}: Invalid QA Est. Time. Use formats like '2d', '1w 3d', '5'.`);
+       }
+        if (bufferTime && parseEstimatedTimeToDays(bufferTime) === null) {
+            errors.push(`${taskPrefix}: Invalid Buffer Time. Use formats like '2d', '1w 3d', '5'.`);
+       }
+      if (!status || !taskStatuses.includes(status)) {
+          errors.push(`${taskPrefix}: Invalid status.`);
+      }
+       if (startDate && !isValid(parseISO(startDate))) errors.push(`${taskPrefix}: Invalid Start Date format (YYYY-MM-DD).`);
+       if (completedDate && !isValid(parseISO(completedDate))) errors.push(`${taskPrefix}: Invalid Completed Date format (YYYY-MM-DD).`);
+
+      if (errors.length > 0) return; // Stop processing this row if errors found for it
+
+      finalTasks.push({
+          id: row.id || `task_${sprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
+          ticketNumber: ticketNumber || '',
+          backlogId: row.backlogId,
+          title: title,
+          description: description,
+          storyPoints: storyPoints,
+          devEstimatedTime: devEstimatedTime,
+          qaEstimatedTime: qaEstimatedTime,
+          bufferTime: bufferTime,
+          assignee: assignee,
+          reviewer: reviewer,
+          status: status,
+          startDate: startDate,
+          completedDate: completedDate,
+          priority: priority,
+          acceptanceCriteria: row.acceptanceCriteria,
+          dependsOn: row.dependsOn,
+          taskType: currentTaskType as TaskType, // Ensure taskType is included
+          createdDate: row.createdDate,
+          initiator: row.initiator,
+          needsGrooming: row.needsGrooming,
+          readyForSprint: row.readyForSprint,
+          movedToSprint: row.movedToSprint,
+          historyStatus: row.historyStatus,
+          splitFromId: row.splitFromId,
+          mergeEventId: row.mergeEventId,
+      });
+  });
+  return { tasks: finalTasks, errors };
 };
 
 

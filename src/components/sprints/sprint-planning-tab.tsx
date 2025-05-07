@@ -12,8 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { PlusCircle, Trash2, PlayCircle, Edit, Circle, CalendarIcon as CalendarIconLucide, XCircle, GanttChartSquare, Info, PackagePlus, CheckCircle, Undo, View, User, Users, CheckSquare } from 'lucide-react';
-import type { Sprint, SprintPlanning, Task, Member, SprintStatus, HolidayCalendar, Team } from '@/types/sprint-data';
-import { initialSprintPlanning, taskStatuses, predefinedRoles, taskPriorities, initialBacklogTask } from '@/types/sprint-data';
+import type { Sprint, SprintPlanning, Task, Member, SprintStatus, HolidayCalendar, Team, TaskType } from '@/types/sprint-data'; // Added TaskType
+import { initialSprintPlanning, taskStatuses, predefinedRoles, taskPriorities, initialBacklogTask, taskTypes } from '@/types/sprint-data'; // Added taskTypes
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { addDays, format, parseISO, isValid, differenceInDays, getDay } from 'date-fns';
@@ -23,7 +23,7 @@ import SprintTimelineChart from '@/components/charts/sprint-timeline-chart';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; // Correct import
 
 const DURATION_OPTIONS = ["1 Week", "2 Weeks", "3 Weeks", "4 Weeks"];
 
@@ -100,7 +100,7 @@ const createEmptyTaskRow = (): TaskRow => ({
   acceptanceCriteria: '',
   priority: 'Medium',
   dependsOn: [],
-  taskType: 'New Feature',
+  taskType: 'New Feature', // Default Task Type
   createdDate: '',
   initiator: '',
   needsGrooming: false,
@@ -170,10 +170,6 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
              (task.qaEstimatedTime !== undefined && task.qaEstimatedTime !== null) &&
              (task.bufferTime !== undefined && task.bufferTime !== null) &&
              isValid(parseISO(task.startDate?? ''))
-             // Ensure parse functions return non-null for estimates to be valid for chart
-             // parseEstimatedTimeToDays(task.devEstimatedTime) !== null &&
-             // parseEstimatedTimeToDays(task.qaEstimatedTime) !== null &&
-             // parseEstimatedTimeToDays(task.bufferTime) !== null
          )
          .map(task => ({ ...task } as Task));
    }, [newTasks, spilloverTasks]);
@@ -218,6 +214,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
             assignee: task.assignee ?? '',
             reviewer: task.reviewer ?? '',
             status: task.status ?? 'To Do',
+            taskType: task.taskType ?? 'New Feature', // Ensure TaskType is mapped
             startDate: task.startDate,
             startDateObj: parseDateString(task.startDate),
             completedDate: task.completedDate ?? null,
@@ -314,10 +311,20 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
      const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
      const taskList = type === 'new' ? newTasks : spilloverTasks;
      const taskToRemove = taskList.find(row => row._internalId === internalId);
+     const targetSprintNum = isCreatingNewSprint ? null : selectedSprintNumber; // Can't revert if creating new
 
-     if (type === 'new' && taskToRemove?.backlogId && selectedSprintNumber) {
-         onRevertTask(selectedSprintNumber, taskToRemove.id, taskToRemove.backlogId); // Call the revert function passed from props
+     // Only call revert if it's a new task, has a backlogId, and we have a selected sprint number
+     if (type === 'new' && taskToRemove?.backlogId && targetSprintNum) {
+         onRevertTask(targetSprintNum, taskToRemove.id, taskToRemove.backlogId); // Call the revert function passed from props
+     } else if (type === 'new' && taskToRemove?.backlogId && isCreatingNewSprint) {
+          // If creating a new sprint, just remove from UI, don't call backend revert
+          console.log("Removed backlog item from new sprint plan (UI only).");
+     } else if (type === 'spillover') {
+         console.log("Removed spillover task (UI only).");
+     } else {
+        console.log("Removed task without backlog ID (UI only).");
      }
+
      // Always remove from the UI state regardless of whether it was reverted in the backend
      updater(prevRows => prevRows.filter(row => row._internalId !== internalId));
  };
@@ -340,7 +347,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
   const handleTaskInputChange = (
     type: 'new' | 'spillover',
     internalId: string,
-    field: keyof Omit<Task, 'id' | 'completedDate'>,
+    field: keyof Omit<Task, 'id' | 'completedDate' | 'startDateObj'>, // Exclude startDateObj
     value: string | number | undefined
   ) => {
      if (isFormDisabled && !isCreatingNewSprint) return;
@@ -348,7 +355,14 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
     updater(rows =>
       rows.map(row => {
           if (row._internalId === internalId) {
-              const updatedRow = { ...row, [field]: value ?? '' };
+              let finalValue: any = value ?? ''; // Default to empty string if undefined
+
+               // Handle taskType specifically
+               if (field === 'taskType') {
+                 finalValue = value as TaskType;
+               }
+
+              const updatedRow = { ...row, [field]: finalValue };
 
               if (field === 'assignee' && typeof value === 'string') {
                   const assigneeName = value;
@@ -404,7 +418,6 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
      });
    };
 
-    // Handler for adding selected backlog items to the 'newTasks'
     const handleAddSelectedBacklogItems = () => {
       if (selectedBacklogIds.size === 0) {
         toast({ variant: "default", title: "No items selected", description: "Please select items from the backlog to add." });
@@ -416,33 +429,30 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
           return;
       }
 
-      // Call the function passed from props (from useBacklogActions)
       const addedTasksForPlan = onAddBacklogItems(Array.from(selectedBacklogIds), currentSprintNum);
 
       if (addedTasksForPlan.length > 0) {
-          // Convert returned Task[] to TaskRow[] for the local state
           const itemsToAdd = addedTasksForPlan.map((task): TaskRow => ({
-              ...createEmptyTaskRow(), // Start with defaults
-              ...task,                // Spread the task data returned
+              ...createEmptyTaskRow(),
+              ...task,
               _internalId: `backlog_added_${task.id}_${Date.now()}`,
               startDateObj: parseDateString(task.startDate),
-              storyPoints: task.storyPoints?.toString() ?? '', // Ensure string
-              qaEstimatedTime: task.qaEstimatedTime ?? '2d', // Apply defaults if missing
+              storyPoints: task.storyPoints?.toString() ?? '',
+              qaEstimatedTime: task.qaEstimatedTime ?? '2d',
               bufferTime: task.bufferTime ?? '1d',
               backlogId: task.backlogId ?? '',
-              ticketNumber: task.ticketNumber ?? task.backlogId ?? '', // Use ticketNumber or fallback
+              ticketNumber: task.ticketNumber ?? task.backlogId ?? '',
+              taskType: task.taskType ?? 'New Feature', // Ensure taskType is present
           }));
 
           setNewTasks(prev => {
               const filteredPrev = prev.filter(p => p.ticketNumber?.trim() || p.storyPoints?.toString().trim());
-              // Prevent duplicates just in case
               const uniqueToAdd = itemsToAdd.filter(newItem => !filteredPrev.some(existing => existing.id === newItem.id));
               return [...filteredPrev, ...uniqueToAdd];
           });
       }
 
-      // Toast is handled within onAddBacklogItems/useBacklogActions
-      setIsBacklogDialogOpen(false); // Close dialog
+      setIsBacklogDialogOpen(false);
     };
 
 
@@ -457,16 +467,14 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
          return;
      }
 
-     // Prepare planning data (without full validation here, assuming useSprintsActions handles it)
       const currentPlanningData: SprintPlanning = {
           goal: planningData.goal.trim(),
-          newTasks: newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0 })), // Basic conversion, validation in hook
-          spilloverTasks: spilloverTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0 })),
+          newTasks: newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || null})), // Pass TaskRow structure
+          spilloverTasks: spilloverTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || null})), // Pass TaskRow structure
           definitionOfDone: planningData.definitionOfDone.trim(),
           testingStrategy: planningData.testingStrategy.trim(),
       };
 
-      // Pass the current status to maintain it unless explicitly starting
      const currentStatus = selectedSprint?.status === 'Active' ? 'Active' : selectedSprint?.status === 'Planned' ? 'Planned' : undefined;
 
      onSavePlanning(selectedSprintNumber, currentPlanningData, currentStatus);
@@ -512,11 +520,10 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
           totalDays: totalDays,
       };
 
-      // Use current state for planning data, validation happens in hook
        const currentPlanningData: SprintPlanning = {
            goal: planningData.goal.trim(),
-           newTasks: newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0 })),
-           spilloverTasks: spilloverTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0 })),
+           newTasks: newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || null})),
+           spilloverTasks: spilloverTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || null})),
            definitionOfDone: planningData.definitionOfDone.trim(),
            testingStrategy: planningData.testingStrategy.trim(),
        };
@@ -536,26 +543,23 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
            return;
        }
 
-       // Prepare latest planning data to save before starting
         const finalPlanningData: SprintPlanning = {
             goal: planningData.goal.trim(),
-            newTasks: newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0 })), // Basic conversion
-            spilloverTasks: spilloverTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0 })), // Basic conversion
+            newTasks: newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || null})),
+            spilloverTasks: spilloverTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || null})),
             definitionOfDone: planningData.definitionOfDone.trim(),
             testingStrategy: planningData.testingStrategy.trim(),
         };
 
-       // Call the save function with the new status 'Active'
        onSavePlanning(selectedSprint.sprintNumber, finalPlanningData, 'Active');
    };
 
    const handleCompleteSprintClick = () => {
       if (!selectedSprintNumber || !isSprintActive) return;
-       // Prepare latest planning data to pass to the completion function
        const latestPlanningData: SprintPlanning = {
            goal: planningData.goal.trim(),
-           newTasks: newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0 })),
-           spilloverTasks: spilloverTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || 0 })),
+           newTasks: newTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || null})),
+           spilloverTasks: spilloverTasks.map(t => ({...t, storyPoints: Number(t.storyPoints) || null})),
            definitionOfDone: planningData.definitionOfDone.trim(),
            testingStrategy: planningData.testingStrategy.trim(),
        };
@@ -647,10 +651,12 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
 
    const renderTaskTable = (type: 'new' | 'spillover', taskRows: TaskRow[], disabled: boolean) => (
       <div className="overflow-x-auto">
-         <div className="min-w-[1350px] space-y-4">
-            <div className="hidden md:grid grid-cols-[100px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] gap-x-2 items-center pb-2 border-b">
+         {/* Adjusted grid for Task Type */}
+         <div className="min-w-[1450px] space-y-4">
+            <div className="hidden md:grid grid-cols-[100px_100px_120px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] gap-x-2 items-center pb-2 border-b">
                 <Label className="text-xs font-medium text-muted-foreground">Ticket #*</Label>
                 <Label className="text-xs font-medium text-muted-foreground">Backlog ID</Label>
+                <Label className="text-xs font-medium text-muted-foreground">Task Type*</Label> {/* Added Task Type */}
                 <Label className="text-xs font-medium text-muted-foreground text-right">Story Pts</Label>
                 <Label className="text-xs font-medium text-muted-foreground text-right">Dev Est</Label>
                 <Label className="text-xs font-medium text-muted-foreground text-right">QA Est</Label>
@@ -664,7 +670,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
             </div>
             <div className="space-y-4 md:space-y-2">
                 {taskRows.map((row) => (
-                <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[100px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] gap-x-2 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
+                <div key={row._internalId} className="grid grid-cols-2 md:grid-cols-[100px_100px_120px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] gap-x-2 gap-y-2 items-start border-b md:border-none pb-4 md:pb-0 last:border-b-0">
                      <div className="md:col-span-1 col-span-1">
                         <Label htmlFor={`ticket-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Ticket #*</Label>
                         <Input
@@ -686,6 +692,24 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                             className="h-9 w-full bg-muted/50 cursor-default"
                             title={row.backlogId}
                         />
+                    </div>
+                     {/* Task Type Select */}
+                    <div className="md:col-span-1 col-span-1">
+                         <Label htmlFor={`taskType-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Task Type*</Label>
+                         <Select
+                             value={row.taskType ?? 'New Feature'}
+                             onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'taskType', value)}
+                             disabled={disabled}
+                         >
+                            <SelectTrigger id={`taskType-${type}-${row._internalId}`} className="h-9 w-full">
+                              <SelectValue placeholder="Select Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                               {taskTypes.map(option => (
+                                 <SelectItem key={option} value={option}>{option}</SelectItem>
+                               ))}
+                            </SelectContent>
+                         </Select>
                     </div>
                     <div className="md:col-span-1 col-span-1">
                         <Label htmlFor={`sp-${type}-${row._internalId}`} className="md:hidden text-xs font-medium">Story Pts</Label>
@@ -914,7 +938,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                  {renderTaskTable('new', newTasks, disabled)}
              </CardContent>
              <CardFooter>
-                <p className="text-xs text-muted-foreground">* Required field: Ticket #, Start Date. Other fields optional but recommended for planning/timeline.</p>
+                <p className="text-xs text-muted-foreground">* Required field: Ticket #, Task Type, Start Date. Other fields optional but recommended for planning/timeline.</p>
             </CardFooter>
          </Card>
 
@@ -927,7 +951,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
                  {renderTaskTable('spillover', spilloverTasks, disabled)}
              </CardContent>
               <CardFooter>
-                <p className="text-xs text-muted-foreground">* Required field: Ticket #, Start Date.</p>
+                <p className="text-xs text-muted-foreground">* Required field: Ticket #, Task Type, Start Date.</p>
             </CardFooter>
          </Card>
 
@@ -1088,7 +1112,7 @@ export default function SprintPlanningTab({ projectId, sprints, onSavePlanning, 
       {!isCreatingNewSprint && (
           <Card>
             <CardHeader>
-              <CardTitle>View &amp; Plan Existing Sprints: {projectName}</CardTitle>
+              <CardTitle>View & Plan Existing Sprints: {projectName}</CardTitle>
                <CardDescription>Select a sprint below to view or edit its plan. Completed sprints are read-only. Use the 'Start Sprint' button for 'Planned' sprints.</CardDescription>
             </CardHeader>
             <CardContent>
