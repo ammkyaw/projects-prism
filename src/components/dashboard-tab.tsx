@@ -247,7 +247,7 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
                          y="50%"
                          textAnchor="middle"
                          dominantBaseline="middle"
-                         dy="1.2em"
+                         dy="1.5em" // Adjusted dy for more padding
                          className="fill-muted-foreground text-xs"
                       >
                          Completed {/* Update label */}
@@ -346,6 +346,3 @@ export default function DashboardTab({ sprintData, projectName, projectId }: Das
     </div>
   );
 }
-
-
-  
