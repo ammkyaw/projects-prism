@@ -32,7 +32,7 @@ import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
 import AddMembersDialog from '@/components/add-members-dialog';
 
 // Analytics Sub-Tab Components
-import AnalyticsChartsTab from '@/components/analytics-charts-tab';
+import AnalyticsChartsTab from '@/components/analytics/analytics-charts-tab';
 import AnalyticsReportsTab from '@/components/analytics/analytics-reports-tab'; // Updated path
 
 
@@ -440,12 +440,12 @@ export default function Home() {
                     sprints: selectedProject.sprintData.sprints ?? [],
                     onSavePlanning: handleSavePlanningAndUpdateStatus,
                     onCreateAndPlanSprint: handleCreateAndPlanSprint,
+                    onCompleteSprint: handleCompleteSprint,
                     members: selectedProject.members ?? [],
                     holidayCalendars: selectedProject.holidayCalendars ?? [],
                     teams: selectedProject.teams ?? [],
                     backlog: selectedProject.backlog?.filter(task => !task.historyStatus && task.readyForSprint) ?? [], // Pass ready & non-historical items
                     onRevertTask: handleRevertTaskToBacklog, // Pass revert function
-                    onCompleteSprint: handleCompleteSprint, // Pass complete function
                  };
                 break;
             case 'sprints/retrospective':
