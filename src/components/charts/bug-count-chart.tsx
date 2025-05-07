@@ -25,7 +25,7 @@ export default function BugCountChart({ data }: BugCountChartProps) {
     }
 
     return data
-      .filter(sprint => sprint.status === 'Completed') // Ensure only completed sprints
+      .filter(sprint => sprint.status === 'Completed' || sprint.status === 'Active') // Ensure only completed sprints
       .map(sprint => {
         const tasks: Task[] = [...(sprint.planning?.newTasks || []), ...(sprint.planning?.spilloverTasks || [])];
         const bugCount = tasks.filter(task => task.taskType === 'Bug').length;

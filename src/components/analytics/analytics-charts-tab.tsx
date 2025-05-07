@@ -33,7 +33,7 @@ export default function AnalyticsChartsTab({ sprintData, members, projectName }:
 
      const completedSprints = useMemo(() => {
         if (!sprintData || !sprintData.sprints) return [];
-        return sprintData.sprints.filter(s => s.status === 'Completed').sort((a, b) => a.sprintNumber - b.sprintNumber);
+        return sprintData.sprints.filter(s => s.status === 'Completed' || s.status === 'Active').sort((a, b) => a.sprintNumber - b.sprintNumber);
      }, [sprintData]);
 
     useEffect(() => {
