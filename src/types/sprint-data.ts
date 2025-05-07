@@ -63,6 +63,7 @@ export interface Task {
   reviewer?: string; // Optional: Stores the Member's name for review
   status?: 'To Do' | 'In Progress' | 'In Review' | 'QA' | 'Done' | 'Blocked'; // Status applicable *within* a sprint or backlog
   startDate?: string | null; // Optional: YYYY-MM-DD for Gantt chart (only relevant when planned in sprint)
+  completedDate?: string | null; // Optional: YYYY-MM-DD when the task was marked as Done
   priority?: 'Highest' | 'High' | 'Medium' | 'Low' | 'Lowest'; // Optional: Priority level
   dependsOn?: string[]; // Optional: Array of Backlog IDs this task depends on
   // --- Backlog Specific Fields ---
@@ -195,6 +196,7 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
     historyStatus: null, // Initialize history status
     splitFromId: null, // Initialize split tracking
     mergeEventId: null, // Initialize merge tracking
+    completedDate: null, // Initialize completed date
     // Fields typically set during sprint planning:
     devEstimatedTime: null,
     qaEstimatedTime: null, // Don't default these in backlog
