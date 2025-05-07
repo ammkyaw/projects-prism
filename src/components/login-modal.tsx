@@ -104,7 +104,7 @@ export default function LoginModal({
     >
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Login to Project Prism</DialogTitle>
+          <DialogTitle>Login to Projects Prism</DialogTitle>
           <DialogDescription>
             Enter your email and password to access your dashboard.
           </DialogDescription>

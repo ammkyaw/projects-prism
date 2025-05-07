@@ -8,7 +8,7 @@ import QueryProvider from '@/components/query-provider'; // Import the new Query
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Project Prism',
+  title: 'Projects Prism',
   description:
     'Agile sprint reports including velocity, burndown, and developer stats.',
 };

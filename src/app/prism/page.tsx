@@ -184,7 +184,7 @@ function PrismPage() {
     if (isAuthenticated && isProjectsSuccess && !loginToastShown) {
       toast({
         title: 'Login Successful',
-        description: 'Welcome to Project Prism!',
+        description: 'Welcome to Projects Prism!',
       });
       setLoginToastShown(true); // Ensure toast is shown only once per session
     }
@@ -855,7 +855,7 @@ function PrismPage() {
           {' '}
           {/* Adjusted gap for mobile */}
           <h1 className="text-lg font-semibold text-primary md:text-2xl">
-            Project Prism
+            Projects Prism
           </h1>
           <Select
             value={selectedProjectId ?? undefined} // Use undefined if null for Select
@@ -1146,7 +1146,7 @@ function PrismPage() {
       </main>
 
       <footer className="border-t p-4 text-center text-xs text-muted-foreground">
-        Project Prism - Agile Reporting Made Easy
+        Projects Prism - Agile Reporting Made Easy
       </footer>
     </div>
   );

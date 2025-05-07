@@ -1768,7 +1768,7 @@ export default function SprintPlanningTab({
 
       <Card>
         <CardHeader>
-          <CardTitle>Spillover Tasks (Optional)</CardTitle>
+          <CardTitle>Spillover Tasks (From Previous Sprint)</CardTitle>
           <CardDescription>
             Tasks carried over from the previous sprint.
           </CardDescription>
