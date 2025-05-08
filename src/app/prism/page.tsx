@@ -182,11 +182,14 @@ function PrismPage() {
   const [loginToastShown, setLoginToastShown] = useState(false);
   useEffect(() => {
     if (isAuthenticated && isProjectsSuccess && !loginToastShown) {
-      toast({
-        title: 'Login Successful',
-        description: 'Welcome to Projects Prism!',
-      });
-      setLoginToastShown(true); // Ensure toast is shown only once per session
+      // Defer toast slightly to avoid potential conflict with dialog opening
+      setTimeout(() => {
+        toast({
+          title: 'Login Successful',
+          description: 'Welcome to Projects Prism!',
+        });
+        setLoginToastShown(true); // Ensure toast is shown only once per session
+      }, 100);
     }
 
     if (!isLoadingProjects && projects.length > 0 && !selectedProjectId) {
@@ -855,7 +858,7 @@ function PrismPage() {
           {' '}
           {/* Adjusted gap for mobile */}
           <h1 className="text-lg font-semibold text-primary md:text-2xl">
-            Projects Prism
+            Project Prism
           </h1>
           <Select
             value={selectedProjectId ?? undefined} // Use undefined if null for Select
@@ -1088,8 +1091,10 @@ function PrismPage() {
             onValueChange={handleMainTabChange}
             className="w-full"
           >
-            {/* Main Tabs List - Updated grid cols for 7 main tabs */}
-            <TabsList className="mb-6 grid w-full grid-cols-7">
+            {/* Main Tabs List - Sticky below header */}
+            <TabsList className="sticky top-16 z-10 mb-6 grid w-full grid-cols-7 bg-background shadow-sm">
+              {' '}
+              {/* Added sticky, top-16 (adjust as needed), z-10, background */}
               {Object.entries(tabsConfig).map(([key, config]) => (
                 <TabsTrigger key={key} value={key}>
                   <config.icon className="h-4 w-4 md:mr-2" />{' '}
@@ -1146,7 +1151,7 @@ function PrismPage() {
       </main>
 
       <footer className="border-t p-4 text-center text-xs text-muted-foreground">
-        Projects Prism - Agile Reporting Made Easy
+        Project Prism - Agile Reporting Made Easy
       </footer>
     </div>
   );
