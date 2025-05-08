@@ -323,7 +323,7 @@ export default function DashboardTab({
               Progress
             </CardTitle>
             <CardDescription className="text-xs">
-              Committed (New Tasks Only) vs. Completed (New Tasks Only) points.
+              Committed vs. Completed points.
             </CardDescription>
           </CardHeader>
           <CardContent className="-mt-4 flex flex-1 items-center justify-center pb-0">
