@@ -9,7 +9,9 @@ interface TaskNodeProgressProps {
   tasks: Task[]; // Array of tasks to calculate progress from
 }
 
-const MAX_VISIBLE_NODES = 10;
+const MAX_VISIBLE_NODES = 10; // Maximum nodes to show before using ellipsis
+const NODES_BEFORE_ELLIPSIS = 4; // Number of nodes to show at the beginning
+const NODES_AFTER_ELLIPSIS = 5; // Number of nodes to show at the end (including the last one)
 
 export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
   if (!tasks || tasks.length === 0) {
@@ -21,23 +23,25 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
   }
 
   // Sort tasks: 'Done' first, then by original index/order if available or ticket number
-  const sortedTasks = [...tasks].sort((a, b) => {
+  // Add an original index for consistent sorting and display
+  const indexedTasks = tasks.map((task, index) => ({ ...task, originalIndex: index }));
+
+  const sortedTasks = [...indexedTasks].sort((a, b) => {
     const aIsDone = a.status === 'Done';
     const bIsDone = b.status === 'Done';
     if (aIsDone && !bIsDone) return -1; // 'Done' comes first
     if (!aIsDone && bIsDone) return 1;
-    // Fallback sort (assuming tasks have a creation order or index)
-    // If no order, sort by ticket number for consistency
-    return (a.ticketNumber ?? '').localeCompare(b.ticketNumber ?? '');
+    // Fallback sort by original index
+    return a.originalIndex - b.originalIndex;
   });
 
   const totalTasks = sortedTasks.length;
-  const completedTasksCount = sortedTasks.filter(
-    (task) => task.status === 'Done'
-  ).length;
 
-  const renderNode = (task: Task, index: number, isDone: boolean) => (
-    <div className="flex min-w-0 flex-1 flex-col items-center">
+  const renderNode = (task: Task, displayIndex: number, isDone: boolean) => (
+    <div
+      key={task.id || task._internalId || displayIndex} // Ensure a stable key
+      className="flex min-w-0 flex-1 flex-col items-center"
+    >
       <div
         className={cn(
           'flex h-8 w-8 items-center justify-center rounded-full border-2 text-sm font-medium transition-all',
@@ -45,9 +49,9 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
             ? 'border-primary bg-primary text-primary-foreground'
             : 'border-primary bg-background text-primary ring-2 ring-primary/30'
         )}
-        title={`Task ${task.ticketNumber || index + 1}: ${task.status || 'N/A'}`}
+        title={`Task ${task.ticketNumber || displayIndex}: ${task.status || 'N/A'}`}
       >
-        {isDone ? <Check className="h-5 w-5" /> : index + 1}
+        {isDone ? <Check className="h-5 w-5" /> : displayIndex}
       </div>
       <div className="mt-1 space-y-0.5">
         <div
@@ -66,8 +70,9 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
     </div>
   );
 
-  const renderConnector = (isDone: boolean) => (
+  const renderConnector = (isDone: boolean, key: string) => (
     <div
+      key={key}
       className={cn(
         'mt-4 h-0.5 flex-1',
         isDone ? 'bg-primary' : 'bg-muted'
@@ -75,13 +80,13 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
     />
   );
 
-  const renderEllipsisConnector = () => (
-    <div className="mt-4 flex flex-1 items-center justify-center">
-      <span className="h-0.5 w-full border-t-2 border-dashed border-muted-foreground"></span>
-      {/* Optional: add dots visually
-          <Minus className="h-4 w-4 text-muted-foreground mx-1" />
-          <Minus className="h-4 w-4 text-muted-foreground mx-1" />
-          <Minus className="h-4 w-4 text-muted-foreground mx-1" /> */}
+  // Updated ellipsis connector rendering based on the image
+  const renderEllipsisConnector = (key: string) => (
+    <div
+      key={key}
+      className="mt-4 flex flex-1 items-center justify-center self-stretch"
+    >
+      <span className="h-0.5 w-full border-t-2 border-dashed border-muted-foreground/50"></span>
     </div>
   );
 
@@ -91,50 +96,38 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
     // Render all nodes if within limit
     sortedTasks.forEach((task, index) => {
       const isDone = task.status === 'Done';
-      nodesToRender.push(renderNode(task, index, isDone));
+      nodesToRender.push(renderNode(task, index + 1, isDone));
       if (index < totalTasks - 1) {
-        // Add connector if not the last node
-        const nextIsDone = sortedTasks[index + 1]?.status === 'Done';
-        // Connector is blue if the *current* node is done
-        nodesToRender.push(renderConnector(isDone));
+        nodesToRender.push(renderConnector(isDone, `conn-${index}`));
       }
     });
   } else {
     // Render with ellipsis if exceeding limit
-    const nodesBeforeEllipsis = 4;
-    const nodesAfterEllipsis = 5; // Include the very last node
-    const lastTaskIndex = totalTasks - 1;
+    const startNodes = sortedTasks.slice(0, NODES_BEFORE_ELLIPSIS);
+    const endNodes = sortedTasks.slice(totalTasks - NODES_AFTER_ELLIPSIS);
 
-    // Ensure we don't try to render more 'done' nodes than exist
-    const actualNodesBefore = Math.min(completedTasksCount, nodesBeforeEllipsis);
-    const startNodes = sortedTasks.slice(0, actualNodesBefore);
-
-    // Ensure we don't try to render more 'not done' nodes than exist, and get correct indices
-    const actualNodesAfter = Math.min(
-      totalTasks - completedTasksCount,
-      nodesAfterEllipsis
-    );
-    // Calculate the starting index for the end slice correctly
-    const endSliceStartIndex = totalTasks - actualNodesAfter;
-    const endNodes = sortedTasks.slice(endSliceStartIndex);
-
-    // Render starting 'Done' nodes
+    // Render starting nodes
     startNodes.forEach((task, index) => {
-      nodesToRender.push(renderNode(task, index, true));
-      // Add connector after each start node, ensuring the last one connects to ellipsis
-      nodesToRender.push(renderConnector(true));
+      const isDone = task.status === 'Done'; // Should always be true if sorted correctly
+      nodesToRender.push(renderNode(task, index + 1, isDone));
+      // Add connector after each start node
+      nodesToRender.push(renderConnector(isDone, `start-conn-${index}`));
     });
 
     // Render Ellipsis connector
-    nodesToRender.push(renderEllipsisConnector());
+    // The connector after the last start node should lead into the ellipsis style
+    // Replace the last solid connector with the ellipsis one
+    nodesToRender.pop(); // Remove the last solid connector
+    nodesToRender.push(renderEllipsisConnector('ellipsis-conn'));
 
-    // Render ending 'Not Done' nodes
+    // Render ending nodes
     endNodes.forEach((task, relativeIndex) => {
-      const originalIndex = endSliceStartIndex + relativeIndex;
-      nodesToRender.push(renderNode(task, originalIndex, false));
-      if (originalIndex < lastTaskIndex) {
-        // Add connector if not the last node
-        nodesToRender.push(renderConnector(false));
+      const originalIndex = totalTasks - NODES_AFTER_ELLIPSIS + relativeIndex;
+      const isDone = task.status === 'Done'; // Should always be false if sorted correctly and enough tasks exist
+      nodesToRender.push(renderNode(task, originalIndex + 1, isDone));
+      if (originalIndex < totalTasks - 1) {
+        // Add connector if not the very last node
+        nodesToRender.push(renderConnector(isDone, `end-conn-${originalIndex}`));
       }
     });
   }
