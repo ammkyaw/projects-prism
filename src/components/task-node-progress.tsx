@@ -77,7 +77,7 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
   const renderEllipsisConnector = (key: string) => (
     <div
       key={key}
-      className="mt-4 flex flex-1 items-center justify-center self-stretch"
+      className="mt-4 flex flex-1 items-center justify-center"
     >
       <span className="h-0.5 w-full border-t-2 border-dashed border-muted-foreground/50"></span>
     </div>
