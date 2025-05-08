@@ -1,4 +1,3 @@
-
 'use client';
 
 import type {
@@ -119,11 +118,8 @@ export default function DashboardTab({
       0
     );
 
-    // Completed points include DONE tasks from BOTH new and spillover for this sprint
-    const completed = [
-      ...(activeSprint.planning.newTasks || []),
-      ...(activeSprint.planning.spilloverTasks || []),
-    ]
+    // Completed points ONLY include DONE NEW TASKS for this sprint
+    const completed = (activeSprint.planning.newTasks || [])
       .filter((task) => task.status === 'Done')
       .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
 
@@ -327,7 +323,7 @@ export default function DashboardTab({
               Progress
             </CardTitle>
             <CardDescription className="text-xs">
-              Committed (New Tasks Only) vs. Completed points.
+              Committed (New Tasks Only) vs. Completed (New Tasks Only) points.
             </CardDescription>
           </CardHeader>
           <CardContent className="-mt-4 flex flex-1 items-center justify-center pb-0">
@@ -391,7 +387,7 @@ export default function DashboardTab({
               <ListChecks className="h-4 w-4 text-primary" /> Task Progress
             </CardTitle>
             <CardDescription className="text-xs">
-              Overall task completion status.
+              Overall task completion status (New + Spillover).
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col items-center justify-center gap-4 pb-4 pt-2">
@@ -436,7 +432,7 @@ export default function DashboardTab({
             <BarChartBig className="h-5 w-5 text-primary" /> Daily Progress
           </CardTitle>
           <CardDescription className="text-center">
-            Story points completed per day.
+            Story points and tasks completed per day.
           </CardDescription>
         </CardHeader>
         <CardContent className="h-[calc(100%-100px)] pl-2">
@@ -475,4 +471,3 @@ export default function DashboardTab({
     </div>
   );
 }
-
