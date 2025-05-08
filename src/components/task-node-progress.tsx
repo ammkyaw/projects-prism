@@ -10,7 +10,8 @@ interface TaskNodeProgressProps {
 }
 
 const MAX_VISIBLE_NODES = 10; // Max nodes to show including start/end/ellipsis placeholder
-const NODES_BEFORE_ELLIPSIS = 4; // Default nodes at the start for mixed view
+const NODES_BEFORE_ELLIPSIS_DONE = 4; // Nodes at the start when Done >= 4
+const NODES_BEFORE_ELLIPSIS_NOT_DONE = 4; // Nodes after Done when Done >= 4 and Not Done > 6
 const NODES_AFTER_ELLIPSIS = 1; // Always show the last node
 
 export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
@@ -40,6 +41,8 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
   const totalTasks = sortedTasks.length;
   const numDone = sortedTasks.filter((task) => task.status === 'Done').length;
   const numNotDone = totalTasks - numDone;
+  const doneTasks = sortedTasks.slice(0, numDone);
+  const notDoneTasks = sortedTasks.slice(numDone);
 
   const renderNode = (task: Task, displayIndex: number, isDone: boolean) => (
     <div
@@ -97,102 +100,147 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
     // Logic for > MAX_VISIBLE_NODES
     if (numDone === totalTasks) {
       // All Done
-      const nodesToShow = MAX_VISIBLE_NODES - NODES_AFTER_ELLIPSIS; // e.g., 9
+      const nodesToShow = MAX_VISIBLE_NODES - NODES_AFTER_ELLIPSIS;
       const firstNodes = sortedTasks.slice(0, nodesToShow);
       const lastNode = sortedTasks[totalTasks - 1];
 
       firstNodes.forEach((task, index) => {
         nodesToRender.push(renderNode(task, index + 1, true));
-        // Add connector after each node except the last one shown before ellipsis
         if (index < nodesToShow - 1) {
           nodesToRender.push(renderConnector(true, `conn-all-done-${index}`));
         }
       });
       nodesToRender.push(renderEllipsisConnector('ellipsis-conn-all-done'));
       nodesToRender.push(renderNode(lastNode, totalTasks, true));
-
     } else if (numNotDone === totalTasks) {
-       // All Not Done
-      const nodesToShow = MAX_VISIBLE_NODES - NODES_AFTER_ELLIPSIS; // e.g., 9
+      // All Not Done
+      const nodesToShow = MAX_VISIBLE_NODES - NODES_AFTER_ELLIPSIS;
       const firstNodes = sortedTasks.slice(0, nodesToShow);
       const lastNode = sortedTasks[totalTasks - 1];
 
       firstNodes.forEach((task, index) => {
         nodesToRender.push(renderNode(task, index + 1, false));
-         if (index < nodesToShow - 1) {
-            nodesToRender.push(renderConnector(false, `conn-all-not-done-${index}`));
-         }
+        if (index < nodesToShow - 1) {
+          nodesToRender.push(
+            renderConnector(false, `conn-all-not-done-${index}`)
+          );
+        }
       });
-      nodesToRender.push(renderEllipsisConnector('ellipsis-conn-all-not-done'));
+      nodesToRender.push(
+        renderEllipsisConnector('ellipsis-conn-all-not-done')
+      );
       nodesToRender.push(renderNode(lastNode, totalTasks, false));
-
     } else {
       // Mixed Statuses
-      const doneTasks = sortedTasks.slice(0, numDone);
-      const notDoneTasks = sortedTasks.slice(numDone);
       const lastNotDoneNode = notDoneTasks[numNotDone - 1];
 
-      if (numDone >= NODES_BEFORE_ELLIPSIS) {
-        // Show first 4 Done
-        const doneToShow = doneTasks.slice(0, NODES_BEFORE_ELLIPSIS);
-        doneToShow.forEach((task, index) => {
-          nodesToRender.push(renderNode(task, index + 1, true));
-           // Add connector only if not the last node *before the next section*
-          if (index < NODES_BEFORE_ELLIPSIS - 1) {
-                nodesToRender.push(renderConnector(true, `conn-mixed-done-${index}`));
-          }
-        });
+      if (numDone >= NODES_BEFORE_ELLIPSIS_DONE) {
+        // --- User's New Logic Starts Here ---
+        if (numNotDone > 6) {
+          // Condition 1: Done >= 4 AND Not Done > 6
+          // Show first 4 Done + first 4 Not Done + Ellipsis + Last Not Done node.
+          const doneToShow = doneTasks.slice(0, NODES_BEFORE_ELLIPSIS_DONE);
+          const notDoneToShow = notDoneTasks.slice(
+            0,
+            NODES_BEFORE_ELLIPSIS_NOT_DONE
+          );
 
-        // Show first 4 Not Done
-        const notDoneToShow = notDoneTasks.slice(0, NODES_BEFORE_ELLIPSIS);
-        // Add connector between Done and Not Done
-        nodesToRender.push(renderConnector(false, `conn-mixed-done-last`));
-
-        notDoneToShow.forEach((task, index) => {
-          const originalIndex = numDone + index;
-          nodesToRender.push(renderNode(task, originalIndex + 1, false));
-           if (index < NODES_BEFORE_ELLIPSIS - 1) { // Add connector if not the last one shown before ellipsis
-                nodesToRender.push(renderConnector(false, `conn-mixed-not-done-${index}`));
+          doneToShow.forEach((task, index) => {
+            nodesToRender.push(renderNode(task, index + 1, true));
+            if (index < NODES_BEFORE_ELLIPSIS_DONE - 1) {
+              nodesToRender.push(
+                renderConnector(true, `conn-mixed-done-${index}`)
+              );
             }
-        });
+          });
 
-        nodesToRender.push(renderEllipsisConnector('ellipsis-conn-mixed-gt4'));
-        nodesToRender.push(renderNode(lastNotDoneNode, totalTasks, false));
+          // Connector between Done and Not Done
+          nodesToRender.push(renderConnector(false, `conn-mixed-done-last`));
 
-      } else { // numDone < 4
+          notDoneToShow.forEach((task, index) => {
+            const originalIndex = numDone + index;
+            nodesToRender.push(renderNode(task, originalIndex + 1, false));
+            if (index < NODES_BEFORE_ELLIPSIS_NOT_DONE - 1) {
+              nodesToRender.push(
+                renderConnector(false, `conn-mixed-not-done-${index}`)
+              );
+            }
+          });
+
+          nodesToRender.push(
+            renderEllipsisConnector('ellipsis-conn-mixed-scenario1')
+          );
+          nodesToRender.push(renderNode(lastNotDoneNode, totalTasks, false));
+        } else {
+          // Condition 2: Done >= 4 AND Not Done <= 6
+          // Show (10 - numNotDone) Done nodes + all Not Done nodes. No ellipsis.
+          const numDoneToShow = MAX_VISIBLE_NODES - numNotDone;
+          const doneToShow = doneTasks.slice(0, numDoneToShow);
+
+          doneToShow.forEach((task, index) => {
+            nodesToRender.push(renderNode(task, index + 1, true));
+            // Add connector only if not the last node *before the next section*
+            if (index < numDoneToShow - 1) {
+              nodesToRender.push(
+                renderConnector(true, `conn-mixed-done-sc2-${index}`)
+              );
+            }
+          });
+
+          // Connector between Done and Not Done (if there are Not Done tasks)
+          if (numNotDone > 0) {
+            nodesToRender.push(renderConnector(false, `conn-mixed-done-last-sc2`));
+
+            notDoneTasks.forEach((task, index) => {
+              const originalIndex = numDone + index;
+              nodesToRender.push(renderNode(task, originalIndex + 1, false));
+              if (index < numNotDone - 1) {
+                nodesToRender.push(
+                  renderConnector(false, `conn-mixed-not-done-sc2-${index}`)
+                );
+              }
+            });
+          }
+        }
+        // --- User's New Logic Ends Here ---
+      } else {
+        // numDone < 4
         // Show all Done
         doneTasks.forEach((task, index) => {
           nodesToRender.push(renderNode(task, index + 1, true));
-           // Add connector only if not the last done node *before the next section*
-           if (index < numDone - 1) {
-             nodesToRender.push(renderConnector(true, `conn-mixed-done-${index}`));
-           }
+          if (index < numDone - 1) {
+            nodesToRender.push(
+              renderConnector(true, `conn-mixed-lt4-done-${index}`)
+            );
+          }
         });
 
-        // Show first (8 - numDone) Not Done
-        const numNotDoneToShow = MAX_VISIBLE_NODES - NODES_AFTER_ELLIPSIS - numDone -1; // -1 for the last node already accounted for
-
-         // Add connector between Done and Not Done (if there were done tasks)
-         if (numDone > 0) {
-             nodesToRender.push(renderConnector(false, `conn-mixed-done-last`));
-         }
-
+        // Show first (10 - 1 - numDone) Not Done nodes
+        const numNotDoneToShow = MAX_VISIBLE_NODES - NODES_AFTER_ELLIPSIS - numDone;
         const firstNotDoneToShow = notDoneTasks.slice(0, numNotDoneToShow);
 
+        // Add connector between Done and Not Done (if there were done tasks)
+        if (numDone > 0 && numNotDone > 0) {
+          nodesToRender.push(renderConnector(false, `conn-mixed-lt4-done-last`));
+        }
+
         firstNotDoneToShow.forEach((task, index) => {
-            const originalIndex = numDone + index;
-            nodesToRender.push(renderNode(task, originalIndex + 1, false));
-             if (index < numNotDoneToShow - 1) { // Add connector if not the last one shown before ellipsis
-                nodesToRender.push(renderConnector(false, `conn-mixed-not-done-${index}`));
-             }
+          const originalIndex = numDone + index;
+          nodesToRender.push(renderNode(task, originalIndex + 1, false));
+          if (index < numNotDoneToShow - 1) {
+            nodesToRender.push(
+              renderConnector(false, `conn-mixed-lt4-not-done-${index}`)
+            );
+          }
         });
 
-        nodesToRender.push(renderEllipsisConnector('ellipsis-conn-mixed-lt4'));
+        nodesToRender.push(
+          renderEllipsisConnector('ellipsis-conn-mixed-lt4')
+        );
         nodesToRender.push(renderNode(lastNotDoneNode, totalTasks, false));
       }
     }
   }
-
 
   return (
     <div className="flex w-full items-start justify-between space-x-2 px-4 py-2">
