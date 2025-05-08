@@ -2,16 +2,16 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
-import { Check, Minus } from 'lucide-react'; // Added Minus for ellipsis
+import { Check, Minus } from 'lucide-react';
 import type { TaskStatus, Task } from '@/types/sprint-data';
 
 interface TaskNodeProgressProps {
   tasks: Task[]; // Array of tasks to calculate progress from
 }
 
-const MAX_VISIBLE_NODES = 10; // Maximum nodes to show before using ellipsis
-const NODES_BEFORE_ELLIPSIS = 4; // Number of nodes to show at the beginning
-const NODES_AFTER_ELLIPSIS = 5; // Number of nodes to show at the end (including the last one)
+const MAX_VISIBLE_NODES = 10; // Max nodes to show including start/end/ellipsis placeholder
+const NODES_BEFORE_ELLIPSIS = 4; // Default nodes at the start for mixed view
+const NODES_AFTER_ELLIPSIS = 1; // Always show the last node
 
 export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
   if (!tasks || tasks.length === 0) {
@@ -22,24 +22,28 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
     );
   }
 
-  // Sort tasks: 'Done' first, then by original index/order if available or ticket number
   // Add an original index for consistent sorting and display
-  const indexedTasks = tasks.map((task, index) => ({ ...task, originalIndex: index }));
+  const indexedTasks = tasks.map((task, index) => ({
+    ...task,
+    originalIndex: index,
+  }));
 
+  // Sort tasks: 'Done' first, then by original index
   const sortedTasks = [...indexedTasks].sort((a, b) => {
     const aIsDone = a.status === 'Done';
     const bIsDone = b.status === 'Done';
-    if (aIsDone && !bIsDone) return -1; // 'Done' comes first
+    if (aIsDone && !bIsDone) return -1;
     if (!aIsDone && bIsDone) return 1;
-    // Fallback sort by original index
     return a.originalIndex - b.originalIndex;
   });
 
   const totalTasks = sortedTasks.length;
+  const numDone = sortedTasks.filter((task) => task.status === 'Done').length;
+  const numNotDone = totalTasks - numDone;
 
   const renderNode = (task: Task, displayIndex: number, isDone: boolean) => (
     <div
-      key={task.id || task._internalId || displayIndex} // Ensure a stable key
+      key={task.id || task._internalId || displayIndex}
       className="flex min-w-0 flex-1 flex-col items-center"
     >
       <div
@@ -53,20 +57,7 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
       >
         {isDone ? <Check className="h-5 w-5" /> : displayIndex}
       </div>
-      <div className="mt-1 space-y-0.5">
-        <div
-          className={cn(
-            'h-1 w-6 rounded-full',
-            isDone ? 'bg-primary' : 'bg-muted'
-          )}
-        ></div>
-        <div
-          className={cn(
-            'mx-auto h-1 w-4 rounded-full',
-            isDone ? 'bg-primary/70' : 'bg-muted/70'
-          )}
-        ></div>
-      </div>
+      {/* Removed the small bars under the node for simplicity */}
     </div>
   );
 
@@ -74,13 +65,12 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
     <div
       key={key}
       className={cn(
-        'mt-4 h-0.5 flex-1',
+        'mt-4 h-0.5 flex-1', // Positioned connector correctly
         isDone ? 'bg-primary' : 'bg-muted'
       )}
     />
   );
 
-  // Updated ellipsis connector rendering based on the image
   const renderEllipsisConnector = (key: string) => (
     <div
       key={key}
@@ -98,39 +88,111 @@ export default function TaskNodeProgress({ tasks }: TaskNodeProgressProps) {
       const isDone = task.status === 'Done';
       nodesToRender.push(renderNode(task, index + 1, isDone));
       if (index < totalTasks - 1) {
-        nodesToRender.push(renderConnector(isDone, `conn-${index}`));
+        // Connector status based on the *next* node's status for visual flow
+        const nextIsDone = sortedTasks[index + 1].status === 'Done';
+        nodesToRender.push(renderConnector(isDone && nextIsDone, `conn-${index}`)); // Connector is 'done' only if both are done
       }
     });
   } else {
-    // Render with ellipsis if exceeding limit
-    const startNodes = sortedTasks.slice(0, NODES_BEFORE_ELLIPSIS);
-    const endNodes = sortedTasks.slice(totalTasks - NODES_AFTER_ELLIPSIS);
+    // Logic for > MAX_VISIBLE_NODES
+    if (numDone === totalTasks) {
+      // All Done
+      const nodesToShow = MAX_VISIBLE_NODES - NODES_AFTER_ELLIPSIS; // e.g., 9
+      const firstNodes = sortedTasks.slice(0, nodesToShow);
+      const lastNode = sortedTasks[totalTasks - 1];
 
-    // Render starting nodes
-    startNodes.forEach((task, index) => {
-      const isDone = task.status === 'Done'; // Should always be true if sorted correctly
-      nodesToRender.push(renderNode(task, index + 1, isDone));
-      // Add connector after each start node
-      nodesToRender.push(renderConnector(isDone, `start-conn-${index}`));
-    });
+      firstNodes.forEach((task, index) => {
+        nodesToRender.push(renderNode(task, index + 1, true));
+        // Add connector after each node except the last one shown before ellipsis
+        if (index < nodesToShow - 1) {
+          nodesToRender.push(renderConnector(true, `conn-all-done-${index}`));
+        }
+      });
+      nodesToRender.push(renderEllipsisConnector('ellipsis-conn-all-done'));
+      nodesToRender.push(renderNode(lastNode, totalTasks, true));
 
-    // Render Ellipsis connector
-    // The connector after the last start node should lead into the ellipsis style
-    // Replace the last solid connector with the ellipsis one
-    nodesToRender.pop(); // Remove the last solid connector
-    nodesToRender.push(renderEllipsisConnector('ellipsis-conn'));
+    } else if (numNotDone === totalTasks) {
+       // All Not Done
+      const nodesToShow = MAX_VISIBLE_NODES - NODES_AFTER_ELLIPSIS; // e.g., 9
+      const firstNodes = sortedTasks.slice(0, nodesToShow);
+      const lastNode = sortedTasks[totalTasks - 1];
 
-    // Render ending nodes
-    endNodes.forEach((task, relativeIndex) => {
-      const originalIndex = totalTasks - NODES_AFTER_ELLIPSIS + relativeIndex;
-      const isDone = task.status === 'Done'; // Should always be false if sorted correctly and enough tasks exist
-      nodesToRender.push(renderNode(task, originalIndex + 1, isDone));
-      if (originalIndex < totalTasks - 1) {
-        // Add connector if not the very last node
-        nodesToRender.push(renderConnector(isDone, `end-conn-${originalIndex}`));
+      firstNodes.forEach((task, index) => {
+        nodesToRender.push(renderNode(task, index + 1, false));
+         if (index < nodesToShow - 1) {
+            nodesToRender.push(renderConnector(false, `conn-all-not-done-${index}`));
+         }
+      });
+      nodesToRender.push(renderEllipsisConnector('ellipsis-conn-all-not-done'));
+      nodesToRender.push(renderNode(lastNode, totalTasks, false));
+
+    } else {
+      // Mixed Statuses
+      const doneTasks = sortedTasks.slice(0, numDone);
+      const notDoneTasks = sortedTasks.slice(numDone);
+      const lastNotDoneNode = notDoneTasks[numNotDone - 1];
+
+      if (numDone >= NODES_BEFORE_ELLIPSIS) {
+        // Show first 4 Done
+        const doneToShow = doneTasks.slice(0, NODES_BEFORE_ELLIPSIS);
+        doneToShow.forEach((task, index) => {
+          nodesToRender.push(renderNode(task, index + 1, true));
+           // Add connector only if not the last node *before the next section*
+          if (index < NODES_BEFORE_ELLIPSIS - 1) {
+                nodesToRender.push(renderConnector(true, `conn-mixed-done-${index}`));
+          }
+        });
+
+        // Show first 4 Not Done
+        const notDoneToShow = notDoneTasks.slice(0, NODES_BEFORE_ELLIPSIS);
+        // Add connector between Done and Not Done
+        nodesToRender.push(renderConnector(false, `conn-mixed-done-last`));
+
+        notDoneToShow.forEach((task, index) => {
+          const originalIndex = numDone + index;
+          nodesToRender.push(renderNode(task, originalIndex + 1, false));
+           if (index < NODES_BEFORE_ELLIPSIS - 1) { // Add connector if not the last one shown before ellipsis
+                nodesToRender.push(renderConnector(false, `conn-mixed-not-done-${index}`));
+            }
+        });
+
+        nodesToRender.push(renderEllipsisConnector('ellipsis-conn-mixed-gt4'));
+        nodesToRender.push(renderNode(lastNotDoneNode, totalTasks, false));
+
+      } else { // numDone < 4
+        // Show all Done
+        doneTasks.forEach((task, index) => {
+          nodesToRender.push(renderNode(task, index + 1, true));
+           // Add connector only if not the last done node *before the next section*
+           if (index < numDone - 1) {
+             nodesToRender.push(renderConnector(true, `conn-mixed-done-${index}`));
+           }
+        });
+
+        // Show first (8 - numDone) Not Done
+        const numNotDoneToShow = MAX_VISIBLE_NODES - NODES_AFTER_ELLIPSIS - numDone -1; // -1 for the last node already accounted for
+
+         // Add connector between Done and Not Done (if there were done tasks)
+         if (numDone > 0) {
+             nodesToRender.push(renderConnector(false, `conn-mixed-done-last`));
+         }
+
+        const firstNotDoneToShow = notDoneTasks.slice(0, numNotDoneToShow);
+
+        firstNotDoneToShow.forEach((task, index) => {
+            const originalIndex = numDone + index;
+            nodesToRender.push(renderNode(task, originalIndex + 1, false));
+             if (index < numNotDoneToShow - 1) { // Add connector if not the last one shown before ellipsis
+                nodesToRender.push(renderConnector(false, `conn-mixed-not-done-${index}`));
+             }
+        });
+
+        nodesToRender.push(renderEllipsisConnector('ellipsis-conn-mixed-lt4'));
+        nodesToRender.push(renderNode(lastNotDoneNode, totalTasks, false));
       }
-    });
+    }
   }
+
 
   return (
     <div className="flex w-full items-start justify-between space-x-2 px-4 py-2">
