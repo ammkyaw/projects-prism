@@ -386,7 +386,7 @@ export default function SprintTimelineChart({
           }
           // A qa phase is considered valid if its calculated end date is on or after the sprint start.
           // This means it at least touches or occurs partially/fully within the sprint.
-          qaPhaseValid = qaEndDayIndex >= 0;
+          qaPhaseValid = qaEndDayIndex >= 0 && viewMode === 'task';
           currentPhaseStartDate = getNextWorkingDay(
             qaEndDateObj,
             memberHolidays
@@ -425,7 +425,7 @@ export default function SprintTimelineChart({
           }
           // A buffer phase is considered valid if its calculated end date is on or after the sprint start.
           // This means it at least touches or occurs partially/fully within the sprint.
-          bufferPhaseValid = bufferEndDayIndex >= 0;
+          bufferPhaseValid = bufferEndDayIndex >= 0 && viewMode === 'task';
           // Buffer end date doesn't impact next phase start
         } else {
           console.warn(
