@@ -340,7 +340,14 @@ export default function SprintTimelineChart({
           );
           devStartDayIndex = differenceInDays(devStartDateObj, sprintStart);
           devEndDayIndex = differenceInDays(devEndDateObj, sprintStart);
-          devPhaseValid = true;
+          // If the dev phase starts before the sprint but ends within it,
+          // its effective start within the sprint's context is day 0 of the sprint.
+          if (devStartDayIndex < 0 && devEndDayIndex >= 0) {
+            devStartDayIndex = 0;
+          }
+          // A dev phase is considered valid if its calculated end date is on or after the sprint start.
+          // This means it at least touches or occurs partially/fully within the sprint.
+          devPhaseValid = devEndDayIndex >= 0;
           currentPhaseStartDate = getNextWorkingDay(
             devEndDateObj,
             memberHolidays
@@ -372,7 +379,14 @@ export default function SprintTimelineChart({
           );
           qaStartDayIndex = differenceInDays(qaStartDateObj, sprintStart);
           qaEndDayIndex = differenceInDays(qaEndDateObj, sprintStart);
-          qaPhaseValid = true;
+          // If the qa phase starts before the sprint but ends within it,
+          // its effective start within the sprint's context is day 0 of the sprint.
+          if (qaStartDayIndex < 0 && qaEndDayIndex >= 0) {
+            qaStartDayIndex = 0;
+          }
+          // A qa phase is considered valid if its calculated end date is on or after the sprint start.
+          // This means it at least touches or occurs partially/fully within the sprint.
+          qaPhaseValid = qaEndDayIndex >= 0;
           currentPhaseStartDate = getNextWorkingDay(
             qaEndDateObj,
             memberHolidays
@@ -402,12 +416,16 @@ export default function SprintTimelineChart({
             bufferWorkingDays,
             memberHolidays
           );
-          bufferStartDayIndex = differenceInDays(
-            bufferStartDateObj,
-            sprintStart
-          );
+          bufferStartDayIndex = differenceInDays(bufferStartDateObj, sprintStart);
           bufferEndDayIndex = differenceInDays(bufferEndDateObj, sprintStart);
-          bufferPhaseValid = true;
+          // If the buffer phase starts before the sprint but ends within it,
+          // its effective start within the sprint's context is day 0 of the sprint.
+          if (bufferStartDayIndex < 0 && bufferEndDayIndex >= 0) {
+            bufferStartDayIndex = 0;
+          }
+          // A buffer phase is considered valid if its calculated end date is on or after the sprint start.
+          // This means it at least touches or occurs partially/fully within the sprint.
+          bufferPhaseValid = bufferEndDayIndex >= 0;
           // Buffer end date doesn't impact next phase start
         } else {
           console.warn(
