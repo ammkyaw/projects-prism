@@ -42,16 +42,16 @@ import { useState, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Info } from 'lucide-react';
 
-const weekendColor = 'hsl(0 0% 0%)'; // Black for weekend background
+const weekendColor = 'hsl(0 0% 10%)'; // Black for weekend background
 // Base colors for tasks
 const devTaskBarColor = 'hsl(var(--primary))';
 const qaTaskBarColor = 'hsl(var(--chart-2))';
 const bufferTaskBarColor = 'hsl(var(--chart-3))';
 // Base colors for holidays - will be dynamically assigned
 const holidayColorBase = [
-  'hsl(var(--chart-4))',
-  'hsl(var(--chart-5))',
-  'hsl(var(--destructive))',
+  'hsl(var(--holiday-1))',
+  'hsl(var(--holiday-2))',
+  'hsl(var(--holiday-3))',
 ]; // Cycle through these
 
 // --- Helper Functions ---
