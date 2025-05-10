@@ -42,7 +42,7 @@ export type TaskType =
   | 'New Feature'
   | 'Improvement'
   | 'Bug'
-  | 'Hotfix' // Added Hotfix
+  | 'Hotfix'
   | 'Refactoring'
   | 'Documentation'
   | 'Security'
@@ -53,13 +53,22 @@ export const taskTypes: TaskType[] = [
   'New Feature',
   'Improvement',
   'Bug',
-  'Hotfix', // Added Hotfix
+  'Hotfix',
   'Refactoring',
   'Documentation',
   'Security',
   'Infra',
   'CI/CD',
   'Compliance',
+];
+
+// Severity Types for Bug tasks
+export type SeverityType = 'Low' | 'Medium' | 'High' | 'Critical';
+export const severities: SeverityType[] = [
+  'Low',
+  'Medium',
+  'High',
+  'Critical',
 ];
 
 // Represents the status of a backlog item in history
@@ -73,7 +82,7 @@ export interface Task {
   title?: string;
   description?: string;
   acceptanceCriteria?: string;
-  storyPoints?: number | null; // Changed storyPoints to number | null
+  storyPoints?: number | string | null; // Allow string for input, convert to number on save
   devEstimatedTime?: string | null;
   qaEstimatedTime?: string | null;
   bufferTime?: string | null;
@@ -101,6 +110,7 @@ export interface Task {
   splitFromId?: string | null;
   mergeEventId?: string | null;
   devTime?: string; // This seems like a legacy/duplicate of devEstimatedTime, consider removing or aligning
+  severity?: SeverityType | null; // Added severity field
 }
 
 // Represents the planning data for a single sprint
@@ -228,6 +238,7 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
   startDate: null,
   completedDate: null,
   devTime: undefined, // Remove or align devTime
+  severity: null, // Initialize severity
 };
 
 export type ToastFun = (props: {

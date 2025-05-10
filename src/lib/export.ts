@@ -75,11 +75,13 @@ export const handleExport = (project: Project | null, toast: ToastFun) => {
             SprintNumber: sprint.sprintNumber,
             Type: type,
             TaskID: task.id,
-            TicketNumber: task.ticketNumber, // Use ticketNumber
-            BacklogID: task.backlogId, // Include backlog ID
+            TicketNumber: task.ticketNumber,
+            BacklogID: task.backlogId,
             Title: task.title,
             Description: task.description,
             StoryPoints: task.storyPoints,
+            TaskType: task.taskType, // Added TaskType
+            Severity: task.severity ?? '', // Added Severity
             DevEstTime: task.devEstimatedTime,
             QAEstTime: task.qaEstimatedTime,
             BufferTime: task.bufferTime,
@@ -116,18 +118,18 @@ export const handleExport = (project: Project | null, toast: ToastFun) => {
         Title: task.title,
         Description: task.description,
         TaskType: task.taskType,
+        Severity: task.severity ?? '', // Added Severity
         Priority: task.priority,
         Initiator: task.initiator,
         CreatedDate: task.createdDate,
         StoryPoints: task.storyPoints,
-        DependsOn: (task.dependsOn || []).join(', '), // Flatten dependency array
-        MovedToSprint: task.movedToSprint ?? '', // Add movedToSprint history
-        HistoryStatus: task.historyStatus ?? '', // Add history status
-        NeedsGrooming: task.needsGrooming ? 'Yes' : 'No', // Add flag
-        ReadyForSprint: task.readyForSprint ? 'Yes' : 'No', // Add flag
-        SplitFromID: task.splitFromId ?? '', // Export split info
-        MergeEventID: task.mergeEventId ?? '', // Export merge info
-        // Other backlog specific fields if needed
+        DependsOn: (task.dependsOn || []).join(', '),
+        MovedToSprint: task.movedToSprint ?? '',
+        HistoryStatus: task.historyStatus ?? '',
+        NeedsGrooming: task.needsGrooming ? 'Yes' : 'No',
+        ReadyForSprint: task.readyForSprint ? 'Yes' : 'No',
+        SplitFromID: task.splitFromId ?? '',
+        MergeEventID: task.mergeEventId ?? '',
       }));
       const wsBacklog = XLSX.utils.json_to_sheet(backlogData);
       XLSX.utils.book_append_sheet(wb, wsBacklog, 'Backlog');
@@ -139,7 +141,7 @@ export const handleExport = (project: Project | null, toast: ToastFun) => {
         MemberID: m.id,
         Name: m.name,
         Role: m.role,
-        HolidayCalendarID: m.holidayCalendarId, // Added holiday calendar ID
+        HolidayCalendarID: m.holidayCalendarId,
       }));
       const wsMembers = XLSX.utils.json_to_sheet(membersData);
       XLSX.utils.book_append_sheet(wb, wsMembers, 'Members');
@@ -159,7 +161,6 @@ export const handleExport = (project: Project | null, toast: ToastFun) => {
             HolidayDate: holiday.date,
           });
         });
-        // Add row for calendar itself if it has no holidays
         if (cal.holidays.length === 0) {
           calendarsData.push({
             CalendarID: cal.id,
@@ -187,7 +188,6 @@ export const handleExport = (project: Project | null, toast: ToastFun) => {
             MemberID: tm.memberId,
           });
         });
-        // Add row for team itself if it has no members
         if (team.members.length === 0) {
           teamsData.push({
             TeamID: team.id,
@@ -204,7 +204,7 @@ export const handleExport = (project: Project | null, toast: ToastFun) => {
     const projectNameSlug = project.name
       .replace(/[^a-z0-9]/gi, '_')
       .toLowerCase();
-    XLSX.writeFile(wb, `sprint_stats_${projectNameSlug}_report.xlsx`);
+    XLSX.writeFile(wb, `project_prism_${projectNameSlug}_report.xlsx`); // Updated filename
     toast({
       title: 'Success',
       description: `Data for project '${project.name}' exported to Excel.`,

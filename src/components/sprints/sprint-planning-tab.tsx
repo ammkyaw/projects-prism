@@ -47,6 +47,7 @@ import {
   User,
   Users,
   CheckSquare,
+  AlertTriangle, // For Severity icon
 } from 'lucide-react';
 import type {
   Sprint,
@@ -57,14 +58,16 @@ import type {
   HolidayCalendar,
   Team,
   TaskType,
-} from '@/types/sprint-data'; // Added TaskType
+  SeverityType, // Import SeverityType
+} from '@/types/sprint-data';
 import {
   initialSprintPlanning,
   initialSprintData,
   taskPriorities,
   taskStatuses,
   taskTypes,
-} from '@/types/sprint-data'; // Added taskTypes
+  severities, // Import severities
+} from '@/types/sprint-data';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -104,7 +107,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'; // Correct import
+} from '@/components/ui/alert-dialog';
+import { finalizeTasks } from '@/hooks/use-sprints-actions'; // Import finalizeTasks
 
 const DURATION_OPTIONS = ['1 Week', '2 Weeks', '3 Weeks', '4 Weeks'];
 
@@ -155,175 +159,6 @@ const calculateSprintMetrics = (
   }
 };
 
-const finalizeTasks = (
-  taskRows: Task[],
-  taskType: 'new' | 'spillover',
-  sprintNumber: number | string | null
-): { tasks: Task[]; errors: string[] } => {
-  const finalTasks: Task[] = [];
-  const errors: string[] = [];
-  taskRows.forEach((row, index) => {
-    const taskPrefix = `${taskType === 'new' ? 'New' : 'Spillover'} Task (Row ${index + 1})`;
-    if (
-      !row.ticketNumber?.trim() &&
-      !row.storyPoints?.toString().trim() &&
-      !row.devEstimatedTime?.trim() &&
-      !row.startDate
-    ) {
-      if (
-        taskRows.length === 1 &&
-        !row.ticketNumber?.trim() &&
-        !row.storyPoints?.toString().trim()
-      )
-        return;
-      return;
-    }
-
-    const ticketNumber = row.ticketNumber?.trim();
-    const storyPointsRaw = row.storyPoints?.toString().trim();
-    let storyPoints: number | null = null;
-    if (storyPointsRaw) {
-      const parsed = parseInt(storyPointsRaw, 10);
-      if (!isNaN(parsed) && parsed >= 0) {
-        storyPoints = parsed;
-      } else {
-        errors.push(
-          `${taskPrefix}: Invalid Story Points. Must be a non-negative number.`
-        );
-      }
-    }
-
-    const devEstimatedTime = row.devEstimatedTime?.trim() || null;
-    const qaEstimatedTime = row.qaEstimatedTime?.trim() || '2d';
-    const bufferTime = row.bufferTime?.trim() || '1d';
-    const assignee = row.assignee?.trim() || '';
-    const reviewer = row.reviewer?.trim() || '';
-    const status = row.status?.trim() as Task['status'];
-    const startDate = row.startDate;
-    const completedDate = row.completedDate;
-    const title = row.title?.trim();
-    const description = row.description?.trim();
-    const priority = row.priority;
-    const currentTaskType = row.taskType ?? 'New Feature'; // Get task type
-
-    if (!ticketNumber) errors.push(`${taskPrefix}: Ticket # is required.`);
-    if (!startDate)
-      errors.push(`${taskPrefix}: Start Date is required for timeline.`);
-    if (!currentTaskType || !taskTypes.includes(currentTaskType as any)) {
-      // Validate task type
-      errors.push(`${taskPrefix}: Invalid Task Type.`);
-    }
-
-    if (
-      devEstimatedTime &&
-      parseEstimatedTimeToDays(devEstimatedTime) === null
-    ) {
-      errors.push(
-        `${taskPrefix}: Invalid Dev Est. Time. Use formats like '2d', '1w 3d', '5'.`
-      );
-    }
-    if (qaEstimatedTime && parseEstimatedTimeToDays(qaEstimatedTime) === null) {
-      errors.push(
-        `${taskPrefix}: Invalid QA Est. Time. Use formats like '2d', '1w 3d', '5'.`
-      );
-    }
-    if (bufferTime && parseEstimatedTimeToDays(bufferTime) === null) {
-      errors.push(
-        `${taskPrefix}: Invalid Buffer Time. Use formats like '2d', '1w 3d', '5'.`
-      );
-    }
-    if (!status || !taskStatuses.includes(status)) {
-      errors.push(`${taskPrefix}: Invalid status.`);
-    }
-    if (startDate && !isValid(parseISO(startDate)))
-      errors.push(`${taskPrefix}: Invalid Start Date format (YYYY-MM-DD).`);
-    if (completedDate && !isValid(parseISO(completedDate)))
-      errors.push(`${taskPrefix}: Invalid Completed Date format (YYYY-MM-DD).`);
-
-    if (errors.length > 0) return; // Stop processing this row if errors found for it
-
-    finalTasks.push({
-      id:
-        row.id ||
-        `task_${sprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
-      ticketNumber: ticketNumber || '',
-      backlogId: row.backlogId,
-      title: title,
-      description: description,
-      storyPoints: storyPoints,
-      devEstimatedTime: devEstimatedTime,
-      qaEstimatedTime: qaEstimatedTime,
-      bufferTime: bufferTime,
-      assignee: assignee,
-      reviewer: reviewer,
-      status: status,
-      startDate: startDate,
-      completedDate: completedDate,
-      priority: priority,
-      acceptanceCriteria: row.acceptanceCriteria,
-      dependsOn: row.dependsOn,
-      taskType: currentTaskType as TaskType, // Ensure taskType is included
-      createdDate: row.createdDate,
-      initiator: row.initiator,
-      needsGrooming: row.needsGrooming,
-      readyForSprint: row.readyForSprint,
-      movedToSprint: row.movedToSprint,
-      historyStatus: row.historyStatus,
-      splitFromId: row.splitFromId,
-      mergeEventId: row.mergeEventId,
-    });
-  });
-  return { tasks: finalTasks, errors };
-};
-
-// Helper function to parse estimated time string (e.g., "2d", "1w 3d") into days
-const parseEstimatedTimeToDays = (
-  timeString: string | undefined | null
-): number | null => {
-  if (!timeString) return null;
-  timeString = timeString.trim().toLowerCase();
-  let totalDays = 0;
-
-  const parts = timeString.match(/(\d+w)?\s*(\d+d)?/);
-  if (!parts || (parts[1] === undefined && parts[2] === undefined)) {
-    const simpleDays = parseInt(timeString, 10);
-    if (!isNaN(simpleDays) && simpleDays >= 0) {
-      return simpleDays;
-    }
-    return null;
-  }
-
-  const weekPart = parts[1];
-  const dayPart = parts[2];
-
-  if (weekPart) {
-    const weeks = parseInt(weekPart.replace('w', ''), 10);
-    if (!isNaN(weeks)) {
-      totalDays += weeks * 5;
-    }
-  }
-
-  if (dayPart) {
-    const days = parseInt(dayPart.replace('d', ''), 10);
-    if (!isNaN(days)) {
-      totalDays += days;
-    }
-  }
-
-  if (totalDays === 0 && /^\d+$/.test(timeString)) {
-    const simpleDays = parseInt(timeString, 10);
-    if (!isNaN(simpleDays) && simpleDays >= 0) {
-      return simpleDays;
-    }
-  }
-
-  return totalDays >= 0
-    ? totalDays
-    : timeString === '0' || timeString === '0d'
-      ? 0
-      : null;
-};
-
 interface SprintPlanningTabProps {
   projectId: string;
   sprints: Sprint[];
@@ -356,7 +191,7 @@ interface SprintPlanningTabProps {
   onAddBacklogItems: (
     backlogItemIds: string[],
     targetSprintNumber: number
-  ) => Task[]; // Function to handle moving items from backlog
+  ) => Task[];
 }
 
 interface TaskRow extends Task {
@@ -390,7 +225,7 @@ const createEmptyTaskRow = (): TaskRow => ({
   acceptanceCriteria: '',
   priority: 'Medium',
   dependsOn: [],
-  taskType: 'New Feature', // Default Task Type
+  taskType: 'New Feature',
   createdDate: '',
   initiator: '',
   needsGrooming: false,
@@ -399,6 +234,7 @@ const createEmptyTaskRow = (): TaskRow => ({
   historyStatus: null,
   splitFromId: null,
   mergeEventId: null,
+  severity: null, // Initialize severity
 });
 
 export default function SprintPlanningTab({
@@ -448,7 +284,6 @@ export default function SprintPlanningTab({
   const { toast } = useToast();
 
   const availableSprints = useMemo(() => {
-    // Filter for sprints that are NOT 'Completed'
     return sprints
       .filter((s) => s.status !== 'Completed')
       .sort((a, b) => a.sprintNumber - b.sprintNumber);
@@ -467,11 +302,10 @@ export default function SprintPlanningTab({
   const sprintLimits = useMemo(() => {
     const numPlanned = sprints.filter((s) => s.status === 'Planned').length;
     const numActive = sprints.filter((s) => s.status === 'Active').length;
-    // Allow planning if: less than 2 planned AND no active sprint OR exactly 1 planned and 1 active
     const canPlanNew =
       (numPlanned < 2 && numActive === 0) ||
       (numPlanned < 1 && numActive === 1);
-    const canStartNew = numActive === 0; // Only allow starting if no other sprint is active
+    const canStartNew = numActive === 0;
     return { numPlanned, numActive, canPlanNew, canStartNew };
   }, [sprints]);
 
@@ -503,7 +337,6 @@ export default function SprintPlanningTab({
 
   const tasksForChart: Task[] = useMemo(() => {
     const allTaskRows = [...newTasks, ...spilloverTasks];
-
     return allTaskRows
       .filter(
         (task) =>
@@ -543,7 +376,6 @@ export default function SprintPlanningTab({
     }
   };
 
-  // Effect to automatically select the sprint if only one active/planned sprint exists
   useEffect(() => {
     if (
       !isCreatingNewSprint &&
@@ -551,10 +383,6 @@ export default function SprintPlanningTab({
       selectedSprintNumber === null
     ) {
       setSelectedSprintNumber(availableSprints[0].sprintNumber);
-      console.log(
-        'Auto-selected the only available sprint:',
-        availableSprints[0].sprintNumber
-      );
     }
   }, [availableSprints, isCreatingNewSprint, selectedSprintNumber]);
 
@@ -562,7 +390,6 @@ export default function SprintPlanningTab({
     if (selectedSprint && !isCreatingNewSprint) {
       const loadedPlanning = selectedSprint.planning ?? initialSprintPlanning;
       setPlanningData(loadedPlanning);
-
       const mapTaskToRow = (
         task: Task,
         index: number,
@@ -579,13 +406,13 @@ export default function SprintPlanningTab({
         assignee: task.assignee ?? '',
         reviewer: task.reviewer ?? '',
         status: task.status ?? 'To Do',
-        taskType: task.taskType ?? 'New Feature', // Ensure TaskType is mapped
+        taskType: task.taskType ?? 'New Feature',
         startDate: task.startDate,
         startDateObj: parseDateString(task.startDate),
         completedDate: task.completedDate ?? null,
         _internalId: task.id || `initial_${type}_${index}_${Date.now()}`,
+        severity: task.severity ?? null,
       });
-
       setNewTasks(
         (loadedPlanning.newTasks || []).map((task, index) =>
           mapTaskToRow(task, index, 'new')
@@ -596,16 +423,10 @@ export default function SprintPlanningTab({
           mapTaskToRow(task, index, 'spill')
         )
       );
-
-      if ((loadedPlanning.newTasks || []).length === 0) {
-        setNewTasks([]);
-      }
-
-      if ((loadedPlanning.spilloverTasks || []).length === 0) {
+      if ((loadedPlanning.newTasks || []).length === 0) setNewTasks([]);
+      if ((loadedPlanning.spilloverTasks || []).length === 0)
         setSpilloverTasks([]);
-      }
     } else if (!isCreatingNewSprint) {
-      // If switching away from a completed sprint, clear selection
       if (
         selectedSprintNumber !== null &&
         sprints.find((s) => s.sprintNumber === selectedSprintNumber)?.status ===
@@ -697,7 +518,6 @@ export default function SprintPlanningTab({
     if (type === 'spillover') {
       setSpilloverTasks((prev) => [...prev, createEmptyTaskRow()]);
     } else {
-      console.warn('New tasks should be added from the backlog.');
       toast({
         variant: 'default',
         title: 'Info',
@@ -711,22 +531,11 @@ export default function SprintPlanningTab({
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     const taskList = type === 'new' ? newTasks : spilloverTasks;
     const taskToRemove = taskList.find((row) => row._internalId === internalId);
-    const targetSprintNum = isCreatingNewSprint ? null : selectedSprintNumber; // Can't revert if creating new
+    const targetSprintNum = isCreatingNewSprint ? null : selectedSprintNumber;
 
     if (type === 'new' && taskToRemove?.backlogId && targetSprintNum) {
       onRevertTask(targetSprintNum, taskToRemove.id, taskToRemove.backlogId);
-    } else if (
-      type === 'new' &&
-      taskToRemove?.backlogId &&
-      isCreatingNewSprint
-    ) {
-      console.log('Removed backlog item from new sprint plan (UI only).');
-    } else if (type === 'spillover') {
-      console.log('Removed spillover task (UI only).');
-    } else {
-      console.log('Removed task without backlog ID (UI only).');
     }
-
     updater((prevRows) =>
       prevRows.filter((row) => row._internalId !== internalId)
     );
@@ -735,15 +544,12 @@ export default function SprintPlanningTab({
   const findTeamLead = useCallback(
     (memberName: string | null): string | undefined => {
       if (!memberName) return undefined;
-
       const member = members.find((m) => m.name === memberName);
       if (!member) return undefined;
-
       const team = teams.find((t) =>
         t.members.some((tm) => tm.memberId === member.id)
       );
       if (!team || !team.leadMemberId) return undefined;
-
       const leadMember = members.find((m) => m.id === team.leadMemberId);
       return leadMember?.name;
     },
@@ -753,32 +559,31 @@ export default function SprintPlanningTab({
   const handleTaskInputChange = (
     type: 'new' | 'spillover',
     internalId: string,
-    field: keyof Omit<Task, 'id' | 'completedDate' | 'startDateObj'>, // Exclude startDateObj
-    value: string | number | undefined
+    field: keyof Omit<Task, 'id' | 'completedDate' | 'startDateObj' | 'storyPoints'>,
+    value: string | number | undefined | null // Allow null for severity
   ) => {
     if (isFormDisabled && !isCreatingNewSprint) return;
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     updater((rows) =>
       rows.map((row) => {
         if (row._internalId === internalId) {
-          let finalValue: any = value ?? ''; // Default to empty string if undefined
-
-          // Handle taskType specifically
-          if (field === 'taskType') {
-            finalValue = value as TaskType;
-          }
+          let finalValue: any = value ?? '';
+          if (field === 'taskType') finalValue = value as TaskType;
+          if (field === 'severity') finalValue = value as SeverityType | null; // Handle severity
 
           const updatedRow = { ...row, [field]: finalValue };
-
           if (field === 'assignee' && typeof value === 'string') {
             const assigneeName = value;
             const assigneeMember = members.find((m) => m.name === assigneeName);
             if (assigneeMember?.role === 'Software Engineer') {
-              const leadName = findTeamLead(assigneeName);
-              updatedRow.reviewer = leadName ?? '';
+              updatedRow.reviewer = findTeamLead(assigneeName) ?? '';
             } else {
               updatedRow.reviewer = '';
             }
+          }
+          // Reset severity if taskType is not 'Bug'
+          if (field === 'taskType' && finalValue !== 'Bug') {
+            updatedRow.severity = null;
           }
           return updatedRow;
         }
@@ -786,6 +591,21 @@ export default function SprintPlanningTab({
       })
     );
   };
+
+  const handleTaskStoryPointsChange = (
+    type: 'new' | 'spillover',
+    internalId: string,
+    value: string
+  ) => {
+    if (isFormDisabled && !isCreatingNewSprint) return;
+    const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
+    updater((rows) =>
+      rows.map((row) =>
+        row._internalId === internalId ? { ...row, storyPoints: value } : row
+      )
+    );
+  };
+
 
   const handleTaskDateChange = (
     type: 'new' | 'spillover',
@@ -815,11 +635,7 @@ export default function SprintPlanningTab({
   const handleBacklogItemToggle = (taskId: string, isChecked: boolean) => {
     setSelectedBacklogIds((prev) => {
       const newSelection = new Set(prev);
-      if (isChecked) {
-        newSelection.add(taskId);
-      } else {
-        newSelection.delete(taskId);
-      }
+      isChecked ? newSelection.add(taskId) : newSelection.delete(taskId);
       return newSelection;
     });
   };
@@ -844,12 +660,10 @@ export default function SprintPlanningTab({
       });
       return;
     }
-
     const addedTasksForPlan = onAddBacklogItems(
       Array.from(selectedBacklogIds),
       currentSprintNum
     );
-
     if (addedTasksForPlan.length > 0) {
       const itemsToAdd = addedTasksForPlan.map(
         (task): TaskRow => ({
@@ -862,10 +676,10 @@ export default function SprintPlanningTab({
           bufferTime: task.bufferTime ?? '1d',
           backlogId: task.backlogId ?? '',
           ticketNumber: task.ticketNumber ?? task.backlogId ?? '',
-          taskType: task.taskType ?? 'New Feature', // Ensure taskType is present
+          taskType: task.taskType ?? 'New Feature',
+          severity: task.severity ?? null,
         })
       );
-
       setNewTasks((prev) => {
         const filteredPrev = prev.filter(
           (p) => p.ticketNumber?.trim() || p.storyPoints?.toString().trim()
@@ -877,7 +691,6 @@ export default function SprintPlanningTab({
         return [...filteredPrev, ...uniqueToAdd];
       });
     }
-
     setIsBacklogDialogOpen(false);
   };
 
@@ -898,7 +711,6 @@ export default function SprintPlanningTab({
       });
       return;
     }
-
     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(
       newTasks,
       'new',
@@ -909,32 +721,28 @@ export default function SprintPlanningTab({
       'spillover',
       selectedSprintNumber
     );
-    const allTaskErrors = [...newErrors, ...spillErrors];
-
-    if (allTaskErrors.length > 0) {
+    const allErrors = [...newErrors, ...spillErrors];
+    if (allErrors.length > 0) {
       toast({
         variant: 'destructive',
         title: 'Validation Error in Tasks',
-        description: allTaskErrors.join('\n'),
+        description: allErrors.join('\n'),
       });
       return;
     }
-
     const currentPlanningData: SprintPlanning = {
       goal: planningData.goal.trim(),
-      newTasks: finalNewTasks, // Pass finalized Task objects
-      spilloverTasks: finalSpilloverTasks, // Pass finalized Task objects
+      newTasks: finalNewTasks,
+      spilloverTasks: finalSpilloverTasks,
       definitionOfDone: planningData.definitionOfDone.trim(),
       testingStrategy: planningData.testingStrategy.trim(),
     };
-
     const currentStatus =
       selectedSprint?.status === 'Active'
         ? 'Active'
         : selectedSprint?.status === 'Planned'
           ? 'Planned'
           : undefined;
-
     onSavePlanning(selectedSprintNumber, currentPlanningData, currentStatus);
   };
 
@@ -948,12 +756,10 @@ export default function SprintPlanningTab({
       });
       return;
     }
-
     const sprintNumInt = parseInt(newSprintForm.sprintNumber, 10);
     const startDateObj = newSprintForm.startDate;
     const startDateStr = startDateObj ? format(startDateObj, 'yyyy-MM-dd') : '';
     const duration = newSprintForm.duration;
-
     let formErrors: string[] = [];
     if (isNaN(sprintNumInt) || sprintNumInt <= 0)
       formErrors.push('Invalid Sprint Number.');
@@ -963,7 +769,6 @@ export default function SprintPlanningTab({
       formErrors.push('Valid Start Date is required.');
     if (!duration || !DURATION_OPTIONS.includes(duration))
       formErrors.push('Valid Duration is required.');
-
     if (formErrors.length > 0) {
       toast({
         variant: 'destructive',
@@ -972,7 +777,6 @@ export default function SprintPlanningTab({
       });
       return;
     }
-
     const { totalDays, endDate } = calculateSprintMetrics(
       startDateStr,
       duration
@@ -985,7 +789,6 @@ export default function SprintPlanningTab({
       });
       return;
     }
-
     const sprintDetails: Omit<
       Sprint,
       'details' | 'planning' | 'status' | 'committedPoints' | 'completedPoints'
@@ -996,7 +799,6 @@ export default function SprintPlanningTab({
       duration: duration,
       totalDays: totalDays,
     };
-
     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(
       newTasks,
       'new',
@@ -1007,25 +809,22 @@ export default function SprintPlanningTab({
       'spillover',
       sprintDetails.sprintNumber
     );
-    const allTaskErrors = [...newErrors, ...spillErrors];
-
-    if (allTaskErrors.length > 0) {
+    const allErrors = [...newErrors, ...spillErrors];
+    if (allErrors.length > 0) {
       toast({
         variant: 'destructive',
         title: 'Validation Error in Tasks',
-        description: allTaskErrors.join('\n'),
+        description: allErrors.join('\n'),
       });
       return;
     }
-
     const currentPlanningData: SprintPlanning = {
       goal: planningData.goal.trim(),
-      newTasks: finalNewTasks, // Pass finalized Task objects
-      spilloverTasks: finalSpilloverTasks, // Pass finalized Task objects
+      newTasks: finalNewTasks,
+      spilloverTasks: finalSpilloverTasks,
       definitionOfDone: planningData.definitionOfDone.trim(),
       testingStrategy: planningData.testingStrategy.trim(),
     };
-
     onCreateAndPlanSprint(sprintDetails, currentPlanningData);
     setIsCreatingNewSprint(false);
   };
@@ -1047,7 +846,6 @@ export default function SprintPlanningTab({
       });
       return;
     }
-
     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(
       newTasks,
       'new',
@@ -1058,17 +856,15 @@ export default function SprintPlanningTab({
       'spillover',
       selectedSprint.sprintNumber
     );
-    const allTaskErrors = [...newErrors, ...spillErrors];
-
-    if (allTaskErrors.length > 0) {
+    const allErrors = [...newErrors, ...spillErrors];
+    if (allErrors.length > 0) {
       toast({
         variant: 'destructive',
         title: 'Validation Error Before Starting',
-        description: `Please fix planning errors before starting: ${allTaskErrors.join(' ')}`,
+        description: `Please fix planning errors before starting: ${allErrors.join(' ')}`,
       });
       return;
     }
-
     const finalPlanningData: SprintPlanning = {
       goal: planningData.goal.trim(),
       newTasks: finalNewTasks,
@@ -1076,7 +872,6 @@ export default function SprintPlanningTab({
       definitionOfDone: planningData.definitionOfDone.trim(),
       testingStrategy: planningData.testingStrategy.trim(),
     };
-
     onSavePlanning(selectedSprint.sprintNumber, finalPlanningData, 'Active');
   };
 
@@ -1092,17 +887,15 @@ export default function SprintPlanningTab({
       'spillover',
       selectedSprintNumber
     );
-    const allTaskErrors = [...newErrors, ...spillErrors];
-
-    if (allTaskErrors.length > 0) {
+    const allErrors = [...newErrors, ...spillErrors];
+    if (allErrors.length > 0) {
       toast({
         variant: 'destructive',
         title: 'Validation Error Before Completing',
-        description: `Please fix errors before completing: ${allTaskErrors.join(' ')}`,
+        description: `Please fix errors before completing: ${allErrors.join(' ')}`,
       });
       return;
     }
-
     const latestPlanningData: SprintPlanning = {
       goal: planningData.goal.trim(),
       newTasks: finalNewTasks,
@@ -1110,7 +903,6 @@ export default function SprintPlanningTab({
       definitionOfDone: planningData.definitionOfDone.trim(),
       testingStrategy: planningData.testingStrategy.trim(),
     };
-
     onCompleteSprint(selectedSprintNumber, latestPlanningData);
     setSelectedSprintNumber(null);
     resetForms();
@@ -1130,7 +922,6 @@ export default function SprintPlanningTab({
   const handleConfirmCompleteTask = () => {
     const { task, taskType } = completingTaskInfo;
     if (!task || !taskType || !selectedCompletedDate) return;
-
     const updater = taskType === 'new' ? setNewTasks : setSpilloverTasks;
     updater((prevRows) =>
       prevRows.map((row) =>
@@ -1154,32 +945,22 @@ export default function SprintPlanningTab({
     status: Sprint['status'] | undefined
   ): 'default' | 'secondary' | 'outline' | 'destructive' | null | undefined => {
     if (!status) return 'secondary';
-    switch (status) {
-      case 'Active':
-        return 'default';
-      case 'Planned':
-        return 'secondary';
-      case 'Completed':
-        return 'outline';
-      default:
-        return 'secondary';
-    }
+    return status === 'Active'
+      ? 'default'
+      : status === 'Planned'
+        ? 'secondary'
+        : 'outline';
   };
 
   const getStatusColorClass = (
     status: Sprint['status'] | undefined
   ): string => {
     if (!status) return 'text-muted-foreground';
-    switch (status) {
-      case 'Active':
-        return 'text-primary';
-      case 'Planned':
-        return 'text-muted-foreground';
-      case 'Completed':
-        return 'text-green-600';
-      default:
-        return 'text-muted-foreground';
-    }
+    return status === 'Active'
+      ? 'text-primary'
+      : status === 'Planned'
+        ? 'text-muted-foreground'
+        : 'text-green-600';
   };
 
   const renderDatePicker = (
@@ -1189,7 +970,6 @@ export default function SprintPlanningTab({
     disabled: boolean
   ) => {
     const dateValue = row.startDateObj;
-
     return (
       <Popover>
         <PopoverTrigger asChild>
@@ -1225,10 +1005,8 @@ export default function SprintPlanningTab({
     disabled: boolean
   ) => (
     <div className="overflow-x-auto">
-      {/* Adjusted grid for Task Type */}
-      <div className="min-w-[1450px] space-y-4">
-        {/* Grid column definitions */}
-        <div className="hidden grid-cols-[100px_100px_120px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] items-center gap-x-2 border-b pb-2 md:grid">
+      <div className="min-w-[1600px] space-y-4"> {/* Increased for Severity */}
+        <div className="hidden grid-cols-[100px_100px_120px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] items-center gap-x-2 border-b pb-2 md:grid"> {/* Added Severity column */}
           <Label className="text-xs font-medium text-muted-foreground">
             Ticket #*
           </Label>
@@ -1237,8 +1015,10 @@ export default function SprintPlanningTab({
           </Label>
           <Label className="text-xs font-medium text-muted-foreground">
             Task Type*
-          </Label>{' '}
-          {/* Added Task Type */}
+          </Label>
+          <Label className="text-xs font-medium text-muted-foreground"> {/* Severity Header */}
+            Severity
+          </Label>
           <Label className="text-right text-xs font-medium text-muted-foreground">
             Story Pts
           </Label>
@@ -1270,12 +1050,10 @@ export default function SprintPlanningTab({
         </div>
         <div className="space-y-4 md:space-y-2">
           {taskRows.map((row) => (
-            // Match the grid column definition here
             <div
               key={row._internalId}
-              className="grid grid-cols-2 items-start gap-x-2 gap-y-2 border-b pb-4 last:border-b-0 md:grid-cols-[100px_100px_120px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] md:border-none md:pb-0"
+              className="grid grid-cols-2 items-start gap-x-2 gap-y-2 border-b pb-4 last:border-b-0 md:grid-cols-[100px_100px_120px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] md:border-none md:pb-0" // Added Severity column
             >
-              {/* Ticket Number */}
               <div className="col-span-1 md:col-span-1">
                 <Label
                   htmlFor={`ticket-${type}-${row._internalId}`}
@@ -1300,7 +1078,6 @@ export default function SprintPlanningTab({
                   required
                 />
               </div>
-              {/* Backlog ID (Readonly) */}
               <div className="col-span-1 md:col-span-1">
                 <Label
                   htmlFor={`backlogid-${type}-${row._internalId}`}
@@ -1316,7 +1093,6 @@ export default function SprintPlanningTab({
                   title={row.backlogId}
                 />
               </div>
-              {/* Task Type Select */}
               <div className="col-span-1 md:col-span-1">
                 <Label
                   htmlFor={`taskType-${type}-${row._internalId}`}
@@ -1351,7 +1127,25 @@ export default function SprintPlanningTab({
                   </SelectContent>
                 </Select>
               </div>
-              {/* Story Points */}
+               {/* Severity Dropdown */}
+              <div className="col-span-1 md:col-span-1">
+                <Label htmlFor={`severity-${type}-${row._internalId}`} className="text-xs font-medium md:hidden">Severity</Label>
+                <Select
+                  value={row.severity ?? 'none'}
+                  onValueChange={(value) => handleTaskInputChange(type, row._internalId, 'severity', value === 'none' ? null : value as SeverityType)}
+                  disabled={disabled || row.taskType !== 'Bug'}
+                >
+                  <SelectTrigger id={`severity-${type}-${row._internalId}`} className="h-9 w-full">
+                    <SelectValue placeholder="Severity" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none" className="text-muted-foreground">-- Select --</SelectItem>
+                    {severities.map(option => (
+                      <SelectItem key={option} value={option}>{option}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="col-span-1 md:col-span-1">
                 <Label
                   htmlFor={`sp-${type}-${row._internalId}`}
@@ -1361,23 +1155,20 @@ export default function SprintPlanningTab({
                 </Label>
                 <Input
                   id={`sp-${type}-${row._internalId}`}
-                  type="number"
+                  type="text" // Changed to text to allow empty string for null
                   value={row.storyPoints ?? ''}
                   onChange={(e) =>
-                    handleTaskInputChange(
+                    handleTaskStoryPointsChange( // Use specific handler for story points
                       type,
                       row._internalId,
-                      'storyPoints',
                       e.target.value
                     )
                   }
                   placeholder="Pts"
                   className="h-9 w-full text-right"
-                  min="0"
                   disabled={disabled}
                 />
               </div>
-              {/* Dev Estimated Time */}
               <div className="col-span-1 md:col-span-1">
                 <Label
                   htmlFor={`devEstTime-${type}-${row._internalId}`}
@@ -1401,7 +1192,6 @@ export default function SprintPlanningTab({
                   disabled={disabled}
                 />
               </div>
-              {/* QA Estimated Time */}
               <div className="col-span-1 md:col-span-1">
                 <Label
                   htmlFor={`qaEstTime-${type}-${row._internalId}`}
@@ -1425,7 +1215,6 @@ export default function SprintPlanningTab({
                   disabled={disabled}
                 />
               </div>
-              {/* Buffer Time */}
               <div className="col-span-1 md:col-span-1">
                 <Label
                   htmlFor={`bufferTime-${type}-${row._internalId}`}
@@ -1449,7 +1238,6 @@ export default function SprintPlanningTab({
                   disabled={disabled}
                 />
               </div>
-              {/* Assignee */}
               <div className="col-span-1 md:col-span-1">
                 <Label
                   htmlFor={`assignee-${type}-${row._internalId}`}
@@ -1495,7 +1283,6 @@ export default function SprintPlanningTab({
                   </SelectContent>
                 </Select>
               </div>
-              {/* Reviewer */}
               <div className="col-span-1 md:col-span-1">
                 <Label
                   htmlFor={`reviewer-${type}-${row._internalId}`}
@@ -1541,7 +1328,6 @@ export default function SprintPlanningTab({
                   </SelectContent>
                 </Select>
               </div>
-              {/* Status */}
               <div className="col-span-1 md:col-span-1">
                 <Label
                   htmlFor={`status-${type}-${row._internalId}`}
@@ -1576,7 +1362,6 @@ export default function SprintPlanningTab({
                   </SelectContent>
                 </Select>
               </div>
-              {/* Start Date */}
               <div className="col-span-1 md:col-span-1">
                 <Label
                   htmlFor={`startDate-${type}-${row._internalId}`}
@@ -1586,7 +1371,6 @@ export default function SprintPlanningTab({
                 </Label>
                 {renderDatePicker(type, row, 'startDate', disabled)}
               </div>
-              {/* Actions (Complete) */}
               <div className="col-span-1 flex items-center justify-center md:col-span-1">
                 <Button
                   type="button"
@@ -1601,7 +1385,6 @@ export default function SprintPlanningTab({
                   <CheckSquare className="h-4 w-4" />
                 </Button>
               </div>
-              {/* Delete Button (or Revert) */}
               <div className="col-span-2 mt-1 flex items-center justify-end md:col-span-1 md:mt-0 md:self-center">
                 <Button
                   type="button"
@@ -1611,7 +1394,7 @@ export default function SprintPlanningTab({
                   className={cn(
                     'h-9 w-9 text-muted-foreground hover:text-destructive',
                     type === 'new' && !!row.backlogId && 'hover:text-blue-600'
-                  )} // Adjust hover color for revert
+                  )}
                   aria-label={
                     type === 'new' && !!row.backlogId
                       ? 'Revert task to backlog'
@@ -2004,13 +1787,11 @@ export default function SprintPlanningTab({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Conditionally render Select or display info if only one sprint exists */}
             {availableSprints.length === 0 ? (
               <p className="py-8 text-center text-muted-foreground">
                 No Planned or Active sprints found. Plan a new sprint above.
               </p>
             ) : availableSprints.length === 1 ? (
-              // If only one sprint, display its info instead of Select
               <div className="mb-6 rounded-md border bg-muted p-4">
                 <p className="text-sm font-medium">
                   Currently viewing: Sprint {availableSprints[0].sprintNumber} (
@@ -2026,7 +1807,6 @@ export default function SprintPlanningTab({
                 </p>
               </div>
             ) : (
-              // If multiple sprints, show the Select dropdown
               <div className="mb-6 max-w-xs">
                 <Label htmlFor="select-sprint">Select Sprint</Label>
                 <Select
