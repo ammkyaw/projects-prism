@@ -110,7 +110,7 @@ const LandingPage = () => {
 
         {/* Footer can be part of the layout if needed */}
         <footer className="mt-16 text-center text-sm text-muted-foreground">
-          © {clientTime ? new Date().getFullYear() : 'Loading year...'} Project
+          © {clientTime ? new Date().getFullYear() : 'Loading year...'} Projects
           Prism. All rights reserved.
         </footer>
       </div>

@@ -190,7 +190,7 @@ function PrismPage() {
       setTimeout(() => {
         toast({
           title: 'Login Successful',
-          description: 'Welcome to Project Prism!',
+          description: 'Welcome to Projects Prism!',
         });
         setLoginToastShown(true);
       }, 100);
@@ -822,7 +822,7 @@ function PrismPage() {
       <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-card p-4 shadow-sm">
         <div className="flex items-center gap-2 md:gap-4">
           <h1 className="text-lg font-semibold text-primary md:text-2xl">
-            Project Prism
+            Projects Prism
           </h1>
           <Select
             value={selectedProjectId ?? undefined}
@@ -1107,7 +1107,8 @@ function PrismPage() {
       </main>
 
       <footer className="border-t p-4 text-center text-xs text-muted-foreground">
-        Project Prism - Agile Reporting Made Easy
+        Projects Prism - Agile Reporting Made Easy
       </footer>
     </div>
   );
+}
