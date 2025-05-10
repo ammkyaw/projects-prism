@@ -118,6 +118,11 @@ export default function BugSeverityChart({ sprintData }: BugSeverityChartProps) 
     <ChartContainer config={chartConfig} className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
+          <defs>
+            <filter id="pieDropShadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="3" dy="3" stdDeviation="2.5" floodColor="hsl(var(--foreground))" floodOpacity="0.25" />
+            </filter>
+          </defs>
           <Tooltip
             cursor={false}
             content={<ChartTooltipContent hideLabel nameKey="name" />}
@@ -127,25 +132,26 @@ export default function BugSeverityChart({ sprintData }: BugSeverityChartProps) 
             dataKey="value"
             nameKey="name"
             cx="50%"
-            cy="50%"
+            cy="50%" 
             outerRadius={100} 
             innerRadius={60} 
             labelLine={false}
-            paddingAngle={1.5} // Added paddingAngle for separation
+            paddingAngle={1.5}
+            filter="url(#pieDropShadow)" // Apply the shadow filter
           >
             {pieChartData.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
                 fill={entry.fill}
-                stroke={'hsl(var(--background))'} // Use background for stroke to create "gap"
-                strokeWidth={2} // Define stroke width for separation
+                stroke={'hsl(var(--background))'} 
+                strokeWidth={2} 
               />
             ))}
           </Pie>
           {/* Center Text for Percentage */}
           <text
             x="50%"
-            y="45%" // Adjusted y position slightly higher for percentage
+            y="45%" 
             textAnchor="middle"
             dominantBaseline="middle"
             className="fill-foreground text-2xl font-semibold"
@@ -154,7 +160,7 @@ export default function BugSeverityChart({ sprintData }: BugSeverityChartProps) 
           </text>
           <text
             x="50%"
-            y="55%" // Adjusted y position slightly lower for "Bugs" label
+            y="55%" 
             textAnchor="middle"
             dominantBaseline="middle"
             className="fill-muted-foreground text-xs"
