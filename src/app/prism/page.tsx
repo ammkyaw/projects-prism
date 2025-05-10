@@ -40,6 +40,7 @@ import {
   AlertTriangle,
   ClipboardCheck,
   ArrowUpDown,
+  HelpCircle, // Added HelpCircle for the new button
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -123,6 +124,8 @@ import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import QueryProvider from '@/components/query-provider';
+import HelpModal from '@/components/help/help-modal'; // Added HelpModal import
+import FloatingHelpButton from '@/components/help/floating-help-button'; // Added FloatingHelpButton import
 
 export default function PrismPageWrapper() {
   return (
@@ -159,6 +162,7 @@ function PrismPage() {
     selectedSprintForPlanning,
     setSelectedSprintForPlanning,
   ] = useState<Sprint | null>(null);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false); // State for Help Modal
 
   const {
     data: projects = [],
@@ -704,6 +708,7 @@ function PrismPage() {
             sprints: selectedProject.sprintData.sprints ?? [],
             onMoveToSprint: handleMoveToSprint,
             generateNextBacklogId: generateNextBacklogIdHelper,
+            allProjectBacklogItems: selectedProject.backlog ?? [],
           };
           break;
         case 'backlog/grooming':
@@ -1050,8 +1055,11 @@ function PrismPage() {
                   key={key}
                   value={key}
                   className={cn(
-                    key === activeMainTab && 'border-b-2 border-primary',
-                    'data-[state=active]:border-primary data-[state=active]:shadow-none'
+                    'data-[state=active]:border-primary data-[state=active]:shadow-none',
+                    'hover:border-primary hover:shadow-sm', // Hover effect
+                    key === activeMainTab
+                      ? 'border-b-2 border-primary' // Active tab style
+                      : 'border-b-2 border-transparent' // Inactive tab style
                   )}
                 >
                   <config.icon className="h-4 w-4 md:mr-2" />
@@ -1109,6 +1117,10 @@ function PrismPage() {
       <footer className="border-t p-4 text-center text-xs text-muted-foreground">
         Projects Prism - Agile Reporting Made Easy
       </footer>
+
+      {/* Help Modal and Floating Button */}
+      <HelpModal isOpen={isHelpModalOpen} onOpenChange={setIsHelpModalOpen} />
+      <FloatingHelpButton onOpen={() => setIsHelpModalOpen(true)} />
     </div>
   );
 }
