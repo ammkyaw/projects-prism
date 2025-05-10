@@ -60,6 +60,11 @@ export default {
           border: 'hsl(var(--sidebar-border))',
           ring: 'hsl(var(--sidebar-ring))',
         },
+        holiday: { // Added holiday colors for consistency
+          '1': 'hsl(var(--holiday-1))',
+          '2': 'hsl(var(--holiday-2))',
+          '3': 'hsl(var(--holiday-3))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
