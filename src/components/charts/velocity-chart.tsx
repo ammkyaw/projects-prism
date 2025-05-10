@@ -18,6 +18,7 @@ import {
   ChartTooltipContent,
 } from '@/components/ui/chart';
 import { useMemo } from 'react'; // Import useMemo
+import { Info } from 'lucide-react'; // Import Info icon
 
 interface VelocityChartProps {
   data: Sprint[];
@@ -40,38 +41,43 @@ export default function VelocityChart({ data }: VelocityChartProps) {
       return [];
     }
 
-    return data
-      .filter((sprint) => sprint.status === 'Completed' || sprint.status === 'Active') // Only consider completed or active sprints
-      .map((sprint) => {
-        const newTasks = sprint.planning?.newTasks || [];
+    // Filter for active or completed, sort descending to get latest, take max 10, then sort ascending for chart
+    const relevantSprints = data
+      .filter((sprint) => sprint.status === 'Completed' || sprint.status === 'Active')
+      .sort((a, b) => b.sprintNumber - a.sprintNumber) // Sort descending by sprint number
+      .slice(0, 10) // Take the last 10 relevant sprints
+      .sort((a, b) => a.sprintNumber - b.sprintNumber); // Sort ascending for chart display
 
-        // Committed points from new tasks only
-        const committedPoints = newTasks.reduce(
-          (sum, task) => sum + (Number(task.storyPoints) || 0),
-          0
-        );
+    return relevantSprints.map((sprint) => {
+      const newTasks = sprint.planning?.newTasks || [];
 
-        let completedPointsValue = 0;
-        // If the sprint is Active or Completed, calculate completed points from its NEW tasks
-        if (sprint.status === 'Active' || sprint.status === 'Completed') {
-          completedPointsValue = newTasks
-            .filter((task) => task.status === 'Done')
-            .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
-        }
+      // Committed points from new tasks only
+      const committedPoints = newTasks.reduce(
+        (sum, task) => sum + (Number(task.storyPoints) || 0),
+        0
+      );
 
+      let completedPointsValue = 0;
+      // If the sprint is Active or Completed, calculate completed points from its NEW tasks
+      if (sprint.status === 'Active' || sprint.status === 'Completed') {
+        completedPointsValue = newTasks
+          .filter((task) => task.status === 'Done')
+          .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+      }
 
-        return {
-          name: `Sprint ${sprint.sprintNumber}`,
-          committed: committedPoints,
-          completed: completedPointsValue,
-        };
-      });
+      return {
+        name: `Sprint ${sprint.sprintNumber}`,
+        committed: committedPoints,
+        completed: completedPointsValue,
+      };
+    });
   }, [data]);
 
 
   if (!chartData || chartData.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
+        <Info className="mr-2 h-4 w-4" /> {/* Added Info icon */}
         No velocity data available. (Ensure sprints are 'Completed' or 'Active' with 'New Tasks' planned)
       </div>
     );

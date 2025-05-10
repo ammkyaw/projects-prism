@@ -173,14 +173,14 @@ export default function AnalyticsChartsTab({
       </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Velocity Chart */}
-        <Card className="h-[400px] lg:col-span-1">
+        {/* Velocity Chart - Make it full width */}
+        <Card className="h-[400px] lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <LineChart className="h-5 w-5 text-primary" /> Velocity Chart
             </CardTitle>
             <CardDescription>
-              Committed vs. Completed points for project '{projectName}'.
+              Committed vs. Completed points for project '{projectName}'. (Max last 10 Sprints)
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[calc(100%-100px)] pl-2">
@@ -284,7 +284,7 @@ export default function AnalyticsChartsTab({
             </CardTitle>
             <CardDescription>
               Number of tasks marked as 'Bug' or 'Hotfix' in completed/active
-              sprints.
+              sprints. (New tasks only)
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[calc(100%-100px)] pl-2">
@@ -300,9 +300,7 @@ export default function AnalyticsChartsTab({
         </Card>
 
         {/* Bug Severity Chart - New Chart */}
-        <Card className="h-[450px] lg:col-span-2">
-          {' '}
-          {/* Make it span 2 columns for better visibility */}
+        <Card className="h-[450px] lg:col-span-1"> 
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <PieChartIcon className="h-5 w-5 text-destructive" /> Bug Severity
