@@ -1,6 +1,7 @@
 // src/components/help/help-modal.tsx
 'use client';
 
+import * as React from 'react'; // Import React
 import { useState } from 'react';
 import {
   Dialog,
