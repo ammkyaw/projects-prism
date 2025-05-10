@@ -176,7 +176,15 @@ export const finalizeTasks = (
     if (completedDate && !isValid(parseISO(completedDate)))
       errors.push(`${taskPrefix}: Invalid Completed Date format (YYYY-MM-DD).`);
 
-    if (errors.length > 0 && !errors.every(e => e.startsWith(taskPrefix))) return; // Stop processing this row if critical errors found
+    // if (errors.length > 0 && !errors.every(e => e.startsWith(taskPrefix))) return; // Stop processing this row if critical errors found
+    if (errors.length > 0) {
+        // Check if any errors are NOT specific to this row already
+        const criticalErrorForThisRow = errors.some(e => e.startsWith(taskPrefix));
+        if (criticalErrorForThisRow) return; // Stop this row
+        // If errors are general or from other rows, we might still process this one if it's valid itself
+        // This part of logic might need refinement based on how errors should be handled globally vs per-row
+    }
+
 
     finalTasks.push({
       id:
@@ -293,14 +301,15 @@ export const useSprintsActions = ({
 
           const committedPoints = [
             ...(validatedPlanning.newTasks || []),
-            ...(validatedPlanning.spilloverTasks || []),
+            // Spillover tasks do not count towards commitment of THIS sprint, but are planned work
           ].reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+
 
           return {
             ...s,
             planning: validatedPlanning,
             status: finalStatus,
-            committedPoints: committedPoints,
+            committedPoints: committedPoints, // Recalculate committed points based on current planning
           };
         }
         return s;
@@ -322,7 +331,7 @@ export const useSprintsActions = ({
             title: 'Success',
             description: `Planning data saved for Sprint ${sprintNumber}.${statusUpdateMessage} in project '${currentProjectName}'`,
           });
-        }, 50);
+        }, 0); // Defer toast slightly
       }
     },
     [selectedProject, updateProjectData, toast]
@@ -358,15 +367,15 @@ export const useSprintsActions = ({
         (s) => s.status === 'Active'
       ).length;
 
-      if (
-        (numActive > 0 && numPlanned >=1) || // 1 active, 1 planned
-        (numActive === 0 && numPlanned >=2)    // 0 active, 2 planned
+       if (
+        (numActive === 1 && numPlanned >=1) ||
+        (numActive === 0 && numPlanned >=2)
       ) {
         toast({
           variant: 'destructive',
           title: 'Sprint Limit Reached',
           description:
-            'Cannot plan new sprint. Limit is 2 Planned (if no active) or 1 Planned + 1 Active.',
+            'Cannot plan new sprint. Maximum is 2 Planned sprints (if no active sprint) or 1 Planned and 1 Active sprint.',
         });
         return;
       }
@@ -412,10 +421,10 @@ export const useSprintsActions = ({
         spilloverTasks: finalSpilloverTasks,
       };
 
-      const committedPoints = [
-        ...(validatedPlanning.newTasks || []),
-        ...(validatedPlanning.spilloverTasks || []),
-      ].reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+      const committedPoints = (validatedPlanning.newTasks || []).reduce( // Only new tasks for commitment
+        (sum, task) => sum + (Number(task.storyPoints) || 0),
+        0
+      );
 
       const newSprint: Sprint = {
         ...sprintDetails,
@@ -434,7 +443,7 @@ export const useSprintsActions = ({
         sprintData: {
           ...(selectedProject.sprintData ?? initialSprintData),
           sprints: updatedSprints,
-          daysInSprint: Math.max(
+          daysInSprint: Math.max( // This might not be needed if daysInSprint is per sprint
             selectedProject.sprintData?.daysInSprint || 0,
             newSprint.totalDays
           ),
@@ -448,7 +457,7 @@ export const useSprintsActions = ({
           title: 'Success',
           description: `Sprint ${sprintDetails.sprintNumber} created and planned for project '${projectNameForToast}'.`,
         });
-      }, 50);
+      }, 0); // Defer toast
     },
     [selectedProject, updateProjectData, toast]
   );
@@ -474,7 +483,11 @@ export const useSprintsActions = ({
 
       const doneTasks = allTasksInCompletedSprint.filter(task => task.status === 'Done');
       const undoneTasksOriginal = allTasksInCompletedSprint.filter(task => task.status !== 'Done');
-      const completedPoints = doneTasks.reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+      // Completed points should only count from 'New Tasks' that were committed to *this* sprint
+      const completedPoints = (latestPlanning.newTasks || [])
+        .filter(task => task.status === 'Done')
+        .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+
 
       let updatedSprints = [...selectedProject.sprintData.sprints];
       let updatedBacklog = [...(selectedProject.backlog || [])];
@@ -486,12 +499,18 @@ export const useSprintsActions = ({
         const nextSprintNumberVal = sprintNumber + 1;
         const nextSprintIndex = updatedSprints.findIndex(s => s.sprintNumber === nextSprintNumberVal);
 
-        const tasksToMoveOrRevert = undoneTasksOriginal.map(task => ({
-          ...task,
-          id: task.backlogId ? task.id : `spill_${task.id}_${Date.now()}`, // Preserve ID if from backlog, new ID for spill context
-          status: 'To Do' as Task['status'],
-          startDate: null,
-          completedDate: null,
+        // Create COPIES of undone tasks for spillover
+        const spilloverTaskCopies = undoneTasksOriginal.map(task => ({
+          ...initialBacklogTask, // Ensure all fields are present for a new task instance
+          ...task, // Copy details from the original undone task
+          id: `spill_${task.id || Date.now()}_${Math.random().toString(36).substring(2,7)}`, // Generate a new unique ID for the spillover copy
+          status: 'To Do' as Task['status'], // Reset status
+          startDate: null, // Reset start date
+          completedDate: null, // Reset completed date
+          // Ensure these are reset or explicitly carried over if needed
+          movedToSprint: null,
+          historyStatus: null,
+          // Other fields like title, description, storyPoints, assignee, backlogId etc. are copied
         }));
 
         if (nextSprintIndex !== -1 && (updatedSprints[nextSprintIndex].status === 'Planned' || updatedSprints[nextSprintIndex].status === 'Active')) {
@@ -500,68 +519,31 @@ export const useSprintsActions = ({
             ...(nextSprint.planning || initialSprintPlanning),
             spilloverTasks: [
               ...(nextSprint.planning?.spilloverTasks || []),
-              ...tasksToMoveOrRevert,
+              ...spilloverTaskCopies, // Add copies
             ],
           };
           updatedSprints[nextSprintIndex] = nextSprint;
-          spilloverMessage = `${undoneTasksOriginal.length} undone task(s) moved to Sprint ${nextSprintNumberVal} as spillover.`;
+          spilloverMessage = `${undoneTasksOriginal.length} undone task(s) copied to Sprint ${nextSprintNumberVal} as spillover.`;
         } else {
-          const tasksForBacklog: Task[] = [];
-          tasksToMoveOrRevert.forEach(task => {
-            if (task.backlogId) {
-              const backlogItemIndex = updatedBacklog.findIndex(b => b.backlogId === task.backlogId && b.movedToSprint === sprintNumber);
-              if (backlogItemIndex !== -1) {
-                updatedBacklog[backlogItemIndex] = {
-                  ...updatedBacklog[backlogItemIndex],
-                  movedToSprint: null,
-                  historyStatus: null,
-                  needsGrooming: true,
-                  readyForSprint: false,
-                };
-              } else {
-                // If original backlog item not found (e.g., it was a spillover task itself), create new backlog item
-                tasksForBacklog.push({
-                  ...initialBacklogTask,
-                  ...task,
-                  id: `reverted_backlog_${task.id}_${Date.now()}`,
-                  backlogId: generateNextBacklogIdHelper([...updatedBacklog, ...tasksForBacklog]),
-                  status: null, movedToSprint: null, historyStatus: null, needsGrooming: true, readyForSprint: false, startDate: null, completedDate: null,
-                });
-              }
-            } else {
-              // Task created directly in sprint, create new backlog item
-              tasksForBacklog.push({
-                ...initialBacklogTask,
-                ...task,
-                id: `reverted_backlog_${task.id}_${Date.now()}`,
-                backlogId: generateNextBacklogIdHelper([...updatedBacklog, ...tasksForBacklog]),
-                status: null, movedToSprint: null, historyStatus: null, needsGrooming: true, readyForSprint: false, startDate: null, completedDate: null,
-              });
-            }
-          });
-          if (tasksForBacklog.length > 0) {
-            updatedBacklog.push(...tasksForBacklog);
-          }
-          updatedBacklog.sort((a, b) => taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
-          spilloverMessage = `${undoneTasksOriginal.length} undone task(s) moved to the project backlog.`;
+          // If no next sprint, undone tasks remain in the completed sprint's record.
+          // No need to move them back to backlog automatically unless specified.
+          // For now, they just stay as part of the completed sprint's historical plan.
+          spilloverMessage = `${undoneTasksOriginal.length} undone task(s) recorded in completed Sprint ${sprintNumber}. No suitable next sprint for spillover.`;
         }
       }
 
-      // Update the completed sprint status and its planning data (only done tasks)
+      // Update the completed sprint status and its planning data.
+      // The planning data should reflect the state AT THE TIME OF COMPLETION, including undone tasks.
       updatedSprints[currentSprintIndex] = {
         ...sprintToComplete,
         status: 'Completed' as SprintStatus,
         completedPoints: completedPoints,
-        planning: {
-          ...latestPlanning,
-          newTasks: latestPlanning.newTasks?.filter(t => t.status === 'Done') || [],
-          spilloverTasks: latestPlanning.spilloverTasks?.filter(t => t.status === 'Done') || [],
-        },
+        planning: latestPlanning, // Store the full plan as it was when completed
       };
 
       const updatedProject: Project = {
         ...selectedProject,
-        backlog: updatedBacklog,
+        backlog: updatedBacklog, // Backlog might not change if no tasks are reverted
         sprintData: {
           ...selectedProject.sprintData,
           sprints: updatedSprints,
@@ -590,6 +572,17 @@ export const useSprintsActions = ({
         return;
       }
       const currentProjectName = selectedProject.name;
+      const sprintToDelete = selectedProject.sprintData.sprints.find(s => s.sprintNumber === sprintNumber);
+
+      if (sprintToDelete && sprintToDelete.status === 'Active') {
+          toast({
+              variant: 'destructive',
+              title: 'Cannot Delete Active Sprint',
+              description: `Sprint ${sprintNumber} is currently Active. Complete or re-plan it before deleting.`,
+          });
+          return;
+      }
+
       const filteredSprints = (selectedProject.sprintData.sprints ?? []).filter(
         (s) => s.sprintNumber !== sprintNumber
       );
@@ -603,7 +596,7 @@ export const useSprintsActions = ({
       };
       // Recalculate totalStoryPoints and daysInSprint based on remaining sprints
       const totalPoints = updatedProject.sprintData.sprints.reduce(
-        (sum, s) => sum + (s.completedPoints || 0),
+        (sum, s) => sum + (s.completedPoints || 0), // Consider using committed points for capacity planning
         0
       );
       const maxDays =
@@ -613,6 +606,7 @@ export const useSprintsActions = ({
             )
           : 0;
 
+      // These global stats might need rethinking if they are meant for overall project capacity
       updatedProject.sprintData.totalStoryPoints = totalPoints;
       updatedProject.sprintData.daysInSprint = maxDays;
 
