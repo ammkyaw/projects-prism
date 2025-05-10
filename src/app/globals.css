@@ -34,6 +34,8 @@ body {
     --chart-3: 210 40% 50%; /* Muted Blue */
     --chart-4: 30 90% 60%; /* Orange-ish */
     --chart-5: 120 40% 55%; /* Green-ish */
+    --chart-6: 300 76% 72%;
+    --critical: 0 100% 50%;
     --holiday-1: 210 40% 50%;
     --holiday-2: 30 90% 60%;
     --holiday-3: 120 40% 55%;
@@ -69,10 +71,12 @@ body {
     --input: 240 3.7% 15.9%;
     --ring: 230 100% 30%; /* Dark Blue for focus rings */
     --chart-1: 230 100% 30%; /* Dark Blue for charts */
-    --chart-2: 51 100% 60%;
+    --chart-2: 51 100% 60%; /* Yellow for charts */
     --chart-3: 210 50% 60%;
-    --chart-4: 60 100% 50%;
-    --chart-5: 300 76% 72%;
+    --chart-4: 147 100% 57%; /* Green for charts */
+    --chart-5: 300 76% 72%; /* Pink for charts */
+    --chart-6: 40 100% 50%; /* Orange for charts */
+    --critical: 0 100% 50%; /* Bright Red */
     --holiday-1: 0 100% 20%;
     --holiday-2: 0 100% 10%;
     --holiday-3: 0 100% 5%;

@@ -27,10 +27,10 @@ interface BugSeverityChartProps {
 
 // Define colors for severities
 const severityColors: { [key in SeverityType]: string } = {
-  Critical: 'hsl(var(--destructive))', // Destructive red
-  High: 'hsl(var(--chart-4))', // Orange-ish
-  Medium: 'hsl(var(--chart-2))', // Gold/Yellow
-  Low: 'hsl(var(--chart-5))', // Green-ish or a light blue
+  Critical: 'hsl(var(--critical))', // Bright red
+  High: 'hsl(var(--destructive))', // Destructive red
+  Medium: 'hsl(var(--chart-5))', // Orange
+  Low: 'hsl(var(--chart-2))', // Green-ish or a light blue
 };
 
 const chartConfig = severities.reduce(

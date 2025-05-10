@@ -31,7 +31,7 @@ const chartConfig = {
   },
   hotfixes: { // Added config for hotfixes
     label: 'Hotfixes',
-    color: 'hsl(0 100% 50%)', // Bright red color
+    color: 'hsl(var(--critical))', // Bright red color
   },
 } satisfies ChartConfig;
 
