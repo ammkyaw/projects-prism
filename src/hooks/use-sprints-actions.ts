@@ -19,8 +19,10 @@ import {
   taskStatuses,
   taskTypes,
   severities,
-} from '@/types/sprint-data'; // Added taskTypes
+  initialBacklogTask, // Import initialBacklogTask
+} from '@/types/sprint-data';
 import { isValid, parseISO, isPast } from 'date-fns';
+import { generateNextBacklogIdHelper } from '@/lib/utils'; // Import the helper
 
 interface UseSprintsActionsProps {
   selectedProject: Project | null;
@@ -174,7 +176,7 @@ export const finalizeTasks = (
     if (completedDate && !isValid(parseISO(completedDate)))
       errors.push(`${taskPrefix}: Invalid Completed Date format (YYYY-MM-DD).`);
 
-    if (errors.length > 0) return; // Stop processing this row if errors found for it
+    if (errors.length > 0 && !errors.every(e => e.startsWith(taskPrefix))) return; // Stop processing this row if critical errors found
 
     finalTasks.push({
       id:
@@ -196,8 +198,8 @@ export const finalizeTasks = (
       priority: priority,
       acceptanceCriteria: row.acceptanceCriteria,
       dependsOn: row.dependsOn,
-      taskType: currentTaskType as TaskType, // Ensure taskType is included
-      severity: currentTaskType === 'Bug' ? currentSeverity : null, // Set severity only for Bugs
+      taskType: currentTaskType as TaskType,
+      severity: currentTaskType === 'Bug' ? currentSeverity : null,
       createdDate: row.createdDate,
       initiator: row.initiator,
       needsGrooming: row.needsGrooming,
@@ -248,7 +250,7 @@ export const useSprintsActions = ({
           toast({
             variant: 'destructive',
             title: 'Active Sprint Limit',
-            description: `Only one sprint can be active at a time. Another sprint is already active.`,
+            description: `Only one sprint can be active at a time. Sprint ${tempSprints.find(s => s.status === 'Active')?.sprintNumber} is already active.`,
           });
           return;
         }
@@ -356,15 +358,19 @@ export const useSprintsActions = ({
         (s) => s.status === 'Active'
       ).length;
 
-      if (numPlanned >= 2 || (numPlanned >= 1 && numActive >= 1)) {
+      if (
+        (numActive > 0 && numPlanned >=1) || // 1 active, 1 planned
+        (numActive === 0 && numPlanned >=2)    // 0 active, 2 planned
+      ) {
         toast({
           variant: 'destructive',
           title: 'Sprint Limit Reached',
           description:
-            'Cannot plan new sprint. Limit is 2 Planned or 1 Planned + 1 Active.',
+            'Cannot plan new sprint. Limit is 2 Planned (if no active) or 1 Planned + 1 Active.',
         });
         return;
       }
+
 
       if (
         currentSprints.some(
@@ -450,35 +456,112 @@ export const useSprintsActions = ({
   const handleCompleteSprint = useCallback(
     (sprintNumber: number, latestPlanning: SprintPlanning) => {
       if (!selectedProject) {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'No project selected.',
-        });
+        toast({ variant: 'destructive', title: 'Error', description: 'No project selected.' });
         return;
       }
       const currentProjectName = selectedProject.name;
+      const sprintToComplete = selectedProject.sprintData.sprints.find(s => s.sprintNumber === sprintNumber);
 
-      const updatedSprints = selectedProject.sprintData.sprints.map((s) => {
-        if (s.sprintNumber === sprintNumber && s.status === 'Active') {
-          const completedPoints = [
-            ...(latestPlanning.newTasks || []),
-            ...(latestPlanning.spilloverTasks || []),
-          ]
-            .filter((task) => task.status === 'Done')
-            .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+      if (!sprintToComplete || sprintToComplete.status !== 'Active') {
+        toast({ variant: 'destructive', title: 'Error', description: "Only 'Active' sprints can be completed." });
+        return;
+      }
 
-          return {
-            ...s,
-            status: 'Completed' as SprintStatus,
-            completedPoints: completedPoints,
+      const allTasksInCompletedSprint = [
+        ...(latestPlanning.newTasks || []),
+        ...(latestPlanning.spilloverTasks || []),
+      ];
+
+      const doneTasks = allTasksInCompletedSprint.filter(task => task.status === 'Done');
+      const undoneTasksOriginal = allTasksInCompletedSprint.filter(task => task.status !== 'Done');
+      const completedPoints = doneTasks.reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+
+      let updatedSprints = [...selectedProject.sprintData.sprints];
+      let updatedBacklog = [...(selectedProject.backlog || [])];
+      let spilloverMessage = "";
+
+      const currentSprintIndex = updatedSprints.findIndex(s => s.sprintNumber === sprintNumber);
+
+      if (undoneTasksOriginal.length > 0) {
+        const nextSprintNumberVal = sprintNumber + 1;
+        const nextSprintIndex = updatedSprints.findIndex(s => s.sprintNumber === nextSprintNumberVal);
+
+        const tasksToMoveOrRevert = undoneTasksOriginal.map(task => ({
+          ...task,
+          id: task.backlogId ? task.id : `spill_${task.id}_${Date.now()}`, // Preserve ID if from backlog, new ID for spill context
+          status: 'To Do' as Task['status'],
+          startDate: null,
+          completedDate: null,
+        }));
+
+        if (nextSprintIndex !== -1 && (updatedSprints[nextSprintIndex].status === 'Planned' || updatedSprints[nextSprintIndex].status === 'Active')) {
+          const nextSprint = { ...updatedSprints[nextSprintIndex] };
+          nextSprint.planning = {
+            ...(nextSprint.planning || initialSprintPlanning),
+            spilloverTasks: [
+              ...(nextSprint.planning?.spilloverTasks || []),
+              ...tasksToMoveOrRevert,
+            ],
           };
+          updatedSprints[nextSprintIndex] = nextSprint;
+          spilloverMessage = `${undoneTasksOriginal.length} undone task(s) moved to Sprint ${nextSprintNumberVal} as spillover.`;
+        } else {
+          const tasksForBacklog: Task[] = [];
+          tasksToMoveOrRevert.forEach(task => {
+            if (task.backlogId) {
+              const backlogItemIndex = updatedBacklog.findIndex(b => b.backlogId === task.backlogId && b.movedToSprint === sprintNumber);
+              if (backlogItemIndex !== -1) {
+                updatedBacklog[backlogItemIndex] = {
+                  ...updatedBacklog[backlogItemIndex],
+                  movedToSprint: null,
+                  historyStatus: null,
+                  needsGrooming: true,
+                  readyForSprint: false,
+                };
+              } else {
+                // If original backlog item not found (e.g., it was a spillover task itself), create new backlog item
+                tasksForBacklog.push({
+                  ...initialBacklogTask,
+                  ...task,
+                  id: `reverted_backlog_${task.id}_${Date.now()}`,
+                  backlogId: generateNextBacklogIdHelper([...updatedBacklog, ...tasksForBacklog]),
+                  status: null, movedToSprint: null, historyStatus: null, needsGrooming: true, readyForSprint: false, startDate: null, completedDate: null,
+                });
+              }
+            } else {
+              // Task created directly in sprint, create new backlog item
+              tasksForBacklog.push({
+                ...initialBacklogTask,
+                ...task,
+                id: `reverted_backlog_${task.id}_${Date.now()}`,
+                backlogId: generateNextBacklogIdHelper([...updatedBacklog, ...tasksForBacklog]),
+                status: null, movedToSprint: null, historyStatus: null, needsGrooming: true, readyForSprint: false, startDate: null, completedDate: null,
+              });
+            }
+          });
+          if (tasksForBacklog.length > 0) {
+            updatedBacklog.push(...tasksForBacklog);
+          }
+          updatedBacklog.sort((a, b) => taskPriorities.indexOf(a.priority!) - taskPriorities.indexOf(b.priority!) || (a.backlogId ?? '').localeCompare(b.backlogId ?? ''));
+          spilloverMessage = `${undoneTasksOriginal.length} undone task(s) moved to the project backlog.`;
         }
-        return s;
-      });
+      }
+
+      // Update the completed sprint status and its planning data (only done tasks)
+      updatedSprints[currentSprintIndex] = {
+        ...sprintToComplete,
+        status: 'Completed' as SprintStatus,
+        completedPoints: completedPoints,
+        planning: {
+          ...latestPlanning,
+          newTasks: latestPlanning.newTasks?.filter(t => t.status === 'Done') || [],
+          spilloverTasks: latestPlanning.spilloverTasks?.filter(t => t.status === 'Done') || [],
+        },
+      };
 
       const updatedProject: Project = {
         ...selectedProject,
+        backlog: updatedBacklog,
         sprintData: {
           ...selectedProject.sprintData,
           sprints: updatedSprints,
@@ -488,11 +571,13 @@ export const useSprintsActions = ({
       updateProjectData(updatedProject);
       toast({
         title: 'Success',
-        description: `Sprint ${sprintNumber} marked as Completed in project '${currentProjectName}'.`,
+        description: `Sprint ${sprintNumber} marked as Completed. ${spilloverMessage}`,
+        duration: 7000, // Longer duration for more info
       });
     },
     [selectedProject, updateProjectData, toast]
   );
+
 
   const handleDeleteSprint = useCallback(
     (sprintNumber: number) => {
