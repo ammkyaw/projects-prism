@@ -10,6 +10,7 @@ import type {
   HolidayCalendar,
   Team,
   TaskType,
+  SeverityType,
 } from '@/types/sprint-data';
 import {
   initialSprintPlanning,
@@ -17,6 +18,7 @@ import {
   taskPriorities,
   taskStatuses,
   taskTypes,
+  severities,
 } from '@/types/sprint-data'; // Added taskTypes
 import { isValid, parseISO, isPast } from 'date-fns';
 
@@ -78,7 +80,7 @@ const parseEstimatedTimeToDays = (
 };
 
 // Helper function to finalize tasks, ensuring storyPoints are number or null
-const finalizeTasks = (
+export const finalizeTasks = (
   taskRows: Task[],
   taskType: 'new' | 'spillover',
   sprintNumber: number | string | null
@@ -128,6 +130,7 @@ const finalizeTasks = (
     const description = row.description?.trim();
     const priority = row.priority;
     const currentTaskType = row.taskType ?? 'New Feature'; // Get task type
+    const currentSeverity = row.severity ?? null; // Get severity
 
     if (!ticketNumber) errors.push(`${taskPrefix}: Ticket # is required.`);
     if (!startDate)
@@ -135,6 +138,14 @@ const finalizeTasks = (
     if (!currentTaskType || !taskTypes.includes(currentTaskType as any)) {
       // Validate task type
       errors.push(`${taskPrefix}: Invalid Task Type.`);
+    }
+    if (
+      currentTaskType === 'Bug' &&
+      (!currentSeverity || !severities.includes(currentSeverity))
+    ) {
+      errors.push(
+        `${taskPrefix}: Severity is required and must be valid for Bugs.`
+      );
     }
 
     if (
@@ -186,6 +197,7 @@ const finalizeTasks = (
       acceptanceCriteria: row.acceptanceCriteria,
       dependsOn: row.dependsOn,
       taskType: currentTaskType as TaskType, // Ensure taskType is included
+      severity: currentTaskType === 'Bug' ? currentSeverity : null, // Set severity only for Bugs
       createdDate: row.createdDate,
       initiator: row.initiator,
       needsGrooming: row.needsGrooming,
