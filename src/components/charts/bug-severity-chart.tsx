@@ -184,7 +184,7 @@ export default function BugSeverityChart({ sprint }: BugSeverityChartProps) {
             dominantBaseline="middle"
             className="fill-muted-foreground text-xs"
           >
-            Bugs (New Tasks)
+            Bugs
           </text>
           <ChartLegend
             content={<ChartLegendContent nameKey="name" />}
