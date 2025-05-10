@@ -71,11 +71,11 @@ body {
     --chart-1: 230 100% 30%; /* Dark Blue for charts */
     --chart-2: 51 100% 60%;
     --chart-3: 210 50% 60%;
-    --chart-4: 30 80% 55%; /* Dark mode adjusted Orange-ish */
-    --chart-5: 120 50% 65%; /* Dark mode adjusted Green-ish */
-    --holiday-1: 210 50% 60%;
-    --holiday-2: 30 80% 55%;
-    --holiday-3: 120 50% 65%;
+    --chart-4: 60 100% 50%;
+    --chart-5: 300 76% 72%;
+    --holiday-1: 0 100% 20%;
+    --holiday-2: 0 100% 10%;
+    --holiday-3: 0 100% 5%;
     /* --chart-4: 0 0% 20%;
     --chart-5: 0 0% 30%;
     --chart-6: 0 0% 40%; */
