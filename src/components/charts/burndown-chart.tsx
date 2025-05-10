@@ -1,3 +1,4 @@
+// src/components/charts/burndown-chart.tsx
 'use client';
 
 import type { Sprint, Task } from '@/types/sprint-data';
@@ -64,7 +65,18 @@ export default function BurndownChart({ activeSprint }: BurndownChartProps) {
 
     const sprintStart = parseISO(activeSprint.startDate);
     const sprintEnd = parseISO(activeSprint.endDate);
-    const committedPoints = activeSprint.committedPoints || 0;
+
+    // Calculate total points for ideal burndown: Sum of newTasks AND spilloverTasks
+    const totalPointsForIdealBurndown =
+      (activeSprint.planning?.newTasks || []).reduce(
+        (sum, task) => sum + (Number(task.storyPoints) || 0),
+        0
+      ) +
+      (activeSprint.planning?.spilloverTasks || []).reduce(
+        (sum, task) => sum + (Number(task.storyPoints) || 0),
+        0
+      );
+
     const allTasks = [
       ...(activeSprint.planning?.newTasks || []),
       ...(activeSprint.planning?.spilloverTasks || []),
@@ -79,7 +91,9 @@ export default function BurndownChart({ activeSprint }: BurndownChartProps) {
     const totalSprintWorkingDays = sprintDaysArray.filter(isWorkingDay).length;
 
     const pointsToBurnPerWorkingDay =
-      totalSprintWorkingDays > 0 ? committedPoints / totalSprintWorkingDays : 0;
+      totalSprintWorkingDays > 0
+        ? totalPointsForIdealBurndown / totalSprintWorkingDays
+        : 0;
 
     let nthWorkingDayCounter = 0;
 
@@ -90,17 +104,17 @@ export default function BurndownChart({ activeSprint }: BurndownChartProps) {
         nthWorkingDayCounter++;
         idealForThisDay = Math.max(
           0,
-          committedPoints - nthWorkingDayCounter * pointsToBurnPerWorkingDay
+          totalPointsForIdealBurndown -
+            nthWorkingDayCounter * pointsToBurnPerWorkingDay
         );
       } else {
-        if (nthWorkingDayCounter === 0) {
-          idealForThisDay = committedPoints;
-        } else {
-          idealForThisDay = Math.max(
-            0,
-            committedPoints - nthWorkingDayCounter * pointsToBurnPerWorkingDay
-          );
-        }
+        // For non-working days, ideal line remains at the level of the previous working day
+        // or at total points if it's before the first working day.
+        idealForThisDay = Math.max(
+          0,
+          totalPointsForIdealBurndown -
+            nthWorkingDayCounter * pointsToBurnPerWorkingDay
+        );
       }
 
       const actualRemaining = allTasks.reduce((sum, task) => {
@@ -108,19 +122,25 @@ export default function BurndownChart({ activeSprint }: BurndownChartProps) {
         if (task.status !== 'Done') {
           return sum + taskPoints;
         }
+        // If task is Done, check if it was completed *after* the currentDay
         if (task.completedDate && isValid(parseISO(task.completedDate))) {
           if (isBefore(currentDay, parseISO(task.completedDate))) {
-            return sum + taskPoints;
+            return sum + taskPoints; // Still counts as remaining if completed after currentDay
           }
         } else {
-          return sum + taskPoints;
+          // If no completedDate but status is Done, assume it's done by sprint start for calculation simplicity,
+          // or handle based on more complex logic if needed. Here, we assume it doesn't count towards remaining.
+          // This might need adjustment based on how "Done" tasks without completedDate are treated.
+          // For burndown, if status is 'Done' it should be burned.
         }
         return sum;
       }, 0);
 
+      // Actual points on the first day should be the total commitment
       const actualForToday = isSameDay(currentDay, sprintStart)
-        ? committedPoints
+        ? totalPointsForIdealBurndown
         : actualRemaining;
+
 
       return {
         date: format(currentDay, 'MM/dd'),
@@ -145,17 +165,37 @@ export default function BurndownChart({ activeSprint }: BurndownChartProps) {
         <Info className="mr-2 h-5 w-5" />
         <span>Not enough data for burndown chart.</span>
         <span className="text-xs">
-          (Ensure sprint has start/end dates and committed points)
+          (Ensure sprint has start/end dates and tasks with story points)
         </span>
       </div>
     );
   }
 
   const yAxisMax =
-    activeSprint.committedPoints > 0
-      ? activeSprint.committedPoints +
-        Math.ceil(activeSprint.committedPoints * 0.1)
+    Math.max(
+      ...(activeSprint.planning?.newTasks || []).reduce(
+        (sum, task) => sum + (Number(task.storyPoints) || 0),
+        0
+      ) +
+        (activeSprint.planning?.spilloverTasks || []).reduce(
+          (sum, task) => sum + (Number(task.storyPoints) || 0),
+          0
+        ),
+      0
+    ) > 0
+      ? Math.ceil(
+          ((activeSprint.planning?.newTasks || []).reduce(
+            (sum, task) => sum + (Number(task.storyPoints) || 0),
+            0
+          ) +
+            (activeSprint.planning?.spilloverTasks || []).reduce(
+              (sum, task) => sum + (Number(task.storyPoints) || 0),
+              0
+            )) *
+            1.1
+        )
       : 10;
+
 
   return (
     <ChartContainer config={chartConfig} className="h-full w-full">
