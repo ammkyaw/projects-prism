@@ -128,15 +128,17 @@ export default function BugSeverityChart({ sprintData }: BugSeverityChartProps) 
             nameKey="name"
             cx="50%"
             cy="50%"
-            outerRadius={100} // Adjust radius as needed
-            innerRadius={60} // For a donut chart effect, increased for more space
+            outerRadius={100} 
+            innerRadius={60} 
             labelLine={false}
+            paddingAngle={1.5} // Added paddingAngle for separation
           >
             {pieChartData.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
                 fill={entry.fill}
-                stroke={entry.fill} // Use fill color for stroke for a solid look
+                stroke={'hsl(var(--background))'} // Use background for stroke to create "gap"
+                strokeWidth={2} // Define stroke width for separation
               />
             ))}
           </Pie>
