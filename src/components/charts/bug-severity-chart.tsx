@@ -1,7 +1,7 @@
 // src/components/charts/bug-severity-chart.tsx
 'use client';
 
-import type { SprintData, Task, SeverityType } from '@/types/sprint-data';
+import type { Sprint, Task, SeverityType } from '@/types/sprint-data'; // Changed SprintData to Sprint
 import { severities } from '@/types/sprint-data'; // Import severities array
 import {
   PieChart,
@@ -22,7 +22,7 @@ import { useMemo } from 'react';
 import { Info } from 'lucide-react';
 
 interface BugSeverityChartProps {
-  sprintData: SprintData | null;
+  sprint: Sprint | null; // Changed to accept a single sprint
 }
 
 // Define colors for severities
@@ -44,9 +44,9 @@ const chartConfig = severities.reduce(
   {} as ChartConfig
 );
 
-export default function BugSeverityChart({ sprintData }: BugSeverityChartProps) {
+export default function BugSeverityChart({ sprint }: BugSeverityChartProps) {
   const { pieChartData, totalBugs, totalTasks, bugPercentage } = useMemo(() => {
-    if (!sprintData || !sprintData.sprints || sprintData.sprints.length === 0) {
+    if (!sprint || !sprint.planning) { // Check if sprint or its planning data is null
       return { pieChartData: [], totalBugs: 0, totalTasks: 0, bugPercentage: 0 };
     }
 
@@ -54,24 +54,20 @@ export default function BugSeverityChart({ sprintData }: BugSeverityChartProps) 
     let currentTotalTasks = 0;
     let currentTotalBugs = 0;
 
-    sprintData.sprints
-      .filter((s) => s.status === 'Completed' || s.status === 'Active')
-      .forEach((sprint) => {
-        const tasks: Task[] = [
-          ...(sprint.planning?.newTasks || []),
-          ...(sprint.planning?.spilloverTasks || []),
-        ];
-        currentTotalTasks += tasks.length;
-        tasks.forEach((task) => {
-          if (task.taskType === 'Bug') {
-            currentTotalBugs++;
-            if (task.severity) {
-              severityCounts[task.severity] =
-                (severityCounts[task.severity] || 0) + 1;
-            }
-          }
-        });
-      });
+    const tasks: Task[] = [
+      ...(sprint.planning?.newTasks || []),
+      ...(sprint.planning?.spilloverTasks || []),
+    ];
+    currentTotalTasks = tasks.length;
+    tasks.forEach((task) => {
+      if (task.taskType === 'Bug') {
+        currentTotalBugs++;
+        if (task.severity) {
+          severityCounts[task.severity] =
+            (severityCounts[task.severity] || 0) + 1;
+        }
+      }
+    });
 
     const pieData = severities
       .map((severity) => ({
@@ -90,13 +86,22 @@ export default function BugSeverityChart({ sprintData }: BugSeverityChartProps) 
       totalTasks: currentTotalTasks,
       bugPercentage: calculatedBugPercentage,
     };
-  }, [sprintData]);
+  }, [sprint]); // Depend on the single sprint prop
 
+  if (!sprint) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
+        <Info className="mr-2 h-5 w-5" />
+        <span>No sprint selected or sprint has no planning data.</span>
+      </div>
+    );
+  }
+  
   if (totalTasks === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
         <Info className="mr-2 h-5 w-5" />
-        <span>No tasks found in active or completed sprints.</span>
+        <span>No tasks found in Sprint {sprint.sprintNumber}.</span>
       </div>
     );
   }
@@ -106,7 +111,7 @@ export default function BugSeverityChart({ sprintData }: BugSeverityChartProps) 
       <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
         <Info className="mr-2 h-5 w-5" />
         <span>
-          No bugs found in active or completed sprints to display severity
+          No bugs found in Sprint {sprint.sprintNumber} to display severity
           distribution.
         </span>
       </div>

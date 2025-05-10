@@ -103,14 +103,14 @@ export default function AnalyticsChartsTab({
     }
   }, [availableSprintsForSelection, selectedAnalyticSprintNumber]);
 
-  const displayedSprintForBurndown: Sprint | null | undefined = useMemo(() => {
+  const displayedSprintForBurndownAndSeverity: Sprint | null | undefined = useMemo(() => { // Renamed for clarity
     if (
       !sprintData ||
       !sprintData.sprints ||
       selectedAnalyticSprintNumber === null
     )
       return null;
-    // Burndown can show active or completed sprints
+    // Burndown and Severity can show active or completed sprints
     return sprintData.sprints.find(
       (s) => s.sprintNumber === selectedAnalyticSprintNumber
     );
@@ -127,7 +127,7 @@ export default function AnalyticsChartsTab({
                 Analytics
               </CardTitle>
               <CardDescription>
-                Select a sprint to view its Burndown chart. Other charts
+                Select a sprint to view its Burndown chart and Bug Severity Distribution. Other charts
                 aggregate data from all relevant sprints.
               </CardDescription>
             </div>
@@ -202,14 +202,14 @@ export default function AnalyticsChartsTab({
             </CardTitle>
             <CardDescription className="text-center">
               Ideal vs. Actual burndown for{' '}
-              {displayedSprintForBurndown
-                ? `Sprint ${displayedSprintForBurndown.sprintNumber}`
+              {displayedSprintForBurndownAndSeverity
+                ? `Sprint ${displayedSprintForBurndownAndSeverity.sprintNumber}`
                 : 'selected sprint'}
               .
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[calc(100%-100px)] pl-2">
-            <BurndownChart activeSprint={displayedSprintForBurndown} />
+            <BurndownChart activeSprint={displayedSprintForBurndownAndSeverity} />
           </CardContent>
         </Card>
 
@@ -304,19 +304,20 @@ export default function AnalyticsChartsTab({
               Distribution
             </CardTitle>
             <CardDescription>
-              Distribution of bug severity across all active and completed
-              sprints.
+              Distribution of bug severity for sprint{' '}
+              {displayedSprintForBurndownAndSeverity
+                ? `Sprint ${displayedSprintForBurndownAndSeverity.sprintNumber}`
+                : 'selected sprint'}
+              .
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[calc(100%-100px)] pl-2">
-            {sprintData &&
-            sprintData.sprints &&
-            sprintData.sprints.length > 0 ? (
-              <BugSeverityChart sprintData={sprintData} />
+            {displayedSprintForBurndownAndSeverity ? (
+              <BugSeverityChart sprint={displayedSprintForBurndownAndSeverity} />
             ) : (
               <div className="flex h-full items-center justify-center text-muted-foreground">
-                <Info className="mr-2 h-5 w-5" /> No sprint data available for
-                bug severity.
+                <Info className="mr-2 h-5 w-5" /> No sprint selected for bug
+                severity distribution.
               </div>
             )}
           </CardContent>
