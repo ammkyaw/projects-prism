@@ -39,8 +39,7 @@ import {
   Loader2,
   AlertTriangle,
   ClipboardCheck,
-  ArrowUpDown,
-  HelpCircle as HelpCircleIcon, // Renamed to avoid conflict
+  Settings2, // For Config Tab Icon
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -69,9 +68,9 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
-  AlertDialogFooter as AlertDFooter, // Renamed to avoid conflict with CardFooter
-  AlertDialogHeader as AlertDHeader, // Renamed
-  AlertDialogTitle as AlertDTitle, // Renamed
+  AlertDialogFooter as AlertDFooter, 
+  AlertDialogHeader as AlertDHeader, 
+  AlertDialogTitle as AlertDTitle, 
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
@@ -90,11 +89,11 @@ import BacklogTab from '@/components/backlog/backlog-tab';
 import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab';
 import HistoryTab from '@/components/backlog/history-tab';
 
-
 // Settings Sub-tab Components
 import MembersTab from '@/components/settings/members-tab';
 import TeamsTab from '@/components/settings/teams-tab';
 import HolidaysTab from '@/components/settings/holidays-tab';
+import ConfigTab from '@/components/settings/config-tab'; // Import ConfigTab
 import AddMembersDialog from '@/components/dialogs/add-members-dialog';
 
 // Analytics Sub-Tab Components
@@ -107,6 +106,7 @@ import type {
   Task,
   ToastFun,
   Sprint,
+  StoryPointScale, // Import StoryPointScale
 } from '@/types/sprint-data';
 import { initialSprintData, taskPriorities } from '@/types/sprint-data';
 import { useToast } from '@/hooks/use-toast';
@@ -323,7 +323,7 @@ function PrismPage() {
     selectedProjectId,
   });
 
-  const { handleSaveMembers, handleSaveHolidayCalendars, handleSaveTeams } =
+  const { handleSaveMembers, handleSaveHolidayCalendars, handleSaveTeams, handleSaveConfigurations } =
     useSettingsActions({
       selectedProject,
       updateProjectData,
@@ -396,6 +396,9 @@ function PrismPage() {
       holidayCalendars: [],
       teams: [],
       backlog: [],
+      storyPointScale: 'Fibonacci', // Default for new project
+      customTaskTypes: [],
+      customTicketStatuses: [],
     };
     updateProjectMutation.mutate(newProject, {
       onSuccess: (data, variables) => {
@@ -568,6 +571,11 @@ function PrismPage() {
           label: 'Holidays',
           icon: CalendarDays,
           component: HolidaysTab,
+        },
+        config: { // New Config sub-tab
+          label: 'Config',
+          icon: Settings2,
+          component: ConfigTab,
         },
       },
     },
@@ -784,6 +792,15 @@ function PrismPage() {
             ...componentProps,
             initialCalendars: selectedProject.holidayCalendars ?? [],
             onSaveCalendars: handleSaveHolidayCalendars,
+          };
+          break;
+        case 'settings/config': // New case for ConfigTab
+          componentProps = {
+            ...componentProps,
+            initialStoryPointScale: selectedProject.storyPointScale,
+            initialCustomTaskTypes: selectedProject.customTaskTypes,
+            initialCustomTicketStatuses: selectedProject.customTicketStatuses,
+            onSaveConfigurations: handleSaveConfigurations,
           };
           break;
         default:
@@ -1125,4 +1142,3 @@ function PrismPage() {
     </div>
   );
 }
-

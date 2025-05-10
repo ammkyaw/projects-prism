@@ -149,6 +149,11 @@ export interface SprintData {
   daysInSprint: number;
 }
 
+// New type for Story Point Scales
+export type StoryPointScale = 'Fibonacci' | 'Modified Fibonacci' | 'Linear';
+export const storyPointScaleOptions: StoryPointScale[] = ['Fibonacci', 'Modified Fibonacci', 'Linear'];
+
+
 export interface Project {
   id: string;
   name: string;
@@ -157,6 +162,10 @@ export interface Project {
   holidayCalendars?: HolidayCalendar[];
   teams?: Team[];
   backlog?: Task[];
+  // New configuration fields
+  storyPointScale?: StoryPointScale;
+  customTaskTypes?: string[];
+  customTicketStatuses?: string[];
 }
 
 export type AppData = Project[];

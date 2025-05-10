@@ -5,6 +5,7 @@ import type {
   HolidayCalendar,
   Team,
   ToastFun,
+  StoryPointScale, // Import StoryPointScale
 } from '@/types/sprint-data';
 
 interface UseSettingsActionsProps {
@@ -18,7 +19,6 @@ export const useSettingsActions = ({
   updateProjectData,
   toast,
 }: UseSettingsActionsProps) => {
-  // Handler to save members for the *selected* project
   const handleSaveMembers = useCallback(
     (updatedMembers: Member[]) => {
       if (!selectedProject) {
@@ -42,7 +42,6 @@ export const useSettingsActions = ({
     [selectedProject, updateProjectData, toast]
   );
 
-  // Handler to save holiday calendars for the *selected* project
   const handleSaveHolidayCalendars = useCallback(
     (updatedCalendars: HolidayCalendar[]) => {
       if (!selectedProject) {
@@ -57,14 +56,13 @@ export const useSettingsActions = ({
       const currentProjectName = selectedProject.name;
       let membersToUpdate: Member[] = [];
 
-      // Check which members might lose their assigned calendar
       const updatedMembers = (selectedProject.members || []).map((member) => {
         const calendarExists = updatedCalendars.some(
           (cal) => cal.id === member.holidayCalendarId
         );
         if (member.holidayCalendarId && !calendarExists) {
-          membersToUpdate.push(member); // Track members whose calendar was removed
-          return { ...member, holidayCalendarId: null }; // Unassign calendar
+          membersToUpdate.push(member);
+          return { ...member, holidayCalendarId: null };
         }
         return member;
       });
@@ -77,7 +75,6 @@ export const useSettingsActions = ({
 
       updateProjectData(updatedProject);
 
-      // Show toasts *after* the mutation call (optimistically)
       setTimeout(() => {
         toast({
           title: 'Success',
@@ -95,7 +92,6 @@ export const useSettingsActions = ({
     [selectedProject, updateProjectData, toast]
   );
 
-  // Handler to save teams for the *selected* project
   const handleSaveTeams = useCallback(
     (updatedTeams: Team[]) => {
       if (!selectedProject) {
@@ -108,7 +104,6 @@ export const useSettingsActions = ({
       }
       const currentProjectName = selectedProject.name;
 
-      // Optionally, add validation here to ensure team members and leads still exist
       const validTeams = updatedTeams.map((team) => {
         const validMembers = team.members.filter((tm) =>
           (selectedProject.members || []).some((m) => m.id === tm.memberId)
@@ -136,9 +131,40 @@ export const useSettingsActions = ({
     [selectedProject, updateProjectData, toast]
   );
 
+  // Handler to save configurations for the *selected* project
+  const handleSaveConfigurations = useCallback(
+    (
+      scale: StoryPointScale,
+      newCustomTaskTypes: string[],
+      newCustomTicketStatuses: string[]
+    ) => {
+      if (!selectedProject) {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'No project selected.',
+        });
+        return;
+      }
+      const updatedProject: Project = {
+        ...selectedProject,
+        storyPointScale: scale,
+        customTaskTypes: newCustomTaskTypes,
+        customTicketStatuses: newCustomTicketStatuses,
+      };
+      updateProjectData(updatedProject);
+      toast({
+        title: 'Success',
+        description: `Configurations updated for project '${selectedProject.name}'.`,
+      });
+    },
+    [selectedProject, updateProjectData, toast]
+  );
+
   return {
     handleSaveMembers,
     handleSaveHolidayCalendars,
     handleSaveTeams,
+    handleSaveConfigurations, // Export new handler
   };
 };

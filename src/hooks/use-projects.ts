@@ -17,37 +17,37 @@ const PROJECTS_QUERY_KEY = 'projects';
 const fetchProjects = async (): Promise<AppData> => {
   console.log('Fetching projects from Firestore...');
   const projectsCollection = collection(db, 'projects');
-  // Optional: Order by name or another field if needed
-  // const q = query(projectsCollection, orderBy("name"));
-  // const querySnapshot = await getDocs(q);
   const querySnapshot = await getDocs(projectsCollection);
   const projects = querySnapshot.docs.map(
     (doc) => ({ id: doc.id, ...doc.data() }) as Project
   );
   console.log(`Fetched ${projects.length} projects.`);
-  // Basic validation/migration can happen here if needed
+
   const validatedProjects = projects.map((project) => ({
     ...project,
     backlog: (project.backlog ?? [])
       .map((task) => ({
         ...task,
-        // Ensure required fields have defaults if missing from Firestore
         needsGrooming: task.needsGrooming ?? false,
         readyForSprint: task.readyForSprint ?? false,
         backlogId:
           task.backlogId ||
-          `BL-${project.id}-${task.id?.substring(0, 4) || Math.random().toString(36).substring(2, 6)}`, // Fallback ID
+          `BL-${project.id}-${task.id?.substring(0, 4) || Math.random().toString(36).substring(2, 6)}`,
       }))
-      .sort((a, b) => (a.backlogId ?? '').localeCompare(b.backlogId ?? '')), // Default sort
+      .sort((a, b) => (a.backlogId ?? '').localeCompare(b.backlogId ?? '')),
     sprintData: {
       ...project.sprintData,
       sprints: (project.sprintData?.sprints ?? []).sort(
         (a, b) => a.sprintNumber - b.sprintNumber
-      ), // Sort sprints
+      ),
     },
     members: project.members ?? [],
     teams: project.teams ?? [],
     holidayCalendars: project.holidayCalendars ?? [],
+    // Default new config fields
+    storyPointScale: project.storyPointScale ?? 'Fibonacci',
+    customTaskTypes: project.customTaskTypes ?? [],
+    customTicketStatuses: project.customTicketStatuses ?? [],
   }));
   return validatedProjects;
 };
@@ -64,9 +64,8 @@ const updateProject = async (project: Project): Promise<void> => {
   console.log(`Updating project ${project.id} in Firestore...`);
   if (!project.id) throw new Error('Project ID is required for updating.');
   const projectRef = doc(db, 'projects', project.id);
-  // Remove the id from the data being saved, as it's the document ID
   const { id, ...projectData } = project;
-  await setDoc(projectRef, projectData, { merge: true }); // Use merge: true to avoid overwriting unrelated fields if needed, or false/omit for full replace
+  await setDoc(projectRef, projectData, { merge: true });
   console.log(`Project ${project.id} updated successfully.`);
 };
 
@@ -78,17 +77,10 @@ export function useUpdateProject() {
       console.log(
         'Project update mutation successful, invalidating queries...'
       );
-      // Invalidate and refetch the projects query to update the UI
       queryClient.invalidateQueries({ queryKey: [PROJECTS_QUERY_KEY] });
-
-      // Optional: Optimistically update the cache
-      // queryClient.setQueryData<AppData>([PROJECTS_QUERY_KEY], (oldData) =>
-      //   oldData ? oldData.map(p => p.id === updatedProject.id ? updatedProject : p) : []
-      // );
     },
     onError: (error) => {
       console.error('Error updating project:', error);
-      // Here you might want to show an error toast to the user
     },
   });
 }
@@ -110,17 +102,10 @@ export function useDeleteProject() {
       console.log(
         'Project delete mutation successful, invalidating queries...'
       );
-      // Invalidate and refetch the projects query
       queryClient.invalidateQueries({ queryKey: [PROJECTS_QUERY_KEY] });
-
-      // Optional: Optimistically remove from the cache
-      // queryClient.setQueryData<AppData>([PROJECTS_QUERY_KEY], (oldData) =>
-      //   oldData ? oldData.filter(p => p.id !== projectId) : []
-      // );
     },
     onError: (error) => {
       console.error('Error deleting project:', error);
-      // Show error toast
     },
   });
 }
