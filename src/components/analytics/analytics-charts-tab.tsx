@@ -305,7 +305,7 @@ export default function AnalyticsChartsTab({
           {/* Make it span 2 columns for better visibility */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <PieChartIcon className="h-5 w-5 text-primary" /> Bug Severity
+              <PieChartIcon className="h-5 w-5 text-destructive" /> Bug Severity
               Distribution
             </CardTitle>
             <CardDescription>

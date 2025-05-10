@@ -858,7 +858,7 @@ function PrismPage() {
           {' '}
           {/* Adjusted gap for mobile */}
           <h1 className="text-lg font-semibold text-primary md:text-2xl">
-            Project Prism
+            Projects Prism
           </h1>
           <Select
             value={selectedProjectId ?? undefined} // Use undefined if null for Select
@@ -1151,7 +1151,7 @@ function PrismPage() {
       </main>
 
       <footer className="border-t p-4 text-center text-xs text-muted-foreground">
-        Project Prism - Agile Reporting Made Easy
+        Project Prisms - Agile Reporting Made Easy
       </footer>
     </div>
   );
