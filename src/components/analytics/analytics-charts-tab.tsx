@@ -103,18 +103,20 @@ export default function AnalyticsChartsTab({
     }
   }, [availableSprintsForSelection, selectedAnalyticSprintNumber]);
 
-  const displayedSprintForBurndownAndSeverity: Sprint | null | undefined = useMemo(() => { // Renamed for clarity
-    if (
-      !sprintData ||
-      !sprintData.sprints ||
-      selectedAnalyticSprintNumber === null
-    )
-      return null;
-    // Burndown and Severity can show active or completed sprints
-    return sprintData.sprints.find(
-      (s) => s.sprintNumber === selectedAnalyticSprintNumber
-    );
-  }, [sprintData, selectedAnalyticSprintNumber]);
+  const displayedSprintForBurndownAndSeverity: Sprint | null | undefined =
+    useMemo(() => {
+      // Renamed for clarity
+      if (
+        !sprintData ||
+        !sprintData.sprints ||
+        selectedAnalyticSprintNumber === null
+      )
+        return null;
+      // Burndown and Severity can show active or completed sprints
+      return sprintData.sprints.find(
+        (s) => s.sprintNumber === selectedAnalyticSprintNumber
+      );
+    }, [sprintData, selectedAnalyticSprintNumber]);
 
   return (
     <div className="space-y-6">
@@ -127,8 +129,9 @@ export default function AnalyticsChartsTab({
                 Analytics
               </CardTitle>
               <CardDescription>
-                Select a sprint to view its Burndown chart and Bug Severity Distribution. Other charts
-                aggregate data from all relevant sprints.
+                Select a sprint to view its Burndown chart and Bug Severity
+                Distribution. Other charts aggregate data from all relevant
+                sprints.
               </CardDescription>
             </div>
             {availableSprintsForSelection.length > 0 && (
@@ -209,7 +212,9 @@ export default function AnalyticsChartsTab({
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[calc(100%-100px)] pl-2">
-            <BurndownChart activeSprint={displayedSprintForBurndownAndSeverity} />
+            <BurndownChart
+              activeSprint={displayedSprintForBurndownAndSeverity}
+            />
           </CardContent>
         </Card>
 
@@ -304,7 +309,7 @@ export default function AnalyticsChartsTab({
               Distribution
             </CardTitle>
             <CardDescription>
-              Distribution of bug severity for sprint{' '}
+              Distribution of bug severity from new tasks for sprint{' '}
               {displayedSprintForBurndownAndSeverity
                 ? `Sprint ${displayedSprintForBurndownAndSeverity.sprintNumber}`
                 : 'selected sprint'}
@@ -313,7 +318,9 @@ export default function AnalyticsChartsTab({
           </CardHeader>
           <CardContent className="h-[calc(100%-100px)] pl-2">
             {displayedSprintForBurndownAndSeverity ? (
-              <BugSeverityChart sprint={displayedSprintForBurndownAndSeverity} />
+              <BugSeverityChart
+                sprint={displayedSprintForBurndownAndSeverity}
+              />
             ) : (
               <div className="flex h-full items-center justify-center text-muted-foreground">
                 <Info className="mr-2 h-5 w-5" /> No sprint selected for bug

@@ -46,7 +46,8 @@ const chartConfig = severities.reduce(
 
 export default function BugSeverityChart({ sprint }: BugSeverityChartProps) {
   const { pieChartData, totalBugs, totalTasks, bugPercentage } = useMemo(() => {
-    if (!sprint || !sprint.planning) { // Check if sprint or its planning data is null
+    if (!sprint || !sprint.planning) {
+      // Check if sprint or its planning data is null
       return { pieChartData: [], totalBugs: 0, totalTasks: 0, bugPercentage: 0 };
     }
 
@@ -54,11 +55,10 @@ export default function BugSeverityChart({ sprint }: BugSeverityChartProps) {
     let currentTotalTasks = 0;
     let currentTotalBugs = 0;
 
-    const tasks: Task[] = [
-      ...(sprint.planning?.newTasks || []),
-      ...(sprint.planning?.spilloverTasks || []),
-    ];
+    // Only consider new tasks for bug severity distribution
+    const tasks: Task[] = sprint.planning?.newTasks || [];
     currentTotalTasks = tasks.length;
+
     tasks.forEach((task) => {
       if (task.taskType === 'Bug') {
         currentTotalBugs++;
@@ -78,13 +78,15 @@ export default function BugSeverityChart({ sprint }: BugSeverityChartProps) {
       .filter((item) => item.value > 0); // Only include severities with counts
 
     const calculatedBugPercentage =
-      currentTotalTasks > 0 ? Math.round((currentTotalBugs / currentTotalTasks) * 100) : 0;
+      currentTotalTasks > 0
+        ? Math.round((currentTotalBugs / currentTotalTasks) * 100)
+        : 0;
 
     return {
       pieChartData: pieData,
       totalBugs: currentTotalBugs,
-      totalTasks: currentTotalTasks,
-      bugPercentage: calculatedBugPercentage,
+      totalTasks: currentTotalTasks, // This now represents total NEW tasks
+      bugPercentage: calculatedBugPercentage, // Percentage of NEW tasks that are bugs
     };
   }, [sprint]); // Depend on the single sprint prop
 
@@ -96,12 +98,13 @@ export default function BugSeverityChart({ sprint }: BugSeverityChartProps) {
       </div>
     );
   }
-  
+
   if (totalTasks === 0) {
+    // This condition now checks if there are any NEW tasks
     return (
       <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
         <Info className="mr-2 h-5 w-5" />
-        <span>No tasks found in Sprint {sprint.sprintNumber}.</span>
+        <span>No new tasks found in Sprint {sprint.sprintNumber}.</span>
       </div>
     );
   }
@@ -111,21 +114,32 @@ export default function BugSeverityChart({ sprint }: BugSeverityChartProps) {
       <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
         <Info className="mr-2 h-5 w-5" />
         <span>
-          No bugs found in Sprint {sprint.sprintNumber} to display severity
-          distribution.
+          No bugs found in the new tasks of Sprint {sprint.sprintNumber} to
+          display severity distribution.
         </span>
       </div>
     );
   }
-
 
   return (
     <ChartContainer config={chartConfig} className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <defs>
-            <filter id="pieDropShadow" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="3" dy="3" stdDeviation="2.5" floodColor="hsl(var(--foreground))" floodOpacity="0.25" />
+            <filter
+              id="pieDropShadow"
+              x="-20%"
+              y="-20%"
+              width="140%"
+              height="140%"
+            >
+              <feDropShadow
+                dx="3"
+                dy="3"
+                stdDeviation="2.5"
+                floodColor="hsl(var(--foreground))"
+                floodOpacity="0.25"
+              />
             </filter>
           </defs>
           <Tooltip
@@ -137,9 +151,9 @@ export default function BugSeverityChart({ sprint }: BugSeverityChartProps) {
             dataKey="value"
             nameKey="name"
             cx="50%"
-            cy="50%" 
-            outerRadius={100} 
-            innerRadius={60} 
+            cy="50%"
+            outerRadius={100}
+            innerRadius={60}
             labelLine={false}
             paddingAngle={1.5}
             filter="url(#pieDropShadow)" // Apply the shadow filter
@@ -148,15 +162,15 @@ export default function BugSeverityChart({ sprint }: BugSeverityChartProps) {
               <Cell
                 key={`cell-${index}`}
                 fill={entry.fill}
-                stroke={'hsl(var(--background))'} 
-                strokeWidth={2} 
+                stroke={'hsl(var(--background))'}
+                strokeWidth={2}
               />
             ))}
           </Pie>
           {/* Center Text for Percentage */}
           <text
             x="50%"
-            y="45%" 
+            y="45%"
             textAnchor="middle"
             dominantBaseline="middle"
             className="fill-foreground text-2xl font-semibold"
@@ -165,12 +179,12 @@ export default function BugSeverityChart({ sprint }: BugSeverityChartProps) {
           </text>
           <text
             x="50%"
-            y="55%" 
+            y="55%"
             textAnchor="middle"
             dominantBaseline="middle"
             className="fill-muted-foreground text-xs"
           >
-            Bugs
+            Bugs (New Tasks)
           </text>
           <ChartLegend
             content={<ChartLegendContent nameKey="name" />}
