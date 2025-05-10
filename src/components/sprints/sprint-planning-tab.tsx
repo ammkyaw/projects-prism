@@ -21,6 +21,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -147,8 +149,8 @@ const calculateSprintMetrics = (
 
 interface SprintPlanningTabProps {
   projectId: string;
-  sprints: Sprint[]; // Now receives ALL sprints for the project
-  initialSelectedSprint?: Sprint | null; // New prop for pre-selecting a sprint
+  sprints: Sprint[];
+  initialSelectedSprint?: Sprint | null;
   onSavePlanning: (
     sprintNumber: number,
     data: SprintPlanning,
@@ -226,8 +228,8 @@ const createEmptyTaskRow = (): TaskRow => ({
 
 export default function SprintPlanningTab({
   projectId,
-  sprints, // Receives ALL sprints for the project
-  initialSelectedSprint, // Prop for pre-selection
+  sprints,
+  initialSelectedSprint,
   onSavePlanning,
   onCreateAndPlanSprint,
   projectName,
@@ -239,8 +241,9 @@ export default function SprintPlanningTab({
   onCompleteSprint,
   onAddBacklogItems,
 }: SprintPlanningTabProps) {
-  const [selectedSprintToPlan, setSelectedSprintToPlan] =
-    useState<Sprint | null>(null);
+  const [selectedSprintNumber, setSelectedSprintNumber] = useState<
+    number | null
+  >(null);
   const [planningData, setPlanningData] = useState<SprintPlanning>(
     initialSprintPlanning
   );
@@ -270,13 +273,26 @@ export default function SprintPlanningTab({
   >(new Date());
   const { toast } = useToast();
 
+  const selectedSprintToPlan = useMemo(() => {
+    if (isCreatingNewSprint) return null;
+    if (initialSelectedSprint && selectedSprintNumber === null) {
+      // If an initial sprint is passed (e.g., for viewing completed), use it.
+      return initialSelectedSprint;
+    }
+    return sprints.find((s) => s.sprintNumber === selectedSprintNumber) ?? null;
+  }, [
+    selectedSprintNumber,
+    sprints,
+    isCreatingNewSprint,
+    initialSelectedSprint,
+  ]);
+
   const availableSprintsForSelection = useMemo(() => {
     return sprints
       .filter((s) => s.status === 'Active' || s.status === 'Planned')
       .sort((a, b) => a.sprintNumber - b.sprintNumber);
   }, [sprints]);
 
-  // Determine if the form should be disabled based on the selected sprint's status
   const isFormDisabled =
     !selectedSprintToPlan || selectedSprintToPlan.status === 'Completed';
 
@@ -327,10 +343,6 @@ export default function SprintPlanningTab({
           task.startDate &&
           task.devEstimatedTime !== undefined &&
           task.devEstimatedTime !== null &&
-          task.qaEstimatedTime !== undefined &&
-          task.qaEstimatedTime !== null &&
-          task.bufferTime !== undefined &&
-          task.bufferTime !== null &&
           isValid(parseISO(task.startDate ?? ''))
       )
       .map((task) => ({ ...task }) as Task);
@@ -338,7 +350,7 @@ export default function SprintPlanningTab({
 
   const nextSprintNumber = useMemo(() => {
     if (sprints.length === 0) return '1';
-    const maxNumber = Math.max(...sprints.map((s) => s.sprintNumber));
+    const maxNumber = Math.max(...sprints.map((s) => s.sprintNumber), 0);
     return (maxNumber + 1).toString();
   }, [sprints]);
 
@@ -361,24 +373,23 @@ export default function SprintPlanningTab({
   };
 
   useEffect(() => {
-    let sprintToSet: Sprint | null = null;
     if (initialSelectedSprint) {
-      sprintToSet =
-        sprints.find(
-          (s) => s.sprintNumber === initialSelectedSprint.sprintNumber
-        ) ?? null;
+      setSelectedSprintNumber(initialSelectedSprint.sprintNumber);
+      setIsCreatingNewSprint(false); // Ensure not in create mode if initial sprint is provided
+    } else if (
+      !selectedSprintNumber &&
+      availableSprintsForSelection.length > 0
+    ) {
+      setSelectedSprintNumber(availableSprintsForSelection[0].sprintNumber);
+    } else if (availableSprintsForSelection.length === 0) {
+      setSelectedSprintNumber(null);
     }
-
-    if (sprintToSet) {
-      setSelectedSprintToPlan(sprintToSet);
-    } else if (!selectedSprintToPlan && availableSprintsForSelection.length > 0) {
-      setSelectedSprintToPlan(availableSprintsForSelection[0]);
-    } else if (availableSprintsForSelection.length === 0 && !selectedSprintToPlan && !initialSelectedSprint) {
-      // If no plannable and no initial, set to null (unless an initial completed sprint was passed)
-       setSelectedSprintToPlan(null);
-    }
-  }, [sprints, initialSelectedSprint, availableSprintsForSelection, selectedSprintToPlan]);
-
+  }, [
+    sprints,
+    initialSelectedSprint,
+    availableSprintsForSelection,
+    selectedSprintNumber,
+  ]);
 
   useEffect(() => {
     if (selectedSprintToPlan && !isCreatingNewSprint) {
@@ -422,14 +433,13 @@ export default function SprintPlanningTab({
       if ((loadedPlanning.spilloverTasks || []).length === 0)
         setSpilloverTasks([]);
     } else if (!isCreatingNewSprint && !selectedSprintToPlan) {
-        resetForms(); // Reset if no sprint is selected for planning
+      resetForms();
     }
   }, [selectedSprintToPlan, isCreatingNewSprint, resetForms]);
 
-
   useEffect(() => {
     if (isCreatingNewSprint) {
-      setSelectedSprintToPlan(null);
+      setSelectedSprintNumber(null);
       resetForms();
       setNewSprintForm({
         sprintNumber: nextSprintNumber,
@@ -437,21 +447,33 @@ export default function SprintPlanningTab({
         duration: '',
       });
     } else {
-      setNewSprintForm({ sprintNumber: '', startDate: null, duration: '' });
+      // If not creating, and initialSelectedSprint is for a completed sprint,
+      // we don't clear the newSprintForm as it's not relevant.
+      if (
+        !initialSelectedSprint ||
+        initialSelectedSprint.status !== 'Completed'
+      ) {
+        setNewSprintForm({ sprintNumber: '', startDate: null, duration: '' });
+      }
     }
-  }, [isCreatingNewSprint, nextSprintNumber, resetForms]);
+  }, [
+    isCreatingNewSprint,
+    nextSprintNumber,
+    resetForms,
+    initialSelectedSprint,
+  ]);
 
   const handleSelectExistingSprint = (sprintNumStr: string) => {
     const sprintNum = parseInt(sprintNumStr, 10);
     if (isNaN(sprintNum)) {
-      setSelectedSprintToPlan(null);
+      setSelectedSprintNumber(null);
     } else {
       const sprintToSelect = sprints.find((s) => s.sprintNumber === sprintNum);
-      if (sprintToSelect) { // Allow selecting any sprint for viewing, completion status handled by isFormDisabled
+      if (sprintToSelect) {
         setIsCreatingNewSprint(false);
-        setSelectedSprintToPlan(sprintToSelect);
+        setSelectedSprintNumber(sprintToSelect.sprintNumber);
       } else {
-        setSelectedSprintToPlan(null);
+        setSelectedSprintNumber(null);
       }
     }
   };
@@ -467,12 +489,20 @@ export default function SprintPlanningTab({
       return;
     }
     setIsCreatingNewSprint(true);
+    setSelectedSprintNumber(null); // Deselect any existing sprint
   };
 
   const handleCancelNewSprint = () => {
     setIsCreatingNewSprint(false);
     resetForms();
-    setSelectedSprintToPlan(null);
+    // Optionally, re-select the first available sprint or the initial one
+    if (initialSelectedSprint) {
+      setSelectedSprintNumber(initialSelectedSprint.sprintNumber);
+    } else if (availableSprintsForSelection.length > 0) {
+      setSelectedSprintNumber(availableSprintsForSelection[0].sprintNumber);
+    } else {
+      setSelectedSprintNumber(null);
+    }
   };
 
   const handleInputChange = (
@@ -508,11 +538,14 @@ export default function SprintPlanningTab({
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     const taskList = type === 'new' ? newTasks : spilloverTasks;
     const taskToRemove = taskList.find((row) => row._internalId === internalId);
-    const targetSprintNum = isCreatingNewSprint
-      ? null
-      : selectedSprintToPlan?.sprintNumber;
+    const targetSprintNum = selectedSprintToPlan?.sprintNumber; // Should only be called when a sprint is selected
 
-    if (type === 'new' && taskToRemove?.backlogId && targetSprintNum) {
+    if (
+      type === 'new' &&
+      taskToRemove?.backlogId &&
+      targetSprintNum !== undefined &&
+      targetSprintNum !== null
+    ) {
       onRevertTask(
         targetSprintNum,
         taskToRemove.id,
@@ -636,7 +669,11 @@ export default function SprintPlanningTab({
     const currentSprintNum = isCreatingNewSprint
       ? parseInt(newSprintForm.sprintNumber, 10)
       : selectedSprintToPlan?.sprintNumber;
-    if (currentSprintNum === null || currentSprintNum === undefined || isNaN(currentSprintNum)) {
+    if (
+      currentSprintNum === null ||
+      currentSprintNum === undefined ||
+      isNaN(currentSprintNum)
+    ) {
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -679,7 +716,7 @@ export default function SprintPlanningTab({
   };
 
   const handleSaveExistingSprintPlanning = () => {
-    if (!selectedSprintToPlan) {
+    if (!selectedSprintToPlan || selectedSprintNumber === null) {
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -698,12 +735,12 @@ export default function SprintPlanningTab({
     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(
       newTasks,
       'new',
-      selectedSprintToPlan.sprintNumber
+      selectedSprintNumber
     );
     const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(
       spilloverTasks,
       'spillover',
-      selectedSprintToPlan.sprintNumber
+      selectedSprintNumber
     );
     const allErrors = [...newErrors, ...spillErrors];
     if (allErrors.length > 0) {
@@ -727,11 +764,7 @@ export default function SprintPlanningTab({
         : selectedSprintToPlan?.status === 'Planned'
           ? 'Planned'
           : undefined;
-    onSavePlanning(
-      selectedSprintToPlan.sprintNumber,
-      currentPlanningData,
-      currentStatus
-    );
+    onSavePlanning(selectedSprintNumber, currentPlanningData, currentStatus);
   };
 
   const handleCreateAndSaveNewSprint = () => {
@@ -818,7 +851,11 @@ export default function SprintPlanningTab({
   };
 
   const handleStartSprint = () => {
-    if (!selectedSprintToPlan || !isSprintPlanned) {
+    if (
+      !selectedSprintToPlan ||
+      !isSprintPlanned ||
+      selectedSprintNumber === null
+    ) {
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -837,12 +874,12 @@ export default function SprintPlanningTab({
     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(
       newTasks,
       'new',
-      selectedSprintToPlan.sprintNumber
+      selectedSprintNumber
     );
     const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(
       spilloverTasks,
       'spillover',
-      selectedSprintToPlan.sprintNumber
+      selectedSprintNumber
     );
     const allErrors = [...newErrors, ...spillErrors];
     if (allErrors.length > 0) {
@@ -860,24 +897,25 @@ export default function SprintPlanningTab({
       definitionOfDone: planningData.definitionOfDone.trim(),
       testingStrategy: planningData.testingStrategy.trim(),
     };
-    onSavePlanning(
-      selectedSprintToPlan.sprintNumber,
-      finalPlanningData,
-      'Active'
-    );
+    onSavePlanning(selectedSprintNumber, finalPlanningData, 'Active');
   };
 
   const handleCompleteSprintClick = () => {
-    if (!selectedSprintToPlan || !isSprintActive) return;
+    if (
+      !selectedSprintToPlan ||
+      !isSprintActive ||
+      selectedSprintNumber === null
+    )
+      return;
     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(
       newTasks,
       'new',
-      selectedSprintToPlan.sprintNumber
+      selectedSprintNumber
     );
     const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(
       spilloverTasks,
       'spillover',
-      selectedSprintToPlan.sprintNumber
+      selectedSprintNumber
     );
     const allErrors = [...newErrors, ...spillErrors];
     if (allErrors.length > 0) {
@@ -895,8 +933,8 @@ export default function SprintPlanningTab({
       definitionOfDone: planningData.definitionOfDone.trim(),
       testingStrategy: planningData.testingStrategy.trim(),
     };
-    onCompleteSprint(selectedSprintToPlan.sprintNumber, latestPlanningData);
-    setSelectedSprintToPlan(null);
+    onCompleteSprint(selectedSprintNumber, latestPlanningData);
+    setSelectedSprintNumber(null);
     resetForms();
   };
 
@@ -997,14 +1035,17 @@ export default function SprintPlanningTab({
     disabled: boolean
   ) => (
     <div className="overflow-x-auto">
-      <div className="min-w-[1600px] space-y-4">
-        <div className="hidden grid-cols-[100px_100px_120px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] items-center gap-x-2 border-b pb-2 md:grid">
+      <div className="min-w-[1700px] space-y-4">
+        {' '}
+        {/* Increased min-width for Backlog ID */}
+        <div className="hidden grid-cols-[100px_120px_120px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] items-center gap-x-2 border-b pb-2 md:grid">
           <Label className="text-xs font-medium text-muted-foreground">
             Ticket #*
           </Label>
           <Label className="text-xs font-medium text-muted-foreground">
             Backlog ID
           </Label>
+          {/* Added Backlog ID header */}
           <Label className="text-xs font-medium text-muted-foreground">
             Task Type*
           </Label>
@@ -1036,12 +1077,13 @@ export default function SprintPlanningTab({
             Start Date*
           </Label>
           <div />
+          <div /> {/* One for complete, one for delete/undo */}
         </div>
         <div className="space-y-4 md:space-y-2">
           {taskRows.map((row) => (
             <div
               key={row._internalId}
-              className="grid grid-cols-2 items-start gap-x-2 gap-y-2 border-b pb-4 last:border-b-0 md:grid-cols-[100px_100px_120px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] md:border-none md:pb-0"
+              className="grid grid-cols-2 items-start gap-x-2 gap-y-2 border-b pb-4 last:border-b-0 md:grid-cols-[100px_120px_120px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] md:border-none md:pb-0"
             >
               <div className="col-span-1 md:col-span-1">
                 <Label
@@ -1067,15 +1109,16 @@ export default function SprintPlanningTab({
                   required
                 />
               </div>
+              {/* Backlog ID Input (Read-only) */}
               <div className="col-span-1 md:col-span-1">
                 <Label
-                  htmlFor={`backlogid-${type}-${row._internalId}`}
+                  htmlFor={`backlogId-${type}-${row._internalId}`}
                   className="text-xs font-medium md:hidden"
                 >
                   Backlog ID
                 </Label>
                 <Input
-                  id={`backlogid-${type}-${row._internalId}`}
+                  id={`backlogId-${type}-${row._internalId}`}
                   value={row.backlogId ?? ''}
                   readOnly
                   className="h-9 w-full cursor-default bg-muted/50"
@@ -1665,11 +1708,18 @@ export default function SprintPlanningTab({
 
   return (
     <div className="space-y-6">
+      {/* Section for Selecting or Creating a Sprint */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Plan New Sprint</CardTitle>
-            {!isCreatingNewSprint && (
+            <CardTitle>
+              {isCreatingNewSprint
+                ? 'Plan New Sprint'
+                : isFormDisabled
+                  ? `Details for Sprint ${selectedSprintToPlan?.sprintNumber}`
+                  : `Planning Details for Sprint ${selectedSprintToPlan?.sprintNumber}`}
+            </CardTitle>
+            {!isCreatingNewSprint && !isFormDisabled && (
               <Button
                 variant="outline"
                 size="sm"
@@ -1677,7 +1727,7 @@ export default function SprintPlanningTab({
                 disabled={!sprintLimits.canPlanNew}
                 title={
                   !sprintLimits.canPlanNew
-                    ? 'Sprint limit reached (Max 2 Planned or 1 Planned + 1 Active)'
+                    ? 'Sprint limit reached'
                     : 'Plan a New Sprint'
                 }
               >
@@ -1691,14 +1741,57 @@ export default function SprintPlanningTab({
                 onClick={handleCancelNewSprint}
                 className="text-destructive hover:text-destructive"
               >
-                <XCircle className="mr-2 h-4 w-4" /> Cancel
+                <XCircle className="mr-2 h-4 w-4" /> Cancel New Plan
               </Button>
             )}
           </div>
-          <CardDescription>
-            Define the details for a new upcoming sprint.
-          </CardDescription>
+          {!isCreatingNewSprint && !isFormDisabled && (
+            <CardDescription>
+              Select an existing sprint to plan or view its details, or plan a
+              new one.
+            </CardDescription>
+          )}
         </CardHeader>
+
+        {!isCreatingNewSprint && !isFormDisabled && (
+          <CardContent>
+            {availableSprintsForSelection.length > 0 && !isFormDisabled ? (
+              <div className="mb-6 max-w-xs">
+                <Label htmlFor="select-sprint-to-plan">
+                  Select Sprint to Plan/View
+                </Label>
+                <Select
+                  value={selectedSprintNumber?.toString() ?? ''}
+                  onValueChange={handleSelectExistingSprint}
+                  disabled={isFormDisabled}
+                >
+                  <SelectTrigger id="select-sprint-to-plan">
+                    <SelectValue placeholder="Select a sprint..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Plannable Sprints</SelectLabel>
+                      {availableSprintsForSelection.map((sprint) => (
+                        <SelectItem
+                          key={sprint.sprintNumber}
+                          value={sprint.sprintNumber.toString()}
+                        >
+                          Sprint {sprint.sprintNumber} ({sprint.status})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : !isFormDisabled ? (
+              <p className="py-4 text-center text-muted-foreground">
+                No Planned or Active sprints available to select. Plan a new
+                sprint.
+              </p>
+            ) : null}
+          </CardContent>
+        )}
+
         {isCreatingNewSprint && (
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-3">
@@ -1785,137 +1878,104 @@ export default function SprintPlanningTab({
         )}
       </Card>
 
-      {!isCreatingNewSprint && (
-        <Card>
+      {/* Display planning form for the selected existing sprint */}
+      {!isCreatingNewSprint && selectedSprintToPlan && (
+        <Card className="mt-6">
           <CardHeader>
-            <CardTitle>
-              View &amp; Plan Existing Sprints: {projectName}
+            <CardTitle className="flex items-center gap-2">
+              {isFormDisabled
+                ? `Details for Sprint ${selectedSprintToPlan.sprintNumber}`
+                : `Planning for Sprint ${selectedSprintToPlan.sprintNumber}`}
+              <Badge
+                variant={getStatusBadgeVariant(selectedSprintToPlan.status)}
+                className="ml-2 capitalize"
+              >
+                <Circle
+                  className={cn(
+                    'mr-1 h-2 w-2 fill-current',
+                    getStatusColorClass(selectedSprintToPlan.status)
+                  )}
+                />
+                {selectedSprintToPlan.status}
+              </Badge>
             </CardTitle>
             <CardDescription>
-              Select a sprint below to view or edit its plan. Completed sprints
-              are read-only. Use the 'Start Sprint' button for 'Planned'
-              sprints.
+              {isFormDisabled
+                ? 'This sprint is completed and read-only.'
+                : 'Manage the goal, tasks, and other planning details for this sprint.'}
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            {sprints.filter(s => s.status !== 'Completed').length === 0 && !initialSelectedSprint ? (
-                 <p className="py-8 text-center text-muted-foreground">
-                    No Planned or Active sprints found. Plan a new sprint above.
-                 </p>
-            ): sprints.filter(s => s.status !== 'Completed').length === 1 && !initialSelectedSprint ? (
-                <div className="mb-6 rounded-md border bg-muted p-4">
-                    <p className="text-sm font-medium">
-                        Currently viewing: Sprint {sprints.find(s => s.status !== 'Completed')?.sprintNumber} (
-                        {sprints.find(s => s.status !== 'Completed')?.status})
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                    {sprints.find(s => s.status !== 'Completed')?.startDate ? format(parseISO(sprints.find(s => s.status !== 'Completed')!.startDate), 'MMM d, yyyy') : 'N/A'} - {sprints.find(s => s.status !== 'Completed')?.endDate ? format(parseISO(sprints.find(s => s.status !== 'Completed')!.endDate), 'MMM d, yyyy') : 'N/A'}
-                    </p>
-                </div>
-            ) : (
-              <div className="mb-6 max-w-xs">
-                <Label htmlFor="select-sprint">Select Sprint</Label>
-                <Select
-                  value={selectedSprintToPlan?.sprintNumber.toString() ?? ''}
-                  onValueChange={(value) => handleSelectExistingSprint(value)}
-                >
-                  <SelectTrigger id="select-sprint">
-                    <SelectValue placeholder="Select a sprint to plan..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sprints
-                      .sort((a,b) => a.sprintNumber - b.sprintNumber) // Sort for display
-                      .map((sprint) => (
-                      <SelectItem
-                        key={sprint.sprintNumber}
-                        value={sprint.sprintNumber.toString()}
-                      >
-                        Sprint {sprint.sprintNumber} ({sprint.status})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+          <CardContent className="space-y-6">
+            {renderPlanningForm(isFormDisabled)}
           </CardContent>
-
-          {selectedSprintToPlan && (
-            <>
-              <CardContent className="mt-6 space-y-6 border-t pt-6">
-                <h3 className="text-xl font-semibold">
-                  Planning Details for Sprint {selectedSprintToPlan.sprintNumber}
-                  <Badge
-                        variant={getStatusBadgeVariant(selectedSprintToPlan.status)}
-                        className="ml-2 capitalize"
-                    >
-                    <Circle className={cn("mr-1 h-2 w-2 fill-current", getStatusColorClass(selectedSprintToPlan.status))} />
-                    {selectedSprintToPlan.status}
-                  </Badge>
-                </h3>
-                {renderPlanningForm(isFormDisabled)}
-              </CardContent>
-              <CardFooter className="flex justify-end gap-2 border-t pt-4">
-                {isSprintPlanned && (
+          <CardFooter className="flex justify-end gap-2 border-t pt-4">
+            {isSprintPlanned && (
+              <Button
+                onClick={handleStartSprint}
+                variant="secondary"
+                size="sm"
+                className="bg-green-600 text-white hover:bg-green-700"
+                disabled={!sprintLimits.canStartNew || isFormDisabled}
+                title={
+                  !sprintLimits.canStartNew
+                    ? 'Another sprint is already active'
+                    : 'Start Sprint'
+                }
+              >
+                <PlayCircle className="mr-2 h-4 w-4" /> Start Sprint
+              </Button>
+            )}
+            {isSprintActive && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
                   <Button
-                    onClick={handleStartSprint}
-                    variant="secondary"
+                    variant="outline"
                     size="sm"
-                    className="bg-green-600 text-white hover:bg-green-700"
-                    disabled={!sprintLimits.canStartNew || isFormDisabled}
-                    title={
-                      !sprintLimits.canStartNew
-                        ? 'Another sprint is already active'
-                        : 'Start Sprint'
-                    }
+                    className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                    disabled={isFormDisabled}
                   >
-                    <PlayCircle className="mr-2 h-4 w-4" /> Start Sprint
+                    <CheckCircle className="mr-2 h-4 w-4" /> Mark as Complete
                   </Button>
-                )}
-                {isSprintActive && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-blue-600 text-blue-600 hover:bg-blue-50"
-                        disabled={isFormDisabled}
-                      >
-                        <CheckCircle className="mr-2 h-4 w-4" /> Mark as
-                        Complete
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          Complete Sprint {selectedSprintToPlan.sprintNumber}?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This action will mark the sprint as 'Completed'.
-                          Completed points will be calculated based on tasks
-                          marked 'Done'. This cannot be easily undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={handleCompleteSprintClick}
-                          disabled={selectedSprintToPlan.status === 'Completed'}
-                        >
-                          Complete Sprint
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-                <Button
-                  onClick={handleSaveExistingSprintPlanning}
-                  disabled={isFormDisabled}
-                >
-                  Save Planning
-                </Button>
-              </CardFooter>
-            </>
-          )}
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Complete Sprint {selectedSprintToPlan.sprintNumber}?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This action will mark the sprint as 'Completed'. Completed
+                      points will be calculated based on tasks marked 'Done'.
+                      This cannot be easily undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleCompleteSprintClick}
+                      disabled={selectedSprintToPlan.status === 'Completed'}
+                    >
+                      Complete Sprint
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+            <Button
+              onClick={handleSaveExistingSprintPlanning}
+              disabled={isFormDisabled}
+            >
+              Save Planning
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
+
+      {/* Fallback if no sprints are selected and not creating */}
+      {!isCreatingNewSprint && !selectedSprintToPlan && (
+        <Card className="mt-6">
+          <CardContent className="py-8 text-center text-muted-foreground">
+            Select a sprint to plan or create a new one.
+          </CardContent>
         </Card>
       )}
 
