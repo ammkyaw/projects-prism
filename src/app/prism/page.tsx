@@ -190,7 +190,7 @@ function PrismPage() {
       setTimeout(() => {
         toast({
           title: 'Login Successful',
-          description: 'Welcome to Projects Prism!',
+          description: 'Welcome to Project Prism!',
         });
         setLoginToastShown(true);
       }, 100);
@@ -497,7 +497,7 @@ function PrismPage() {
           component: SprintSummaryTab,
         },
         planning: {
-          label: 'Planning',
+          label: 'Planning', // This label will be dynamically changed if needed
           icon: NotebookPen,
           component: SprintPlanningTab,
         },
@@ -1038,7 +1038,7 @@ function PrismPage() {
             onValueChange={handleMainTabChange}
             className="w-full"
           >
-            <TabsList className="sticky top-16 z-10 mb-6 grid w-full grid-cols-7 bg-background shadow-sm">
+            <TabsList className="sticky top-16 z-10 mb-6 grid w-full grid-cols-4 sm:grid-cols-7 bg-background shadow-sm">
               {Object.entries(tabsConfig).map(([key, config]) => (
                 <TabsTrigger key={key} value={key}>
                   <config.icon className="h-4 w-4 md:mr-2" />
@@ -1064,17 +1064,26 @@ function PrismPage() {
                     {Object.entries(
                       tabsConfig[activeMainTab as keyof typeof tabsConfig]
                         .subTabs!
-                    ).map(([subKey, subConfig]) => (
-                      <TabsTrigger
-                        key={`${activeMainTab}/${subKey}`}
-                        value={`${activeMainTab}/${subKey}`}
-                      >
-                        <subConfig.icon className="h-4 w-4 md:mr-2" />
-                        <span className="hidden md:inline">
-                          {subConfig.label}
-                        </span>
-                      </TabsTrigger>
-                    ))}
+                    ).map(([subKey, subConfig]) => {
+                      let label = subConfig.label;
+                      if (
+                        activeMainTab === 'sprints' &&
+                        subKey === 'planning' &&
+                        selectedSprintForPlanning &&
+                        selectedSprintForPlanning.status === 'Completed'
+                      ) {
+                        label = 'Details';
+                      }
+                      return (
+                        <TabsTrigger
+                          key={`${activeMainTab}/${subKey}`}
+                          value={`${activeMainTab}/${subKey}`}
+                        >
+                          <subConfig.icon className="h-4 w-4 md:mr-2" />
+                          <span className="hidden md:inline">{label}</span>
+                        </TabsTrigger>
+                      );
+                    })}
                   </TabsList>
                 </Tabs>
               )}
