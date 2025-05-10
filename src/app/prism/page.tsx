@@ -39,7 +39,7 @@ import {
   Loader2,
   AlertTriangle,
   ClipboardCheck,
-  ArrowUpDown, // Added ArrowUpDown
+  ArrowUpDown,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -68,9 +68,9 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogFooter as AlertDFooter, // Renamed to avoid conflict with CardFooter
+  AlertDialogHeader as AlertDHeader, // Renamed
+  AlertDialogTitle as AlertDTitle, // Renamed
 } from '@/components/ui/alert-dialog';
 
 // Main Content Components (Tabs)
@@ -235,7 +235,7 @@ function PrismPage() {
 
   const handleMainTabChange = useCallback(
     (mainTabKey: string) => {
-      setSelectedSprintForPlanning(null); // Reset specific sprint selection when changing main tabs
+      setSelectedSprintForPlanning(null);
       if (['dashboard', 'risk', 'evaluation'].includes(mainTabKey)) {
         setActiveTab(mainTabKey);
       } else {
@@ -249,6 +249,11 @@ function PrismPage() {
   const navigateToSprintPlanning = useCallback((sprintToPlan: Sprint) => {
     setSelectedSprintForPlanning(sprintToPlan);
     setActiveTab('sprints/planning');
+  }, []);
+
+  const handleBackToOverview = useCallback(() => {
+    setActiveTab('sprints/overview');
+    setSelectedSprintForPlanning(null); // Clear selected sprint when going back
   }, []);
 
   useEffect(() => {
@@ -497,7 +502,7 @@ function PrismPage() {
           component: SprintSummaryTab,
         },
         planning: {
-          label: 'Planning', // This label will be dynamically changed if needed
+          label: 'Planning',
           icon: NotebookPen,
           component: SprintPlanningTab,
         },
@@ -658,7 +663,7 @@ function PrismPage() {
             ...componentProps,
             sprintData: selectedProject.sprintData,
             onDeleteSprint: handleDeleteSprint,
-            onViewSprintPlanning: navigateToSprintPlanning, // Pass the navigation handler
+            onViewSprintPlanning: navigateToSprintPlanning,
           };
           break;
         case 'sprints/planning':
@@ -669,7 +674,7 @@ function PrismPage() {
           componentProps = {
             ...componentProps,
             sprints: selectedProject.sprintData.sprints ?? [],
-            initialSelectedSprint: selectedSprintForPlanning, // Pass the specifically selected sprint
+            initialSelectedSprint: selectedSprintForPlanning,
             onSavePlanning: handleSavePlanningAndUpdateStatus,
             onCreateAndPlanSprint: handleCreateAndPlanSprint,
             onCompleteSprint: handleCompleteSprint,
@@ -679,6 +684,7 @@ function PrismPage() {
             backlog: availableBacklogItems,
             onRevertTask: handleRevertTaskToBacklog,
             onAddBacklogItems: handleMoveSelectedBacklogItemsToSprint,
+            onBackToOverview: handleBackToOverview, // Pass new prop
           };
           break;
         case 'sprints/retrospective':
@@ -824,7 +830,7 @@ function PrismPage() {
               if (value === 'loading' || value === 'no-projects') return;
               setSelectedProjectId(value);
               setActiveTab('dashboard');
-              setSelectedSprintForPlanning(null); // Reset when project changes
+              setSelectedSprintForPlanning(null);
             }}
             disabled={isLoadingProjects || projects.length === 0}
           >
@@ -959,11 +965,11 @@ function PrismPage() {
         onOpenChange={setIsDeleteDialogOpen}
       >
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
+          <AlertDHeader>
+            <AlertDTitle>
               Delete Project "
               {projects.find((p) => p.id === projectToDeleteId)?.name}"?
-            </AlertDialogTitle>
+            </AlertDTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the
               project and all its associated data.
@@ -973,7 +979,7 @@ function PrismPage() {
                 {projects.find((p) => p.id === projectToDeleteId)?.name}
               </strong>
             </AlertDialogDescription>
-          </AlertDialogHeader>
+          </AlertDHeader>
           <div className="py-2">
             <Input
               id="confirm-project-name"
@@ -983,7 +989,7 @@ function PrismPage() {
               className="mt-2"
             />
           </div>
-          <AlertDialogFooter>
+          <AlertDFooter>
             <AlertDialogCancel onClick={() => setProjectToDeleteId(null)}>
               Cancel
             </AlertDialogCancel>
@@ -1007,7 +1013,7 @@ function PrismPage() {
                 'Delete Project'
               )}
             </AlertDialogAction>
-          </AlertDialogFooter>
+          </AlertDFooter>
         </AlertDialogContent>
       </AlertDialog>
 
@@ -1038,7 +1044,7 @@ function PrismPage() {
             onValueChange={handleMainTabChange}
             className="w-full"
           >
-            <TabsList className="sticky top-16 z-10 mb-6 grid w-full grid-cols-4 sm:grid-cols-7 bg-background shadow-sm">
+            <TabsList className="sticky top-16 z-10 mb-6 grid w-full grid-cols-4 bg-background shadow-sm sm:grid-cols-7">
               {Object.entries(tabsConfig).map(([key, config]) => (
                 <TabsTrigger key={key} value={key}>
                   <config.icon className="h-4 w-4 md:mr-2" />

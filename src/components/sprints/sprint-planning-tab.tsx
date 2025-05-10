@@ -40,6 +40,7 @@ import {
   Users,
   CheckSquare,
   AlertTriangle,
+  ArrowLeft, // Import ArrowLeft for Back button
 } from 'lucide-react';
 import type {
   Sprint,
@@ -80,7 +81,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
+  DialogFooter as BacklogDialogFooter, // Renamed to avoid conflict with CardFooter
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -181,6 +182,7 @@ interface SprintPlanningTabProps {
     backlogItemIds: string[],
     targetSprintNumber: number
   ) => Task[];
+  onBackToOverview?: () => void; // New prop
 }
 
 interface TaskRow extends Task {
@@ -240,6 +242,7 @@ export default function SprintPlanningTab({
   onRevertTask,
   onCompleteSprint,
   onAddBacklogItems,
+  onBackToOverview, // Destructure new prop
 }: SprintPlanningTabProps) {
   const [selectedSprintNumber, setSelectedSprintNumber] = useState<
     number | null
@@ -279,8 +282,6 @@ export default function SprintPlanningTab({
       return initialSelectedSprint;
     }
     if (selectedSprintNumber === null) {
-      // If no sprint is selected, and not creating, and no completed initial sprint,
-      // try to pick the first active or planned sprint
       const firstAvailable = sprints.find(
         (s) => s.status === 'Active' || s.status === 'Planned'
       );
@@ -301,7 +302,7 @@ export default function SprintPlanningTab({
   }, [sprints]);
 
   const isFormDisabled =
-    !selectedSprint || selectedSprint.status === 'Completed';
+    selectedSprint?.status === 'Completed'; // Simplified read-only check
 
   const isSprintActive = selectedSprint?.status === 'Active';
   const isSprintPlanned = selectedSprint?.status === 'Planned';
@@ -382,7 +383,7 @@ export default function SprintPlanningTab({
   useEffect(() => {
     if (initialSelectedSprint) {
       setSelectedSprintNumber(initialSelectedSprint.sprintNumber);
-      setIsCreatingNewSprint(false); // Ensure not in create mode if initial sprint is provided
+      setIsCreatingNewSprint(false);
     } else if (
       !selectedSprintNumber &&
       availableSprintsForSelection.length > 0
@@ -454,8 +455,6 @@ export default function SprintPlanningTab({
         duration: '',
       });
     } else {
-      // If not creating, and initialSelectedSprint is for a completed sprint,
-      // we don't clear the newSprintForm as it's not relevant.
       if (
         !initialSelectedSprint ||
         initialSelectedSprint.status !== 'Completed'
@@ -496,13 +495,12 @@ export default function SprintPlanningTab({
       return;
     }
     setIsCreatingNewSprint(true);
-    setSelectedSprintNumber(null); // Deselect any existing sprint
+    setSelectedSprintNumber(null);
   };
 
   const handleCancelNewSprint = () => {
     setIsCreatingNewSprint(false);
     resetForms();
-    // Optionally, re-select the first available sprint or the initial one
     if (initialSelectedSprint) {
       setSelectedSprintNumber(initialSelectedSprint.sprintNumber);
     } else if (availableSprintsForSelection.length > 0) {
@@ -545,7 +543,7 @@ export default function SprintPlanningTab({
     const updater = type === 'new' ? setNewTasks : setSpilloverTasks;
     const taskList = type === 'new' ? newTasks : spilloverTasks;
     const taskToRemove = taskList.find((row) => row._internalId === internalId);
-    const targetSprintNum = selectedSprint?.sprintNumber; // Should only be called when a sprint is selected
+    const targetSprintNum = selectedSprint?.sprintNumber;
 
     if (
       type === 'new' &&
@@ -654,14 +652,6 @@ export default function SprintPlanningTab({
     if (isFormDisabled && !isCreatingNewSprint) return;
     setSelectedBacklogIds(new Set());
     setIsBacklogDialogOpen(true);
-  };
-
-  const handleBacklogItemToggle = (taskId: string, isChecked: boolean) => {
-    setSelectedBacklogIds((prev) => {
-      const newSelection = new Set(prev);
-      isChecked ? newSelection.add(taskId) : newSelection.delete(taskId);
-      return newSelection;
-    });
   };
 
   const handleAddSelectedBacklogItems = () => {
@@ -1043,8 +1033,6 @@ export default function SprintPlanningTab({
   ) => (
     <div className="overflow-x-auto">
       <div className="min-w-[1820px] space-y-4">
-        {' '}
-        {/* Increased min-width for Backlog ID */}
         <div className="hidden grid-cols-[100px_120px_120px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] items-center gap-x-2 border-b pb-2 md:grid">
           <Label className="text-xs font-medium text-muted-foreground">
             Ticket #*
@@ -1052,7 +1040,6 @@ export default function SprintPlanningTab({
           <Label className="text-xs font-medium text-muted-foreground">
             Backlog ID
           </Label>
-          {/* Added Backlog ID header */}
           <Label className="text-xs font-medium text-muted-foreground">
             Task Type*
           </Label>
@@ -1084,7 +1071,7 @@ export default function SprintPlanningTab({
             Start Date*
           </Label>
           <div />
-          <div /> {/* One for complete, one for delete/undo */}
+          <div />
         </div>
         <div className="space-y-4 md:space-y-2">
           {taskRows.map((row) => (
@@ -1116,7 +1103,6 @@ export default function SprintPlanningTab({
                   required
                 />
               </div>
-              {/* Backlog ID Input (Read-only) */}
               <div className="col-span-1 md:col-span-1">
                 <Label
                   htmlFor={`backlogId-${type}-${row._internalId}`}
@@ -1556,7 +1542,7 @@ export default function SprintPlanningTab({
                         </p>
                       )}
                     </ScrollArea>
-                    <DialogFooter>
+                    <BacklogDialogFooter>
                       <DialogClose asChild>
                         <Button variant="outline">Cancel</Button>
                       </DialogClose>
@@ -1566,7 +1552,7 @@ export default function SprintPlanningTab({
                       >
                         Add Selected ({selectedBacklogIds.size})
                       </Button>
-                    </DialogFooter>
+                    </BacklogDialogFooter>
                   </DialogContent>
                 </Dialog>
               )}
@@ -1669,7 +1655,7 @@ export default function SprintPlanningTab({
                 size="icon"
                 onClick={() => setTimelineViewMode('task')}
                 title="View by Task"
-                disabled={disabled}
+                disabled={isFormDisabled && selectedSprint?.status !== 'Completed'} // Keep enabled for completed sprints
               >
                 <GanttChartSquare className="h-4 w-4" />
               </Button>
@@ -1680,7 +1666,7 @@ export default function SprintPlanningTab({
                 size="icon"
                 onClick={() => setTimelineViewMode('assignee')}
                 title="View by Assignee"
-                disabled={disabled}
+                disabled={isFormDisabled && selectedSprint?.status !== 'Completed'} // Keep enabled for completed sprints
               >
                 <Users className="h-4 w-4" />
               </Button>
@@ -1715,15 +1701,17 @@ export default function SprintPlanningTab({
 
   return (
     <div className="space-y-6">
-      {/* Section for Selecting or Creating a Sprint */}
-      {!isFormDisabled && ( // Only show this card if not in read-only (completed sprint) mode
+      {/* Card for Sprint Header and Selection/Creation - Hide if viewing Completed Sprint */}
+      {selectedSprint?.status !== 'Completed' && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>
                 {isCreatingNewSprint
                   ? 'Plan New Sprint'
-                  : `Planning Details for Sprint ${selectedSprint?.sprintNumber ?? 'N/A'}`}
+                  : selectedSprint
+                    ? `Planning Details for Sprint ${selectedSprint.sprintNumber}`
+                    : 'Select or Plan Sprint'}
               </CardTitle>
               {!isCreatingNewSprint && (
                 <Button
@@ -1884,38 +1872,47 @@ export default function SprintPlanningTab({
         </Card>
       )}
 
-      {/* Display planning form for the selected existing sprint */}
+      {/* Display planning form for the selected existing sprint OR read-only details */}
       {!isCreatingNewSprint && selectedSprint && (
         <Card className="mt-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {isFormDisabled
-                ? `Details for Sprint ${selectedSprint.sprintNumber}`
-                : `Planning for Sprint ${selectedSprint.sprintNumber}`}
-              <Badge
-                variant={getStatusBadgeVariant(selectedSprint.status)}
-                className="ml-2 capitalize"
-              >
-                <Circle
-                  className={cn(
-                    'mr-1 h-2 w-2 fill-current',
-                    getStatusColorClass(selectedSprint.status)
-                  )}
-                />
-                {selectedSprint.status}
-              </Badge>
-            </CardTitle>
-            <CardDescription>
-              {isFormDisabled
-                ? 'This sprint is completed and read-only.'
-                : 'Manage the goal, tasks, and other planning details for this sprint.'}
-            </CardDescription>
-          </CardHeader>
+          {/* Conditional Header for non-completed Sprints */}
+          {selectedSprint.status !== 'Completed' && (
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {`Planning for Sprint ${selectedSprint.sprintNumber}`}
+                <Badge
+                  variant={getStatusBadgeVariant(selectedSprint.status)}
+                  className="ml-2 capitalize"
+                >
+                  <Circle
+                    className={cn(
+                      'mr-1 h-2 w-2 fill-current',
+                      getStatusColorClass(selectedSprint.status)
+                    )}
+                  />
+                  {selectedSprint.status}
+                </Badge>
+              </CardTitle>
+              <CardDescription>
+                Manage the goal, tasks, and other planning details for this
+                sprint.
+              </CardDescription>
+            </CardHeader>
+          )}
           <CardContent className="space-y-6">
             {renderPlanningForm(isFormDisabled)}
           </CardContent>
           <CardFooter className="flex justify-end gap-2 border-t pt-4">
-            {isSprintPlanned && (
+            {isFormDisabled && onBackToOverview && ( // Show Back button if completed
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onBackToOverview}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview
+              </Button>
+            )}
+            {!isFormDisabled && isSprintPlanned && (
               <Button
                 onClick={handleStartSprint}
                 variant="secondary"
@@ -1931,14 +1928,13 @@ export default function SprintPlanningTab({
                 <PlayCircle className="mr-2 h-4 w-4" /> Start Sprint
               </Button>
             )}
-            {isSprintActive && (
+            {!isFormDisabled && isSprintActive && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
                     className="border-blue-600 text-blue-600 hover:bg-blue-50"
-                    disabled={isFormDisabled}
                   >
                     <CheckCircle className="mr-2 h-4 w-4" /> Mark as Complete
                   </Button>
@@ -1958,7 +1954,6 @@ export default function SprintPlanningTab({
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={handleCompleteSprintClick}
-                      disabled={selectedSprint.status === 'Completed'}
                     >
                       Complete Sprint
                     </AlertDialogAction>
@@ -1966,17 +1961,17 @@ export default function SprintPlanningTab({
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            <Button
-              onClick={handleSaveExistingSprintPlanning}
-              disabled={isFormDisabled}
-            >
-              Save Planning
-            </Button>
+            {!isFormDisabled && (
+                 <Button
+                 onClick={handleSaveExistingSprintPlanning}
+               >
+                 Save Planning
+               </Button>
+            )}
           </CardFooter>
         </Card>
       )}
 
-      {/* Fallback if no sprints are selected and not creating */}
       {!isCreatingNewSprint && !selectedSprint && !initialSelectedSprint && (
         <Card className="mt-6">
           <CardContent className="py-8 text-center text-muted-foreground">
