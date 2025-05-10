@@ -40,7 +40,7 @@ import {
   AlertTriangle,
   ClipboardCheck,
   ArrowUpDown,
-  HelpCircle, // Added HelpCircle for the new button
+  HelpCircle as HelpCircleIcon, // Renamed to avoid conflict
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -72,6 +72,7 @@ import {
   AlertDialogFooter as AlertDFooter, // Renamed to avoid conflict with CardFooter
   AlertDialogHeader as AlertDHeader, // Renamed
   AlertDialogTitle as AlertDTitle, // Renamed
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
 // Main Content Components (Tabs)
@@ -88,6 +89,7 @@ import SprintRetrospectiveTab from '@/components/sprints/sprint-retrospective-ta
 import BacklogTab from '@/components/backlog/backlog-tab';
 import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab';
 import HistoryTab from '@/components/backlog/history-tab';
+
 
 // Settings Sub-tab Components
 import MembersTab from '@/components/settings/members-tab';
@@ -106,7 +108,7 @@ import type {
   ToastFun,
   Sprint,
 } from '@/types/sprint-data';
-import { initialSprintData } from '@/types/sprint-data';
+import { initialSprintData, taskPriorities } from '@/types/sprint-data';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useSprintsActions } from '@/hooks/use-sprints-actions';
@@ -124,8 +126,8 @@ import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import QueryProvider from '@/components/query-provider';
-import HelpModal from '@/components/help/help-modal'; // Added HelpModal import
-import FloatingHelpButton from '@/components/help/floating-help-button'; // Added FloatingHelpButton import
+import HelpModal from '@/components/help/help-modal';
+import FloatingHelpButton from '@/components/help/floating-help-button';
 
 export default function PrismPageWrapper() {
   return (
@@ -162,7 +164,7 @@ function PrismPage() {
     selectedSprintForPlanning,
     setSelectedSprintForPlanning,
   ] = useState<Sprint | null>(null);
-  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false); // State for Help Modal
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
   const {
     data: projects = [],
@@ -257,7 +259,7 @@ function PrismPage() {
 
   const handleBackToOverview = useCallback(() => {
     setActiveTab('sprints/overview');
-    setSelectedSprintForPlanning(null); // Clear selected sprint when going back
+    setSelectedSprintForPlanning(null);
   }, []);
 
   useEffect(() => {
@@ -688,7 +690,7 @@ function PrismPage() {
             backlog: availableBacklogItems,
             onRevertTask: handleRevertTaskToBacklog,
             onAddBacklogItems: handleMoveSelectedBacklogItemsToSprint,
-            onBackToOverview: handleBackToOverview, // Pass new prop
+            onBackToOverview: handleBackToOverview,
           };
           break;
         case 'sprints/retrospective':
@@ -1056,10 +1058,10 @@ function PrismPage() {
                   value={key}
                   className={cn(
                     'data-[state=active]:border-primary data-[state=active]:shadow-none',
-                    'hover:border-primary hover:shadow-sm', // Hover effect
+                    'hover:border-primary hover:shadow-sm',
                     key === activeMainTab
-                      ? 'border-b-2 border-primary' // Active tab style
-                      : 'border-b-2 border-transparent' // Inactive tab style
+                      ? 'border-b-2 border-primary'
+                      : 'border-b-2 border-transparent'
                   )}
                 >
                   <config.icon className="h-4 w-4 md:mr-2" />
@@ -1118,9 +1120,9 @@ function PrismPage() {
         Projects Prism - Agile Reporting Made Easy
       </footer>
 
-      {/* Help Modal and Floating Button */}
       <HelpModal isOpen={isHelpModalOpen} onOpenChange={setIsHelpModalOpen} />
       <FloatingHelpButton onOpen={() => setIsHelpModalOpen(true)} />
     </div>
   );
 }
+
