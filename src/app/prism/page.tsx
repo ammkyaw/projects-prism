@@ -1,3 +1,4 @@
+// src/app/prism/page.tsx
 'use client';
 
 import React, {
@@ -6,15 +7,15 @@ import React, {
   useMemo,
   useCallback,
   useRef,
-} from 'react'; // Added useRef, React
-import { Button, buttonVariants } from '@/components/ui/button'; // Import buttonVariants
+} from 'react';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'; // Added CardContent
+} from '@/components/ui/card';
 import {
   Download,
   BarChart,
@@ -38,7 +39,8 @@ import {
   Loader2,
   AlertTriangle,
   ClipboardCheck,
-} from 'lucide-react'; // Added ArrowUpDown, ListChecks icons, Loader2, AlertTriangle, ClipboardCheck
+  ArrowUpDown, // Added ArrowUpDown
+} from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -69,54 +71,59 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'; // Import AlertDialog components
+} from '@/components/ui/alert-dialog';
 
-// Main Content Components (Tabs) - Renamed and New Placeholders
-import DashboardTab from '@/components/backlog/dashboard-tab'; // Renamed from HomeTab
-import RiskTab from '@/components/risk/risk-tab'; // New component
-import EvaluationTab from '@/components/evaluation/evaluation-tab'; // New component
+// Main Content Components (Tabs)
+import DashboardTab from '@/components/backlog/dashboard-tab';
+import RiskTab from '@/components/risk/risk-tab';
+import EvaluationTab from '@/components/evaluation/evaluation-tab';
 
 // Sprint Sub-Tab Components
-import SprintSummaryTab from '@/components/sprints/sprint-summary-tab'; // Updated path
-import SprintPlanningTab from '@/components/sprints/sprint-planning-tab'; // New component for planning
-import SprintRetrospectiveTab from '@/components/sprints/sprint-retrospective-tab'; // Updated path
+import SprintSummaryTab from '@/components/sprints/sprint-summary-tab';
+import SprintPlanningTab from '@/components/sprints/sprint-planning-tab';
+import SprintRetrospectiveTab from '@/components/sprints/sprint-retrospective-tab';
 
 // Backlog Sub-Tab Components
-import BacklogTab from '@/components/backlog/backlog-tab'; // Updated path
-import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // Corrected import path
-import HistoryTab from '@/components/backlog/history-tab'; // Import HistoryTab component
+import BacklogTab from '@/components/backlog/backlog-tab';
+import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab';
+import HistoryTab from '@/components/backlog/history-tab';
 
-// Settings Sub-tab Components (Moved from Teams)
-import MembersTab from '@/components/settings/members-tab'; // Updated path
-import TeamsTab from '@/components/settings/teams-tab'; // Updated path
-import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
+// Settings Sub-tab Components
+import MembersTab from '@/components/settings/members-tab';
+import TeamsTab from '@/components/settings/teams-tab';
+import HolidaysTab from '@/components/settings/holidays-tab';
 import AddMembersDialog from '@/components/dialogs/add-members-dialog';
 
 // Analytics Sub-Tab Components
 import AnalyticsChartsTab from '@/components/analytics/analytics-charts-tab';
-import AnalyticsReportsTab from '@/components/analytics/analytics-reports-tab'; // Updated path
+import AnalyticsReportsTab from '@/components/analytics/analytics-reports-tab';
 
-import type { Project, Member, Task, ToastFun } from '@/types/sprint-data'; // Added HistoryStatus, ToastFun
-import { initialSprintData } from '@/types/sprint-data'; // Import taskPriorities
+import type {
+  Project,
+  Member,
+  Task,
+  ToastFun,
+  Sprint,
+} from '@/types/sprint-data';
+import { initialSprintData } from '@/types/sprint-data';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { useSprintsActions } from '@/hooks/use-sprints-actions'; // Import the new hook
+import { useSprintsActions } from '@/hooks/use-sprints-actions';
 import { useBacklogActions } from '@/hooks/use-backlog-actions';
-import { useSettingsActions } from '@/hooks/use-settings-actions'; // Import the new hook for settings
-import { generateNextBacklogIdHelper } from '@/lib/utils'; // Import the helper function
-import { ModeToggle } from '@/components/mode-toggle'; // Import ModeToggle
+import { useSettingsActions } from '@/hooks/use-settings-actions';
+import { generateNextBacklogIdHelper } from '@/lib/utils';
+import { ModeToggle } from '@/components/mode-toggle';
 import {
   useProjects,
   useUpdateProject,
   useDeleteProject,
-} from '@/hooks/use-projects'; // Import React Query hooks
+} from '@/hooks/use-projects';
 import { handleExport } from '@/lib/export';
-import { auth } from '@/lib/firebase'; // Import auth
-import { onAuthStateChanged } from 'firebase/auth'; // Import onAuthStateChanged
-import { useRouter } from 'next/navigation'; // Import useRouter
-import QueryProvider from '@/components/query-provider'; // Import QueryProvider
+import { auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
+import QueryProvider from '@/components/query-provider';
 
-// Wrap the main export with QueryProvider
 export default function PrismPageWrapper() {
   return (
     <QueryProvider>
@@ -126,8 +133,7 @@ export default function PrismPageWrapper() {
 }
 
 function PrismPage() {
-  const router = useRouter(); // Initialize router
-  // Local UI state
+  const router = useRouter();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null
   );
@@ -147,9 +153,13 @@ function PrismPage() {
   const [confirmProjectName, setConfirmProjectName] = useState<string>('');
   const [clientNow, setClientNow] = useState<Date | null>(null);
   const { toast } = useToast();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null); // Track auth state
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [loginToastShown, setLoginToastShown] = useState(false);
+  const [
+    selectedSprintForPlanning,
+    setSelectedSprintForPlanning,
+  ] = useState<Sprint | null>(null);
 
-  // React Query hooks for data management
   const {
     data: projects = [],
     isLoading: isLoadingProjects,
@@ -159,49 +169,38 @@ function PrismPage() {
   const updateProjectMutation = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
 
-  // Check auth state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setIsAuthenticated(true);
       } else {
         setIsAuthenticated(false);
-        router.push('/'); // Redirect to landing if not authenticated
+        router.push('/');
       }
     });
-    return () => unsubscribe(); // Cleanup subscription
+    return () => unsubscribe();
   }, [router]);
 
-  // Get current date on client mount to avoid hydration issues
   useEffect(() => {
     setClientNow(new Date());
   }, []);
 
-  // Effect to select the first project when data loads or changes, if none selected
-  // Also show login success toast when projects are successfully loaded for the first time after auth
-  const [loginToastShown, setLoginToastShown] = useState(false);
   useEffect(() => {
     if (isAuthenticated && isProjectsSuccess && !loginToastShown) {
-      // Defer toast slightly to avoid potential conflict with dialog opening
       setTimeout(() => {
         toast({
           title: 'Login Successful',
           description: 'Welcome to Projects Prism!',
         });
-        setLoginToastShown(true); // Ensure toast is shown only once per session
+        setLoginToastShown(true);
       }, 100);
     }
 
     if (!isLoadingProjects && projects.length > 0 && !selectedProjectId) {
       setSelectedProjectId(projects[0].id);
-      console.log(
-        'No project selected, defaulting to first project:',
-        projects[0].id
-      );
     } else if (!isLoadingProjects && projects.length === 0) {
-      setSelectedProjectId(null); // Clear selection if no projects exist
+      setSelectedProjectId(null);
     }
-    // Do NOT reset selectedProjectId if it already exists and is valid within the loaded projects
   }, [
     isLoadingProjects,
     projects,
@@ -212,14 +211,10 @@ function PrismPage() {
     toast,
   ]);
 
-  // Find the currently selected project object
   const selectedProject = useMemo(() => {
-    const project = projects.find((p) => p.id === selectedProjectId) ?? null;
-    console.log('Selected project determined:', project?.name ?? 'None');
-    return project;
+    return projects.find((p) => p.id === selectedProjectId) ?? null;
   }, [projects, selectedProjectId]);
 
-  // Memoize the list of plannable sprints (Active or Planned) for the selected project
   const plannableSprints = useMemo(() => {
     if (!selectedProject) return [];
     return (selectedProject.sprintData?.sprints ?? []).filter(
@@ -227,45 +222,41 @@ function PrismPage() {
     );
   }, [selectedProject]);
 
-  // Define default sub-tabs for each main tab
   const defaultSubTabs: Record<string, string> = {
-    sprints: 'summary',
+    sprints: 'overview',
     backlog: 'management',
     analytics: 'charts',
-    settings: 'members', // Default to 'members' under settings now
-    // Risk and Evaluation are main tabs without subtabs for now
+    settings: 'members',
   };
 
-  // Derive activeMainTab from activeTab
   const activeMainTab = useMemo(() => {
     return activeTab.split('/')[0];
   }, [activeTab]);
 
-  // Update activeTab logic for main tabs
   const handleMainTabChange = useCallback(
     (mainTabKey: string) => {
-      // Handle main tabs that don't have sub-tabs directly
+      setSelectedSprintForPlanning(null); // Reset specific sprint selection when changing main tabs
       if (['dashboard', 'risk', 'evaluation'].includes(mainTabKey)) {
         setActiveTab(mainTabKey);
-      } else if (mainTabKey === 'sprints') {
-        // If navigating to Sprints and there's only one plannable sprint, go directly to planning
-        if (plannableSprints.length === 1) {
-          setActiveTab('sprints/planning');
-          // If you have a selectedSprintNumber state, you might want to set it here too
-          // e.g., setSelectedSprintNumberForPlanning(plannableSprints[0].sprintNumber);
-        } else {
-          // Otherwise, go to the default sub-tab for Sprints (summary)
-          setActiveTab(`sprints/${defaultSubTabs.sprints}`);
-        }
       } else {
-        const defaultSub = defaultSubTabs[mainTabKey] || ''; // Fallback to empty string if no default
+        const defaultSub = defaultSubTabs[mainTabKey] || '';
         setActiveTab(`${mainTabKey}/${defaultSub}`);
       }
     },
-    [plannableSprints, defaultSubTabs]
-  ); // Add plannableSprints and defaultSubTabs to dependencies
+    [defaultSubTabs]
+  );
 
-  // Helper function to update project data via mutation
+  const navigateToSprintPlanning = useCallback((sprintToPlan: Sprint) => {
+    setSelectedSprintForPlanning(sprintToPlan);
+    setActiveTab('sprints/planning');
+  }, []);
+
+  useEffect(() => {
+    if (activeMainTab !== 'sprints' || activeTab !== 'sprints/planning') {
+      setSelectedSprintForPlanning(null);
+    }
+  }, [activeMainTab, activeTab]);
+
   const updateProjectData = useCallback(
     (updatedProject: Project) => {
       if (!updatedProject.id) {
@@ -284,13 +275,11 @@ function PrismPage() {
             description: `Failed to save changes: ${error.message}`,
           });
         },
-        // onSuccess is handled in the hook to invalidate query
       });
     },
     [updateProjectMutation, toast]
   );
 
-  // Use the custom hook for sprint actions
   const {
     handleSavePlanningAndUpdateStatus,
     handleCreateAndPlanSprint,
@@ -305,12 +294,11 @@ function PrismPage() {
     selectedProjectId,
   });
 
-  // Use the custom hook for backlog actions
   const {
     handleSaveNewBacklogItems,
     handleUpdateSavedBacklogItem,
     handleMoveToSprint,
-    handleMoveSelectedBacklogItemsToSprint, // Get the updated function
+    handleMoveSelectedBacklogItemsToSprint,
     handleRevertTaskToBacklog,
     handleSplitBacklogItem,
     handleDeleteSavedBacklogItem,
@@ -324,7 +312,6 @@ function PrismPage() {
     selectedProjectId,
   });
 
-  // Use the custom hook for settings actions
   const { handleSaveMembers, handleSaveHolidayCalendars, handleSaveTeams } =
     useSettingsActions({
       selectedProject,
@@ -332,11 +319,9 @@ function PrismPage() {
       toast,
     });
 
-  // Handler to add members to the *newly created* project (from dialog)
   const handleAddMembersToNewProject = useCallback(
     (addedMembers: Member[]) => {
       if (!newlyCreatedProjectId) return;
-
       const projectToUpdate = projects.find(
         (p) => p.id === newlyCreatedProjectId
       );
@@ -350,14 +335,11 @@ function PrismPage() {
         setNewlyCreatedProjectId(null);
         return;
       }
-
       const updatedProject: Project = {
         ...projectToUpdate,
         members: [...(projectToUpdate.members || []), ...addedMembers],
       };
-
-      updateProjectData(updatedProject); // Update via mutation
-
+      updateProjectData(updatedProject);
       toast({
         title: 'Members Added',
         description: `Members added to project '${projectToUpdate.name}'.`,
@@ -375,7 +357,6 @@ function PrismPage() {
     ]
   );
 
-  // Handle creating a new project
   const handleCreateNewProject = () => {
     const trimmedName = newProjectName.trim();
     if (!trimmedName) {
@@ -396,7 +377,6 @@ function PrismPage() {
       });
       return;
     }
-
     const newProject: Project = {
       id: `proj_${Date.now()}`,
       name: trimmedName,
@@ -406,23 +386,19 @@ function PrismPage() {
       teams: [],
       backlog: [],
     };
-
     updateProjectMutation.mutate(newProject, {
       onSuccess: (data, variables) => {
-        // variables is the project object passed to mutate
         setSelectedProjectId(variables.id);
         setNewProjectName('');
         setIsNewProjectDialogOpen(false);
         setNewlyCreatedProjectId(variables.id);
         setActiveTab('dashboard');
-
-        // Defer the toast and dialog opening slightly
         setTimeout(() => {
           toast({
             title: 'Project Created',
             description: `Project "${trimmedName}" created successfully.`,
           });
-          setIsAddMembersDialogOpen(true); // Open the dialog AFTER state update
+          setIsAddMembersDialogOpen(true);
         }, 50);
       },
       onError: (error) => {
@@ -435,18 +411,15 @@ function PrismPage() {
     });
   };
 
-  // Handler to open the delete project confirmation dialog (uses local state)
   const handleOpenDeleteDialog = (projectId: string | null) => {
     if (!projectId) return;
     setProjectToDeleteId(projectId);
-    setConfirmProjectName(''); // Reset confirmation input
+    setConfirmProjectName('');
     setIsDeleteDialogOpen(true);
   };
 
-  // Handler to confirm and delete a project
   const handleConfirmDeleteProject = () => {
     if (!projectToDeleteId) return;
-
     const project = projects.find((p) => p.id === projectToDeleteId);
     if (!project) {
       toast({
@@ -458,7 +431,6 @@ function PrismPage() {
       setProjectToDeleteId(null);
       return;
     }
-
     if (
       confirmProjectName.trim().toLowerCase() !== project.name.toLowerCase()
     ) {
@@ -469,7 +441,6 @@ function PrismPage() {
       });
       return;
     }
-
     deleteProjectMutation.mutate(projectToDeleteId, {
       onSuccess: () => {
         toast({
@@ -478,7 +449,6 @@ function PrismPage() {
         });
         setIsDeleteDialogOpen(false);
         setProjectToDeleteId(null);
-        // If the deleted project was the selected one, select the first available project or null
         if (selectedProjectId === projectToDeleteId) {
           const remainingProjects = projects.filter(
             (p) => p.id !== projectToDeleteId
@@ -494,13 +464,12 @@ function PrismPage() {
           title: 'Delete Error',
           description: `Failed to delete project: ${error.message}`,
         });
-        setIsDeleteDialogOpen(false); // Close dialog even on error
+        setIsDeleteDialogOpen(false);
         setProjectToDeleteId(null);
       },
     });
   };
 
-  // Define the tab structure including new tabs
   const tabsConfig: Record<
     string,
     {
@@ -522,7 +491,11 @@ function PrismPage() {
       label: 'Sprints',
       icon: IterationCw,
       subTabs: {
-        summary: { label: 'Overview', icon: Eye, component: SprintSummaryTab },
+        overview: {
+          label: 'Overview',
+          icon: Eye,
+          component: SprintSummaryTab,
+        },
         planning: {
           label: 'Planning',
           icon: NotebookPen,
@@ -552,12 +525,12 @@ function PrismPage() {
         history: { label: 'History', icon: History, component: HistoryTab },
       },
     },
-    risk: { label: 'Risk', icon: AlertTriangle, component: RiskTab }, // New Risk Tab
+    risk: { label: 'Risk', icon: AlertTriangle, component: RiskTab },
     evaluation: {
       label: 'Evaluation',
       icon: ClipboardCheck,
       component: EvaluationTab,
-    }, // New Evaluation Tab
+    },
     analytics: {
       label: 'Analytics',
       icon: BarChartBig,
@@ -589,9 +562,7 @@ function PrismPage() {
     },
   };
 
-  // Render the currently active tab content
   const renderActiveTabContent = () => {
-    // Handle initial loading state for authentication check
     if (isAuthenticated === null) {
       return (
         <Card className="flex min-h-[400px] flex-col items-center justify-center border-2 border-dashed">
@@ -607,7 +578,6 @@ function PrismPage() {
     }
 
     if (!selectedProject) {
-      // Initial loading state from React Query
       if (isLoadingProjects) {
         return (
           <Card className="flex min-h-[400px] flex-col items-center justify-center border-2 border-dashed">
@@ -623,7 +593,6 @@ function PrismPage() {
           </Card>
         );
       }
-      // Error state from React Query
       if (projectsError) {
         return (
           <Card className="flex min-h-[400px] flex-col items-center justify-center border-2 border-dashed border-destructive">
@@ -642,7 +611,6 @@ function PrismPage() {
           </Card>
         );
       }
-      // No projects exist state
       if (projects.length === 0) {
         return (
           <Card className="flex min-h-[400px] flex-col items-center justify-center border-2 border-dashed">
@@ -655,8 +623,6 @@ function PrismPage() {
           </Card>
         );
       }
-
-      // No project selected (should ideally default to first, but handle as fallback)
       return (
         <Card className="flex min-h-[400px] flex-col items-center justify-center border-2 border-dashed">
           <CardHeader className="text-center">
@@ -672,12 +638,10 @@ function PrismPage() {
 
     const [mainKey, subKey] = activeTab.split('/');
     const mainConfig = tabsConfig[mainKey as keyof typeof tabsConfig];
-
-    if (!mainConfig) return null; // Should not happen if activeTab is valid
+    if (!mainConfig) return null;
 
     let ActiveComponent: React.ElementType | undefined;
     let componentProps: any = {
-      // Base props for all components
       projectId: selectedProject.id,
       projectName: selectedProject.name,
     };
@@ -685,16 +649,16 @@ function PrismPage() {
     if (mainConfig.subTabs && subKey) {
       const subConfig =
         mainConfig.subTabs[subKey as keyof typeof mainConfig.subTabs];
-      if (!subConfig) return null; // Invalid sub-tab
+      if (!subConfig) return null;
       ActiveComponent = subConfig.component;
 
-      // Add specific props based on the sub-tab component
       switch (`${mainKey}/${subKey}`) {
-        case 'sprints/summary':
+        case 'sprints/overview':
           componentProps = {
             ...componentProps,
             sprintData: selectedProject.sprintData,
             onDeleteSprint: handleDeleteSprint,
+            onViewSprintPlanning: navigateToSprintPlanning, // Pass the navigation handler
           };
           break;
         case 'sprints/planning':
@@ -705,15 +669,16 @@ function PrismPage() {
           componentProps = {
             ...componentProps,
             sprints: selectedProject.sprintData.sprints ?? [],
+            initialSelectedSprint: selectedSprintForPlanning, // Pass the specifically selected sprint
             onSavePlanning: handleSavePlanningAndUpdateStatus,
             onCreateAndPlanSprint: handleCreateAndPlanSprint,
             onCompleteSprint: handleCompleteSprint,
             members: selectedProject.members ?? [],
             holidayCalendars: selectedProject.holidayCalendars ?? [],
             teams: selectedProject.teams ?? [],
-            backlog: availableBacklogItems, // Pass only active backlog items
+            backlog: availableBacklogItems,
             onRevertTask: handleRevertTaskToBacklog,
-            onAddBacklogItems: handleMoveSelectedBacklogItemsToSprint, // Pass the move function
+            onAddBacklogItems: handleMoveSelectedBacklogItemsToSprint,
           };
           break;
         case 'sprints/retrospective':
@@ -725,14 +690,14 @@ function PrismPage() {
         case 'backlog/management':
           componentProps = {
             ...componentProps,
-            initialBacklog: selectedProject.backlog ?? [], // Pass ALL items
-            onSaveNewItems: handleSaveNewBacklogItems, // Pass handler for new items
-            onUpdateSavedItem: handleUpdateSavedBacklogItem, // Pass handler for updates
-            onDeleteSavedItem: handleDeleteSavedBacklogItem, // Pass handler for deletion
-            members: selectedProject.members ?? [], // Still needed for assignee dropdown
-            sprints: selectedProject.sprintData.sprints ?? [], // Still needed for "Move to Sprint" dialog options
-            onMoveToSprint: handleMoveToSprint, // Pass handler from hook
-            generateNextBacklogId: generateNextBacklogIdHelper, // Pass the helper
+            initialBacklog: selectedProject.backlog ?? [],
+            onSaveNewItems: handleSaveNewBacklogItems,
+            onUpdateSavedItem: handleUpdateSavedBacklogItem,
+            onDeleteSavedItem: handleDeleteSavedBacklogItem,
+            members: selectedProject.members ?? [],
+            sprints: selectedProject.sprintData.sprints ?? [],
+            onMoveToSprint: handleMoveToSprint,
+            generateNextBacklogId: generateNextBacklogIdHelper,
           };
           break;
         case 'backlog/grooming':
@@ -740,9 +705,8 @@ function PrismPage() {
             ...componentProps,
             initialBacklog:
               selectedProject.backlog?.filter((task) => !task.historyStatus) ??
-              [], // Pass only non-historical items to grooming
+              [],
             onSaveBacklog: (groomedBacklog: Task[]) => {
-              // Combine groomed items with historical items before saving
               const historicalItems = (selectedProject.backlog ?? []).filter(
                 (task) => task.historyStatus
               );
@@ -757,11 +721,11 @@ function PrismPage() {
                 description: 'Changes saved.',
               });
             },
-            onSplitBacklogItem: handleSplitBacklogItem, // Pass handler from hook
-            onMergeBacklogItems: handleMergeBacklogItems, // Pass handler from hook
-            onUndoBacklogAction: handleUndoBacklogAction, // Pass handler from hook
-            generateNextBacklogId: generateNextBacklogIdHelper, // Pass helper for merge dialog ID gen
-            allProjectBacklogItems: selectedProject.backlog ?? [], // Pass all items for uniqueness check
+            onSplitBacklogItem: handleSplitBacklogItem,
+            onMergeBacklogItems: handleMergeBacklogItems,
+            onUndoBacklogAction: handleUndoBacklogAction,
+            generateNextBacklogId: generateNextBacklogIdHelper,
+            allProjectBacklogItems: selectedProject.backlog ?? [],
           };
           break;
         case 'backlog/history':
@@ -769,8 +733,8 @@ function PrismPage() {
             ...componentProps,
             historyItems:
               selectedProject.backlog?.filter((task) => !!task.historyStatus) ??
-              [], // Pass items with history status
-            onUndoBacklogAction: handleUndoBacklogAction, // Pass handler from hook
+              [],
+            onUndoBacklogAction: handleUndoBacklogAction,
           };
           break;
         case 'analytics/charts':
@@ -786,7 +750,7 @@ function PrismPage() {
             sprintData: selectedProject.sprintData,
           };
           break;
-        case 'settings/members': // Updated path
+        case 'settings/members':
           componentProps = {
             ...componentProps,
             initialMembers: selectedProject.members ?? [],
@@ -794,7 +758,7 @@ function PrismPage() {
             holidayCalendars: selectedProject.holidayCalendars ?? [],
           };
           break;
-        case 'settings/teams': // Updated path
+        case 'settings/teams':
           componentProps = {
             ...componentProps,
             initialTeams: selectedProject.teams ?? [],
@@ -802,7 +766,7 @@ function PrismPage() {
             onSaveTeams: handleSaveTeams,
           };
           break;
-        case 'settings/holidays': // Updated path
+        case 'settings/holidays':
           componentProps = {
             ...componentProps,
             initialCalendars: selectedProject.holidayCalendars ?? [],
@@ -810,12 +774,10 @@ function PrismPage() {
           };
           break;
         default:
-          // ActiveComponent = () => <div>Unknown Tab</div>; // Fallback if a specific case isn't matched but subConfig exists
           componentProps = {};
           break;
       }
     } else {
-      // Handle main tabs without sub-tabs (Dashboard, Risk, Evaluation)
       ActiveComponent = mainConfig.component;
       if (mainKey === 'dashboard') {
         componentProps = {
@@ -827,16 +789,15 @@ function PrismPage() {
           ...componentProps,
           sprintData: selectedProject.sprintData,
           backlog: selectedProject.backlog,
-        }; // Add props for RiskTab if needed
+        };
       } else if (mainKey === 'evaluation') {
         componentProps = {
           ...componentProps,
           sprintData: selectedProject.sprintData,
           backlog: selectedProject.backlog,
           members: selectedProject.members,
-        }; // Add props for EvaluationTab if needed
+        };
       }
-      // Add props for other main tabs if needed
     }
 
     if (!ActiveComponent) {
@@ -847,7 +808,6 @@ function PrismPage() {
         <div>Error: Tab component not found. Please check configuration.</div>
       );
     }
-
     return <ActiveComponent {...componentProps} />;
   };
 
@@ -855,24 +815,20 @@ function PrismPage() {
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-card p-4 shadow-sm">
         <div className="flex items-center gap-2 md:gap-4">
-          {' '}
-          {/* Adjusted gap for mobile */}
           <h1 className="text-lg font-semibold text-primary md:text-2xl">
-            Projects Prism
+            Project Prism
           </h1>
           <Select
-            value={selectedProjectId ?? undefined} // Use undefined if null for Select
+            value={selectedProjectId ?? undefined}
             onValueChange={(value) => {
-              if (value === 'loading' || value === 'no-projects') return; // Prevent selecting placeholder items
-              console.log(`Project selected: ${value}`);
+              if (value === 'loading' || value === 'no-projects') return;
               setSelectedProjectId(value);
-              setActiveTab('dashboard'); // Reset to dashboard tab on project change
+              setActiveTab('dashboard');
+              setSelectedSprintForPlanning(null); // Reset when project changes
             }}
-            disabled={isLoadingProjects || projects.length === 0} // Disable while loading or if no projects
+            disabled={isLoadingProjects || projects.length === 0}
           >
             <SelectTrigger className="w-[150px] md:w-[200px]">
-              {' '}
-              {/* Adjusted width for mobile */}
               <SelectValue
                 placeholder={
                   isLoadingProjects
@@ -897,8 +853,6 @@ function PrismPage() {
                       className="flex items-center justify-between pr-2"
                     >
                       <SelectItem value={project.id} className="flex-1">
-                        {' '}
-                        {/* Allow text to take space */}
                         {project.name}
                       </SelectItem>
                       <Button
@@ -906,7 +860,7 @@ function PrismPage() {
                         size="icon"
                         className="ml-2 h-6 w-6 text-muted-foreground hover:text-destructive"
                         onClick={(e) => {
-                          e.stopPropagation(); // Prevent Select from closing
+                          e.stopPropagation();
                           handleOpenDeleteDialog(project.id);
                         }}
                         aria-label={`Delete project ${project.name}`}
@@ -928,7 +882,6 @@ function PrismPage() {
             onOpenChange={setIsNewProjectDialogOpen}
           >
             <DialogTrigger asChild>
-              {/* Icon only on mobile, button with text on larger screens */}
               <Button
                 variant="outline"
                 size="sm"
@@ -980,10 +933,7 @@ function PrismPage() {
             </DialogContent>
           </Dialog>
         </div>
-
         <div className="flex items-center gap-2 md:gap-4">
-          {' '}
-          {/* Adjusted gap */}
           {selectedProject &&
             (selectedProject.sprintData?.sprints?.length > 0 ||
               selectedProject.members?.length > 0 ||
@@ -994,17 +944,16 @@ function PrismPage() {
                 onClick={() => handleExport(selectedProject, toast as ToastFun)}
                 variant="outline"
                 size="sm"
-                className="p-2 md:px-3 md:py-2" // Icon only on mobile
+                className="p-2 md:px-3 md:py-2"
               >
                 <Download className="h-4 w-4 md:mr-2" />
                 <span className="hidden md:inline">Export Project Data</span>
               </Button>
             )}
-          <ModeToggle /> {/* Add the dark mode toggle */}
+          <ModeToggle />
         </div>
       </header>
 
-      {/* Delete Project Confirmation Dialog */}
       <AlertDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
@@ -1017,8 +966,7 @@ function PrismPage() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the
-              project and all its associated data (sprints, backlog, members,
-              etc.).
+              project and all its associated data.
               <br />
               To confirm, please type the project name below:
               <strong className="mt-1 block">
@@ -1063,17 +1011,16 @@ function PrismPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Add Members Dialog */}
       <AddMembersDialog
         isOpen={isAddMembersDialogOpen}
         onOpenChange={setIsAddMembersDialogOpen}
-        onSaveMembers={handleAddMembersToNewProject} // Use the specific handler for new projects
-        existingMembers={[]} // Start with no members for a new project
-        projectId={newlyCreatedProjectId} // Pass the ID of the newly created project
+        onSaveMembers={handleAddMembersToNewProject}
+        existingMembers={[]}
+        projectId={newlyCreatedProjectId}
       />
 
       <main className="flex-1 p-6">
-        {isLoadingProjects ? ( // Use React Query loading state
+        {isLoadingProjects ? (
           <Card className="flex min-h-[400px] flex-col items-center justify-center border-2 border-dashed">
             <CardHeader className="text-center">
               <CardTitle>Loading Project Data...</CardTitle>
@@ -1091,23 +1038,16 @@ function PrismPage() {
             onValueChange={handleMainTabChange}
             className="w-full"
           >
-            {/* Main Tabs List - Sticky below header */}
             <TabsList className="sticky top-16 z-10 mb-6 grid w-full grid-cols-7 bg-background shadow-sm">
-              {' '}
-              {/* Added sticky, top-16 (adjust as needed), z-10, background */}
               {Object.entries(tabsConfig).map(([key, config]) => (
                 <TabsTrigger key={key} value={key}>
-                  <config.icon className="h-4 w-4 md:mr-2" />{' '}
-                  {/* Icon always visible, margin only on larger screens */}
-                  <span className="hidden md:inline">{config.label}</span>{' '}
-                  {/* Text hidden on mobile */}
+                  <config.icon className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">{config.label}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
 
-            {/* Sub Tabs and Content Area */}
             <div className="mt-4">
-              {/* Render Sub Tabs only if the active main tab has them */}
               {tabsConfig[activeMainTab as keyof typeof tabsConfig]
                 ?.subTabs && (
                 <Tabs
@@ -1118,7 +1058,6 @@ function PrismPage() {
                   <TabsList
                     className={cn(
                       'grid w-full',
-                      // Adjust grid cols dynamically based on the number of subtabs
                       `grid-cols-${Object.keys(tabsConfig[activeMainTab as keyof typeof tabsConfig].subTabs!).length}`
                     )}
                   >
@@ -1130,20 +1069,15 @@ function PrismPage() {
                         key={`${activeMainTab}/${subKey}`}
                         value={`${activeMainTab}/${subKey}`}
                       >
-                        <subConfig.icon className="h-4 w-4 md:mr-2" />{' '}
-                        {/* Icon always visible, margin only on larger screens */}
+                        <subConfig.icon className="h-4 w-4 md:mr-2" />
                         <span className="hidden md:inline">
                           {subConfig.label}
-                        </span>{' '}
-                        {/* Text hidden on mobile */}
+                        </span>
                       </TabsTrigger>
                     ))}
                   </TabsList>
-                  {/* Content will be rendered below based on the combined activeTab state */}
                 </Tabs>
               )}
-
-              {/* Render Content based on the full activeTab state */}
               {renderActiveTabContent()}
             </div>
           </Tabs>
@@ -1151,7 +1085,7 @@ function PrismPage() {
       </main>
 
       <footer className="border-t p-4 text-center text-xs text-muted-foreground">
-        Project Prisms - Agile Reporting Made Easy
+        Project Prism - Agile Reporting Made Easy
       </footer>
     </div>
   );
