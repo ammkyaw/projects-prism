@@ -45,12 +45,14 @@ const chartConfig = severities.reduce(
 );
 
 export default function BugSeverityChart({ sprintData }: BugSeverityChartProps) {
-  const chartData = useMemo(() => {
+  const { pieChartData, totalBugs, totalTasks, bugPercentage } = useMemo(() => {
     if (!sprintData || !sprintData.sprints || sprintData.sprints.length === 0) {
-      return [];
+      return { pieChartData: [], totalBugs: 0, totalTasks: 0, bugPercentage: 0 };
     }
 
     const severityCounts: { [key in SeverityType]?: number } = {};
+    let currentTotalTasks = 0;
+    let currentTotalBugs = 0;
 
     sprintData.sprints
       .filter((s) => s.status === 'Completed' || s.status === 'Active')
@@ -59,24 +61,47 @@ export default function BugSeverityChart({ sprintData }: BugSeverityChartProps) 
           ...(sprint.planning?.newTasks || []),
           ...(sprint.planning?.spilloverTasks || []),
         ];
+        currentTotalTasks += tasks.length;
         tasks.forEach((task) => {
-          if (task.taskType === 'Bug' && task.severity) {
-            severityCounts[task.severity] =
-              (severityCounts[task.severity] || 0) + 1;
+          if (task.taskType === 'Bug') {
+            currentTotalBugs++;
+            if (task.severity) {
+              severityCounts[task.severity] =
+                (severityCounts[task.severity] || 0) + 1;
+            }
           }
         });
       });
 
-    return severities
+    const pieData = severities
       .map((severity) => ({
         name: severity,
         value: severityCounts[severity] || 0,
         fill: severityColors[severity],
       }))
       .filter((item) => item.value > 0); // Only include severities with counts
+
+    const calculatedBugPercentage =
+      currentTotalTasks > 0 ? Math.round((currentTotalBugs / currentTotalTasks) * 100) : 0;
+
+    return {
+      pieChartData: pieData,
+      totalBugs: currentTotalBugs,
+      totalTasks: currentTotalTasks,
+      bugPercentage: calculatedBugPercentage,
+    };
   }, [sprintData]);
 
-  if (!chartData || chartData.length === 0) {
+  if (totalTasks === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
+        <Info className="mr-2 h-5 w-5" />
+        <span>No tasks found in active or completed sprints.</span>
+      </div>
+    );
+  }
+
+  if (pieChartData.length === 0 && totalBugs === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
         <Info className="mr-2 h-5 w-5" />
@@ -88,6 +113,7 @@ export default function BugSeverityChart({ sprintData }: BugSeverityChartProps) 
     );
   }
 
+
   return (
     <ChartContainer config={chartConfig} className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
@@ -97,24 +123,42 @@ export default function BugSeverityChart({ sprintData }: BugSeverityChartProps) 
             content={<ChartTooltipContent hideLabel nameKey="name" />}
           />
           <Pie
-            data={chartData}
+            data={pieChartData}
             dataKey="value"
             nameKey="name"
             cx="50%"
             cy="50%"
             outerRadius={100} // Adjust radius as needed
-            innerRadius={50} // For a donut chart effect
+            innerRadius={60} // For a donut chart effect, increased for more space
             labelLine={false}
-            // label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
           >
-            {chartData.map((entry, index) => (
+            {pieChartData.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
                 fill={entry.fill}
-                stroke={entry.fill}
+                stroke={entry.fill} // Use fill color for stroke for a solid look
               />
             ))}
           </Pie>
+          {/* Center Text for Percentage */}
+          <text
+            x="50%"
+            y="45%" // Adjusted y position slightly higher for percentage
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="fill-foreground text-2xl font-semibold"
+          >
+            {bugPercentage}%
+          </text>
+          <text
+            x="50%"
+            y="55%" // Adjusted y position slightly lower for "Bugs" label
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="fill-muted-foreground text-xs"
+          >
+            Bugs
+          </text>
           <ChartLegend
             content={<ChartLegendContent nameKey="name" />}
             verticalAlign="bottom"
