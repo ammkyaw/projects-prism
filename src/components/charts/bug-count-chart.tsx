@@ -29,7 +29,8 @@ const chartConfig = {
     label: 'Bugs',
     color: 'hsl(var(--destructive))', // Use destructive color for bugs
   },
-  hotfixes: { // Added config for hotfixes
+  hotfixes: {
+    // Added config for hotfixes
     label: 'Hotfixes',
     color: 'hsl(var(--critical))', // Bright red color
   },
@@ -46,12 +47,14 @@ export default function BugCountChart({ data }: BugCountChartProps) {
         (sprint) => sprint.status === 'Completed' || sprint.status === 'Active'
       ) // Include completed and active sprints
       .map((sprint) => {
-        const tasks: Task[] = [
-          ...(sprint.planning?.newTasks || []),
-          ...(sprint.planning?.spilloverTasks || []),
-        ];
-        const bugCount = tasks.filter((task) => task.taskType === 'Bug').length;
-        const hotfixCount = tasks.filter((task) => task.taskType === 'Hotfix').length; // Count hotfixes
+        // Only consider new tasks for bug and hotfix counts
+        const newTasks: Task[] = sprint.planning?.newTasks || [];
+        const bugCount = newTasks.filter(
+          (task) => task.taskType === 'Bug'
+        ).length;
+        const hotfixCount = newTasks.filter(
+          (task) => task.taskType === 'Hotfix'
+        ).length; // Count hotfixes
         return {
           name: `Sprint ${sprint.sprintNumber}`,
           bugs: bugCount,
@@ -70,7 +73,7 @@ export default function BugCountChart({ data }: BugCountChartProps) {
   }
 
   // Calculate max value based on the higher count between bugs and hotfixes per sprint
-  const maxCountPerSprint = chartData.map(d => Math.max(d.bugs, d.hotfixes));
+  const maxCountPerSprint = chartData.map((d) => Math.max(d.bugs, d.hotfixes));
   const maxCountOverall = Math.max(...maxCountPerSprint, 0);
   const yAxisMax = maxCountOverall > 0 ? Math.ceil(maxCountOverall * 1.1) : 5; // Set a minimum axis height
 
