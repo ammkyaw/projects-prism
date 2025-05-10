@@ -14,14 +14,19 @@ import {
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { HelpCircle, Search } from 'lucide-react';
+import { HelpCircle, Search, ArrowLeft } from 'lucide-react'; // Added ArrowLeft
 
 interface HelpModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const glossaryItems = [
+interface GlossaryItem {
+  term: string;
+  definition: string;
+}
+
+const glossaryItems: GlossaryItem[] = [
   {
     term: 'Story Points',
     definition:
@@ -74,26 +79,50 @@ const glossaryItems = [
   },
   {
     term: 'Sprint Planning',
-    definition: 'A meeting where the team plans the work to be performed during the upcoming sprint.',
+    definition:
+      'A meeting where the team plans the work to be performed during the upcoming sprint.',
   },
   {
     term: 'Sprint Retrospective',
-    definition: 'A meeting held at the end of a sprint for the team to reflect on what went well, what could be improved, and how to make those improvements.',
+    definition:
+      'A meeting held at the end of a sprint for the team to reflect on what went well, what could be improved, and how to make those improvements.',
   },
-    {
+  {
     term: 'Spillover Task',
-    definition: 'A task that was planned for a previous sprint but was not completed and is carried over to the current or a future sprint.',
+    definition:
+      'A task that was planned for a previous sprint but was not completed and is carried over to the current or a future sprint.',
   },
 ];
 
 export default function HelpModal({ isOpen, onOpenChange }: HelpModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'details'>('list');
+  const [selectedTerm, setSelectedTerm] = useState<GlossaryItem | null>(null);
 
   const filteredGlossary = glossaryItems.filter(
     (item) =>
       item.term.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.definition.toLowerCase().includes(searchTerm.toLowerCase())
+      (viewMode === 'list' &&
+        item.definition.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const handleTermClick = (term: GlossaryItem) => {
+    setSelectedTerm(term);
+    setViewMode('details');
+  };
+
+  const handleBackToList = () => {
+    setSelectedTerm(null);
+    setViewMode('list');
+    setSearchTerm(''); // Optionally clear search term when going back
+  };
+
+  // Reset view when dialog closes
+  React.useEffect(() => {
+    if (!isOpen) {
+      handleBackToList();
+    }
+  }, [isOpen]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -101,47 +130,86 @@ export default function HelpModal({ isOpen, onOpenChange }: HelpModalProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <HelpCircle className="h-6 w-6 text-primary" />
-            Help & Glossary
+            {viewMode === 'details' && selectedTerm
+              ? selectedTerm.term
+              : 'Help & Glossary'}
           </DialogTitle>
-          <DialogDescription>
-            Find explanations for common Agile and project management terms used
-            in Projects Prism.
-          </DialogDescription>
+          {viewMode === 'list' && (
+            <DialogDescription>
+              Find explanations for common Agile and project management terms
+              used in Projects Prism.
+            </DialogDescription>
+          )}
         </DialogHeader>
 
-        <div className="relative mt-4">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search glossary..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+        {viewMode === 'list' && (
+          <>
+            <div className="relative mt-4">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search glossary..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <ScrollArea className="mt-4 h-80 w-full rounded-md border p-4">
+              {filteredGlossary.length > 0 ? (
+                <ul className="space-y-2">
+                  {filteredGlossary.map((item) => (
+                    <li key={item.term}>
+                      <Button
+                        variant="link"
+                        className="h-auto justify-start p-0 text-left text-primary"
+                        onClick={() => handleTermClick(item)}
+                      >
+                        {item.term}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-center text-sm text-muted-foreground">
+                  No terms found matching your search.
+                </p>
+              )}
+            </ScrollArea>
+          </>
+        )}
 
-        <ScrollArea className="mt-4 h-80 w-full rounded-md border p-4">
-          {filteredGlossary.length > 0 ? (
-            <ul className="space-y-4">
-              {filteredGlossary.map((item) => (
-                <li key={item.term}>
-                  <h3 className="font-semibold text-primary">{item.term}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {item.definition}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-center text-sm text-muted-foreground">
-              No terms found matching your search.
-            </p>
-          )}
-        </ScrollArea>
+        {viewMode === 'details' && selectedTerm && (
+          <div className="mt-4 space-y-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBackToList}
+              className="mb-4"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Glossary
+            </Button>
+            <div>
+              <h3 className="text-lg font-semibold text-primary">
+                {selectedTerm.term}
+              </h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {selectedTerm.definition}
+              </p>
+            </div>
+          </div>
+        )}
 
         <DialogFooter className="mt-6">
           <DialogClose asChild>
-            <Button type="button" variant="outline">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                // Ensure list view is set when closing with the main button
+                handleBackToList();
+                onOpenChange(false);
+              }}
+            >
               Close
             </Button>
           </DialogClose>
