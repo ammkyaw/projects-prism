@@ -11,7 +11,7 @@ import {
   CardDescription,
 } from '@/components/ui/card';
 import { TrendingUp, BarChart, LayoutDashboard } from 'lucide-react';
-import LoginModal from '@/components/login-modal'; // Import the LoginModal component
+import LoginModal from '@/components/login/login-modal'; // Import the LoginModal component
 import { useToast } from '@/hooks/use-toast'; // Import useToast for other potential uses
 
 const LandingPage = () => {

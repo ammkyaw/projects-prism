@@ -52,8 +52,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'; // Import Tooltip components
-import SplitBacklogItemDialog from '@/components/split-backlog-item-dialog'; // Import Split Dialog
-import MergeBacklogDialog from '@/components/merge-backlog-dialog'; // Import Merge Dialog
+import SplitBacklogItemDialog from '@/components/dialogs/split-backlog-item-dialog'; // Import Split Dialog
+import MergeBacklogDialog from '@/components/dialogs/merge-backlog-dialog'; // Import Merge Dialog
 
 interface BacklogGroomingTabProps {
   projectId: string;

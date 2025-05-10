@@ -72,7 +72,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format, parseISO, isValid, getYear } from 'date-fns'; // Added getYear
-import SelectDependenciesDialog from '@/components/select-dependencies-dialog'; // Import the new dialog
+import SelectDependenciesDialog from '@/components/dialogs/select-dependencies-dialog'; // Import the new dialog
 import { Separator } from '@/components/ui/separator'; // Import Separator
 import {
   Table,

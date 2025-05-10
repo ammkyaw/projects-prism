@@ -72,9 +72,9 @@ import {
 } from '@/components/ui/alert-dialog'; // Import AlertDialog components
 
 // Main Content Components (Tabs) - Renamed and New Placeholders
-import DashboardTab from '@/components/dashboard-tab'; // Renamed from HomeTab
-import RiskTab from '@/components/risk-tab'; // New component
-import EvaluationTab from '@/components/evaluation-tab'; // New component
+import DashboardTab from '@/components/backlog/dashboard-tab'; // Renamed from HomeTab
+import RiskTab from '@/components/risk/risk-tab'; // New component
+import EvaluationTab from '@/components/evaluation/evaluation-tab'; // New component
 
 // Sprint Sub-Tab Components
 import SprintSummaryTab from '@/components/sprints/sprint-summary-tab'; // Updated path
@@ -87,10 +87,10 @@ import BacklogGroomingTab from '@/components/backlog/backlog-grooming-tab'; // C
 import HistoryTab from '@/components/backlog/history-tab'; // Import HistoryTab component
 
 // Settings Sub-tab Components (Moved from Teams)
-import MembersTab from '@/components/teams/members-tab'; // Updated path
-import TeamsTab from '@/components/teams/teams-tab'; // Updated path
+import MembersTab from '@/components/settings/members-tab'; // Updated path
+import TeamsTab from '@/components/settings/teams-tab'; // Updated path
 import HolidaysTab from '@/components/settings/holidays-tab'; // Updated path
-import AddMembersDialog from '@/components/add-members-dialog';
+import AddMembersDialog from '@/components/dialogs/add-members-dialog';
 
 // Analytics Sub-Tab Components
 import AnalyticsChartsTab from '@/components/analytics/analytics-charts-tab';

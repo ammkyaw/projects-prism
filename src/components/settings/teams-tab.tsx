@@ -41,7 +41,7 @@ import type { Team, TeamMember, Member } from '@/types/sprint-data';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge'; // Import Badge
-import AddTeamMemberDialog from '@/components/add-team-member-dialog'; // Import the new dialog
+import AddTeamMemberDialog from '@/components/dialogs/add-team-member-dialog'; // Import the new dialog
 
 interface TeamsTabProps {
   projectId: string;
