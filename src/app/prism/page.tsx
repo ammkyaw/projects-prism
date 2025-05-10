@@ -1046,7 +1046,14 @@ function PrismPage() {
           >
             <TabsList className="sticky top-16 z-10 mb-6 grid w-full grid-cols-4 bg-background shadow-sm sm:grid-cols-7">
               {Object.entries(tabsConfig).map(([key, config]) => (
-                <TabsTrigger key={key} value={key}>
+                <TabsTrigger
+                  key={key}
+                  value={key}
+                  className={cn(
+                    key === activeMainTab && 'border-b-2 border-primary',
+                    'data-[state=active]:border-primary data-[state=active]:shadow-none'
+                  )}
+                >
                   <config.icon className="h-4 w-4 md:mr-2" />
                   <span className="hidden md:inline">{config.label}</span>
                 </TabsTrigger>
@@ -1104,4 +1111,3 @@ function PrismPage() {
       </footer>
     </div>
   );
-}
