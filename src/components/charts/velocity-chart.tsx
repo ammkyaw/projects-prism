@@ -1,3 +1,4 @@
+// src/components/charts/velocity-chart.tsx
 'use client';
 
 import type { Sprint } from '@/types/sprint-data';
@@ -16,6 +17,7 @@ import {
   ChartContainer,
   ChartTooltipContent,
 } from '@/components/ui/chart';
+import { useMemo } from 'react'; // Import useMemo
 
 interface VelocityChartProps {
   data: Sprint[];
@@ -33,38 +35,50 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export default function VelocityChart({ data }: VelocityChartProps) {
-  if (!data || data.length === 0) {
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    return data
+      .filter((sprint) => sprint.status === 'Completed' || sprint.status === 'Active') // Only consider completed or active sprints
+      .map((sprint) => {
+        const newTasks = sprint.planning?.newTasks || [];
+
+        // Committed points from new tasks only
+        const committedPoints = newTasks.reduce(
+          (sum, task) => sum + (Number(task.storyPoints) || 0),
+          0
+        );
+
+        let completedPointsValue = 0;
+        // If the sprint is Active or Completed, calculate completed points from its NEW tasks
+        if (sprint.status === 'Active' || sprint.status === 'Completed') {
+          completedPointsValue = newTasks
+            .filter((task) => task.status === 'Done')
+            .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
+        }
+
+
+        return {
+          name: `Sprint ${sprint.sprintNumber}`,
+          committed: committedPoints,
+          completed: completedPointsValue,
+        };
+      });
+  }, [data]);
+
+
+  if (!chartData || chartData.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
-        No velocity data available.
+        No velocity data available. (Ensure sprints are 'Completed' or 'Active' with 'New Tasks' planned)
       </div>
     );
   }
+  const maxPoints = Math.max(...chartData.map(d => Math.max(d.committed, d.completed)), 0);
+  const yAxisMax = maxPoints > 0 ? Math.ceil(maxPoints * 1.1) : 10;
 
-  const chartData = data.map((sprint) => {
-    let completedPointsValue = sprint.completedPoints || 0;
-
-    // If the sprint is Active or Planned, recalculate completed points from its tasks
-    // This makes the chart more "live" for ongoing sprints.
-    if (
-      (sprint.status === 'Active' || sprint.status === 'Planned') &&
-      sprint.planning
-    ) {
-      const tasks = [
-        ...(sprint.planning.newTasks || []),
-        ...(sprint.planning.spilloverTasks || []),
-      ];
-      completedPointsValue = tasks
-        .filter((task) => task.status === 'Done')
-        .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
-    }
-
-    return {
-      name: `Sprint ${sprint.sprintNumber}`,
-      committed: sprint.committedPoints || 0,
-      completed: completedPointsValue,
-    };
-  });
 
   return (
     <ChartContainer config={chartConfig} className="h-full w-full">
@@ -89,6 +103,7 @@ export default function VelocityChart({ data }: VelocityChartProps) {
             tickMargin={8}
             fontSize={12}
             allowDecimals={false}
+            domain={[0, yAxisMax]}
           />{' '}
           {/* Ensure integer ticks */}
           <Tooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
