@@ -501,14 +501,16 @@ export default function SprintTimelineChart({
           // Sort assignees alphabetically
           groupedByAssignee[assigneeName].forEach((task) => {
             // Create a new object for each task within the assignee group
-            assigneeChartData.push({
-              ...task,
-              name: assigneeName, // Y-axis label is now assignee name
-              index: assigneeIndex, // Y-axis position based on assignee group
-              tooltip: `Assignee: ${assigneeName} | Ticket: ${task.originalTask?.ticketNumber || 'N/A'} | Dev: ${task.originalTask?.devEstimatedTime || '0d'} | QA: ${task.originalTask?.qaEstimatedTime || '0d'} | Buffer: ${task.originalTask?.bufferTime || '0d'}`, // Updated tooltip
-            });
+            if (task.devRange) {
+              assigneeChartData.push({
+                ...task,
+                name: assigneeName, // Y-axis label is now assignee name
+                index: assigneeIndex, // Y-axis position based on assignee group
+                tooltip: `Assignee: ${assigneeName} | Ticket: ${task.originalTask?.ticketNumber || 'N/A'} | Dev: ${task.originalTask?.devEstimatedTime || '0d'} | QA: ${task.originalTask?.qaEstimatedTime || '0d'} | Buffer: ${task.originalTask?.bufferTime || '0d'}`, // Updated tooltip
+              });
+            }
           });
-        });
+      });
       return assigneeChartData;
     } else {
       // 'task' view (default) - use processedTasks as is
@@ -826,22 +828,26 @@ export default function SprintTimelineChart({
             name="Development"
             yAxisId={0}
           />
-          <Bar
-            dataKey="qaRange"
-            radius={2}
-            barSize={10}
-            fill={chartConfig.qa.color}
-            name="QA"
-            yAxisId={0}
-          />
-          <Bar
-            dataKey="bufferRange"
-            radius={2}
-            barSize={10}
-            fill={chartConfig.buffer.color}
-            name="Buffer"
-            yAxisId={0}
-          />
+          { viewMode === 'task' &&
+            <Bar
+              dataKey="qaRange"
+              radius={2}
+              barSize={10}
+              fill={chartConfig.qa.color}
+              name="QA"
+              yAxisId={0}
+            />
+          }
+          { viewMode === 'task' &&
+            <Bar
+              dataKey="bufferRange"
+              radius={2}
+              barSize={10}
+              fill={chartConfig.buffer.color}
+              name="Buffer"
+              yAxisId={0}
+            />
+          }
 
           {/* Render Weekend and Holiday Reference Areas LAST - These will be in the foreground */}
           {sprintDayIndices
