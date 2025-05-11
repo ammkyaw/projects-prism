@@ -7,7 +7,13 @@ import type {
   ToastFun,
   StoryPointScale, // Import StoryPointScale
   RiskItem, // Import RiskItem
+  RiskLikelihood,
+  RiskImpact,
 } from '@/types/sprint-data';
+import {
+  riskLikelihoodValues,
+  riskImpactValues,
+} from '@/types/sprint-data'; // Import the missing values
 
 interface UseSettingsActionsProps {
   selectedProject: Project | null;
@@ -174,37 +180,49 @@ export const useSettingsActions = ({
         return;
       }
 
-      const likelihoodValue = selectedProject.risks?.find(r => r.id === existingId)?.likelihood ?? riskDetails.likelihood;
-      const impactValue = selectedProject.risks?.find(r => r.id === existingId)?.impact ?? riskDetails.impact;
+      // Use the likelihood and impact from the submitted details for calculation.
+      // If updating, these values in `riskDetails` would be the latest from the form.
+      const likelihoodValue =
+        riskLikelihoodValues[riskDetails.likelihood as RiskLikelihood] || 0;
+      const impactValue =
+        riskImpactValues[riskDetails.impact as RiskImpact] || 0;
 
-      const riskScore =
-        (riskLikelihoodValues[likelihoodValue] || 0) *
-        (riskImpactValues[impactValue] || 0);
-
+      const riskScore = likelihoodValue * impactValue;
 
       let updatedRisks: RiskItem[];
       let toastMessage = '';
 
-      if (existingId) { // Updating an existing risk
-        const riskToUpdate = selectedProject.risks?.find(r => r.id === existingId);
+      if (existingId) {
+        // Updating an existing risk
+        const riskToUpdate = selectedProject.risks?.find(
+          (r) => r.id === existingId
+        );
         if (!riskToUpdate) {
-           toast({ variant: 'destructive', title: 'Error', description: 'Risk item to update not found.' });
-           return;
+          toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Risk item to update not found.',
+          });
+          return;
         }
-        updatedRisks = (selectedProject.risks || []).map(r =>
-          r.id === existingId ? { ...riskToUpdate, ...riskDetails, riskScore } : r
+        updatedRisks = (selectedProject.risks || []).map((r) =>
+          r.id === existingId
+            ? { ...riskToUpdate, ...riskDetails, riskScore }
+            : r
         );
         toastMessage = `Risk "${riskDetails.title}" has been updated.`;
-      } else { // Adding a new risk
+      } else {
+        // Adding a new risk
         const newRiskWithId: RiskItem = {
           ...riskDetails,
-          id: `risk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          id: `risk_${Date.now()}_${Math.random()
+            .toString(36)
+            .substring(2, 7)}`,
           riskScore,
         };
         updatedRisks = [...(selectedProject.risks || []), newRiskWithId];
         toastMessage = `Risk "${newRiskWithId.title}" has been registered.`;
       }
-
 
       const updatedProject: Project = {
         ...selectedProject,
@@ -218,7 +236,6 @@ export const useSettingsActions = ({
     },
     [selectedProject, updateProjectData, toast]
   );
-
 
   return {
     handleSaveMembers,
