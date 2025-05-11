@@ -41,7 +41,7 @@ import type {
 import {
   riskCategories,
   riskStatuses,
-  riskLikelihoods,
+  riskLikelihoods, // Use the updated array from types
   riskImpacts,
   riskLikelihoodValues,
   riskImpactValues,
@@ -76,8 +76,8 @@ export default function RegisterRiskModal({
   const { toast } = useToast();
 
   const calculateRiskScore = useCallback((): number => {
-    const likelihoodValue = riskLikelihoodValues[riskDetails.likelihood];
-    const impactValue = riskImpactValues[riskDetails.impact];
+    const likelihoodValue = riskLikelihoodValues[riskDetails.likelihood as RiskLikelihood]; // Ensure type assertion
+    const impactValue = riskImpactValues[riskDetails.impact as RiskImpact]; // Ensure type assertion
     if (likelihoodValue && impactValue) {
       return likelihoodValue * impactValue;
     }
@@ -90,7 +90,7 @@ export default function RegisterRiskModal({
         const { id, riskScore, ...editableData } = initialData; // Exclude id and riskScore
         setRiskDetails(editableData);
         setIdentifiedDateObj(
-          initialData.identifiedDate
+          initialData.identifiedDate && isValid(parseISO(initialData.identifiedDate))
             ? parseISO(initialData.identifiedDate)
             : undefined
         );
@@ -135,7 +135,6 @@ export default function RegisterRiskModal({
       });
       return;
     }
-    // Check for duplicates only if it's a new risk or if the title has changed for an existing risk
     if (
       (!initialData ||
         (initialData &&
@@ -166,13 +165,11 @@ export default function RegisterRiskModal({
       });
       return;
     }
-    // The ID and riskScore will be handled by the parent/hook,
-    // or preserved if initialData (editing) is present.
     onSaveRisk(riskDetails);
     onOpenChange(false);
   };
 
-  const riskScoreDisplay = calculateRiskScore(); // Calculate for display
+  const riskScoreDisplay = calculateRiskScore();
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -190,7 +187,6 @@ export default function RegisterRiskModal({
 
         <ScrollArea className="mt-4 max-h-[65vh] w-full rounded-md border p-4">
           <div className="space-y-4">
-            {/* Title and Description */}
             <div className="space-y-1">
               <Label htmlFor="risk-title">Title*</Label>
               <Input
@@ -213,7 +209,6 @@ export default function RegisterRiskModal({
               />
             </div>
 
-            {/* Date, Owner, Category */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="space-y-1">
                 <Label htmlFor="risk-identified-date">Identified Date*</Label>
@@ -292,7 +287,6 @@ export default function RegisterRiskModal({
               </div>
             </div>
 
-            {/* Status, Likelihood, Impact, Score */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
               <div className="space-y-1">
                 <Label htmlFor="risk-status">Status</Label>
@@ -365,7 +359,6 @@ export default function RegisterRiskModal({
               </div>
             </div>
 
-            {/* Mitigation and Contingency */}
             <div className="space-y-1">
               <Label htmlFor="risk-mitigation">Mitigation Strategies</Label>
               <Textarea

@@ -103,8 +103,8 @@ export interface Task {
   readyForSprint?: boolean;
   movedToSprint?: number | null;
   historyStatus?: HistoryStatus | null;
-  splitFromId?: string | null;
-  mergeEventId?: string | null;
+  splitFromId?: string | null; // ID of the original task if this task was created by splitting
+  mergeEventId?: string | null; // ID to group items that were merged together or resulted from a merge
   devTime?: string; // This seems like a legacy/duplicate of devEstimatedTime, consider removing or aligning
   severity?: SeverityType | null; // Added severity field
 }
@@ -185,24 +185,24 @@ export const riskStatuses: RiskStatus[] = [
 ];
 
 export type RiskLikelihood =
-  | 'Very Low'
-  | 'Low'
-  | 'Medium'
-  | 'High'
-  | 'Very High';
+  | 'Rare'
+  | 'Unlikely'
+  | 'Possible'
+  | 'Likely'
+  | 'Almost Certain';
 export const riskLikelihoods: RiskLikelihood[] = [
-  'Very Low',
-  'Low',
-  'Medium',
-  'High',
-  'Very High',
+  'Rare',
+  'Unlikely',
+  'Possible',
+  'Likely',
+  'Almost Certain',
 ];
 export const riskLikelihoodValues: Record<RiskLikelihood, number> = {
-  'Very Low': 1,
-  Low: 2,
-  Medium: 3,
-  High: 4,
-  'Very High': 5,
+  Rare: 1,
+  Unlikely: 2,
+  Possible: 3,
+  Likely: 4,
+  'Almost Certain': 5,
 };
 
 export type RiskImpact =
@@ -362,7 +362,7 @@ export const initialRiskItem: Omit<RiskItem, 'id' | 'riskScore'> = {
   owner: '',
   category: 'Technical',
   status: 'Open',
-  likelihood: 'Medium',
+  likelihood: 'Possible', // Updated default to 'Possible'
   impact: 'Moderate',
   mitigationStrategies: '',
   contingencyPlan: '',
