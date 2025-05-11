@@ -28,7 +28,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { ScrollArea } from '@/components/ui/scroll-area'; // Added import for ScrollArea
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { CalendarIcon, AlertTriangle, Save } from 'lucide-react';
 import type {
   RiskItem,
@@ -54,10 +54,10 @@ import { cn } from '@/lib/utils';
 interface RegisterRiskModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSaveRisk: (newRisk: RiskItem) => void;
+  onSaveRisk: (riskDetails: Omit<RiskItem, 'id' | 'riskScore'>) => void; // ID and score will be handled by parent
   projectMembers: Member[]; // To populate Owner dropdown
   existingRiskTitles: string[]; // To check for duplicate titles
-  // initialData?: RiskItem | null; // For editing existing risks
+  initialData?: RiskItem | null; // For editing existing risks
 }
 
 export default function RegisterRiskModal({
@@ -66,7 +66,7 @@ export default function RegisterRiskModal({
   onSaveRisk,
   projectMembers,
   existingRiskTitles,
-  // initialData,
+  initialData,
 }: RegisterRiskModalProps) {
   const [riskDetails, setRiskDetails] = useState<Omit<RiskItem, 'id' | 'riskScore'>>(
     initialRiskItem
@@ -79,31 +79,24 @@ export default function RegisterRiskModal({
   const calculateRiskScore = useCallback((): number => {
     const likelihoodValue = riskLikelihoodValues[riskDetails.likelihood];
     const impactValue = riskImpactValues[riskDetails.impact];
-    return likelihoodValue * impactValue;
+    if (likelihoodValue && impactValue) {
+       return likelihoodValue * impactValue;
+    }
+    return 0; // Return 0 if likelihood or impact is not set
   }, [riskDetails.likelihood, riskDetails.impact]);
 
   useEffect(() => {
     if (isOpen) {
-      // if (initialData) {
-      //   setRiskDetails({
-      //     title: initialData.title,
-      //     description: initialData.description,
-      //     identifiedDate: initialData.identifiedDate,
-      //     owner: initialData.owner,
-      //     category: initialData.category,
-      //     status: initialData.status,
-      //     likelihood: initialData.likelihood,
-      //     impact: initialData.impact,
-      //     mitigationStrategies: initialData.mitigationStrategies,
-      //     contingencyPlan: initialData.contingencyPlan,
-      //   });
-      //   setIdentifiedDateObj(initialData.identifiedDate ? parseISO(initialData.identifiedDate) : undefined);
-      // } else {
-      setRiskDetails(initialRiskItem);
-      setIdentifiedDateObj(undefined);
-      // }
+      if (initialData) {
+        const { id, riskScore, ...editableData } = initialData; // Exclude id and riskScore
+        setRiskDetails(editableData);
+        setIdentifiedDateObj(initialData.identifiedDate ? parseISO(initialData.identifiedDate) : undefined);
+      } else {
+        setRiskDetails(initialRiskItem);
+        setIdentifiedDateObj(undefined);
+      }
     }
-  }, [isOpen, /*initialData*/]);
+  }, [isOpen, initialData]);
 
   const handleInputChange = (
     field: keyof Omit<RiskItem, 'id' | 'riskScore' | 'identifiedDate'>,
@@ -139,20 +132,17 @@ export default function RegisterRiskModal({
       });
       return;
     }
-    // if (
-    //   (!initialData || initialData.title.toLowerCase() !== riskDetails.title.trim().toLowerCase()) &&
-    //   existingRiskTitles.includes(riskDetails.title.trim().toLowerCase())
-    // ) {
-    //   toast({
-    //     variant: 'destructive',
-    //     title: 'Validation Error',
-    //     description: 'A risk with this title already exists.',
-    //   });
-    //   return;
-    // }
-    if (existingRiskTitles.includes(riskDetails.title.trim().toLowerCase())) {
-         toast({ variant: 'destructive', title: 'Validation Error', description: 'A risk with this title already exists.' });
-         return;
+     // Check for duplicates only if it's a new risk or if the title has changed for an existing risk
+    if (
+      (!initialData || (initialData && initialData.title.toLowerCase() !== riskDetails.title.trim().toLowerCase())) &&
+      existingRiskTitles.includes(riskDetails.title.trim().toLowerCase())
+    ) {
+      toast({
+        variant: 'destructive',
+        title: 'Validation Error',
+        description: 'A risk with this title already exists.',
+      });
+      return;
     }
     if (!riskDetails.identifiedDate) {
       toast({
@@ -166,28 +156,23 @@ export default function RegisterRiskModal({
          toast({ variant: 'destructive', title: 'Validation Error', description: 'Owner is required.' });
          return;
     }
-
-    const newRisk: RiskItem = {
-      // ...initialData, // Spread initialData first to preserve ID if editing
-      ...riskDetails,
-      id: /*initialData?.id ||*/ `risk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      riskScore: calculateRiskScore(),
-    };
-    onSaveRisk(newRisk);
+    // The ID and riskScore will be handled by the parent/hook,
+    // or preserved if initialData (editing) is present.
+    onSaveRisk(riskDetails);
     onOpenChange(false);
   };
 
-  const riskScore = calculateRiskScore();
+  const riskScoreDisplay = calculateRiskScore(); // Calculate for display
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-primary" /> Register New Risk
+            <AlertTriangle className="h-5 w-5 text-primary" /> {initialData ? 'Edit Risk' : 'Register New Risk'}
           </DialogTitle>
           <DialogDescription>
-            Fill in the details for the new risk item.
+            Fill in the details for the {initialData ? 'risk item' : 'new risk item'}.
           </DialogDescription>
         </DialogHeader>
 
@@ -355,7 +340,7 @@ export default function RegisterRiskModal({
                 <Label htmlFor="risk-score">Risk Score</Label>
                 <Input
                   id="risk-score"
-                  value={riskScore}
+                  value={riskScoreDisplay}
                   readOnly
                   className="cursor-default bg-muted font-semibold"
                 />

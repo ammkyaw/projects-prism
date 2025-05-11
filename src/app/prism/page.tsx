@@ -340,31 +340,31 @@ function PrismPage() {
     handleSaveHolidayCalendars,
     handleSaveTeams,
     handleSaveConfigurations,
-    handleSaveRisk, // Add handleSaveRisk
+    handleSaveRisk,
   } = useSettingsActions({
     selectedProject,
     updateProjectData,
     toast,
   });
 
-  // --- Risk Actions (Directly in PrismPage for now, can be moved to a hook) ---
-  const handleSaveRiskItem = useCallback(
-    (newRisk: RiskItem) => {
+  // Risk Action: Save New or Update Existing (ID generation handled in useSettingsActions)
+  const handleSaveOrUpdateRiskItem = useCallback(
+    (riskDetails: Omit<RiskItem, 'id' | 'riskScore'>, existingId?: string) => {
       if (!selectedProject) return;
-      const updatedRisks = [...(selectedProject.risks || []), newRisk];
-      updateProjectData({ ...selectedProject, risks: updatedRisks });
-      // Toast is handled by the useSettingsActions.handleSaveRisk
+      handleSaveRisk(riskDetails, existingId); // Call the hook function
     },
-    [selectedProject, updateProjectData]
+    [selectedProject, handleSaveRisk] // Ensure handleSaveRisk from the hook is a dependency
   );
 
-  const handleUpdateRiskItem = useCallback(
+
+  const handleUpdateRiskItem = useCallback( // This can now potentially be removed if all updates go through handleSaveOrUpdateRiskItem
     (updatedRisk: RiskItem) => {
       if (!selectedProject) return;
       const updatedRisks = (selectedProject.risks || []).map((r) =>
         r.id === updatedRisk.id ? updatedRisk : r
       );
       updateProjectData({ ...selectedProject, risks: updatedRisks });
+       // Toast for update can be added here or handled by the form
     },
     [selectedProject, updateProjectData]
   );
@@ -383,7 +383,7 @@ function PrismPage() {
     },
     [selectedProject, updateProjectData, toast]
   );
-  // --- End Risk Actions ---
+
 
   const handleAddMembersToNewProject = useCallback(
     (addedMembers: Member[]) => {
@@ -851,7 +851,6 @@ function PrismPage() {
         case 'risk/overview':
           componentProps = {
             ...componentProps,
-            // Add specific props for RiskOverviewTab if needed
             sprintData: selectedProject.sprintData,
             backlog: selectedProject.backlog,
             risks: selectedProject.risks ?? [],
@@ -862,15 +861,14 @@ function PrismPage() {
             ...componentProps,
             risks: selectedProject.risks ?? [],
             members: selectedProject.members ?? [],
-            onSaveRisk: handleSaveRiskItem,
-            onUpdateRisk: handleUpdateRiskItem,
+            onSaveRisk: (riskDetails: Omit<RiskItem, 'id'|'riskScore'>) => handleSaveOrUpdateRiskItem(riskDetails),
+            onUpdateRisk: (updatedRisk: RiskItem) => handleSaveOrUpdateRiskItem(updatedRisk, updatedRisk.id),
             onDeleteRisk: handleDeleteRiskItem,
           };
           break;
         case 'risk/mitigation':
           componentProps = {
             ...componentProps,
-            // Add specific props for RiskMitigationTab if needed
             sprintData: selectedProject.sprintData,
             backlog: selectedProject.backlog,
             risks: selectedProject.risks ?? [],

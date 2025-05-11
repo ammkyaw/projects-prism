@@ -162,36 +162,69 @@ export const useSettingsActions = ({
     [selectedProject, updateProjectData, toast]
   );
 
-  // Handler to save a new risk item
+  // Handler to save a new risk item (or update if ID exists implicitly through `riskDetails` if editing)
   const handleSaveRisk = useCallback(
-    (newRisk: RiskItem) => {
+    (riskDetails: Omit<RiskItem, 'id' | 'riskScore'>, existingId?: string) => {
       if (!selectedProject) {
         toast({
           variant: 'destructive',
           title: 'Error',
-          description: 'No project selected to add the risk to.',
+          description: 'No project selected to manage risks for.',
         });
         return;
       }
-      const updatedRisks = [...(selectedProject.risks || []), newRisk];
+
+      const likelihoodValue = selectedProject.risks?.find(r => r.id === existingId)?.likelihood ?? riskDetails.likelihood;
+      const impactValue = selectedProject.risks?.find(r => r.id === existingId)?.impact ?? riskDetails.impact;
+
+      const riskScore =
+        (riskLikelihoodValues[likelihoodValue] || 0) *
+        (riskImpactValues[impactValue] || 0);
+
+
+      let updatedRisks: RiskItem[];
+      let toastMessage = '';
+
+      if (existingId) { // Updating an existing risk
+        const riskToUpdate = selectedProject.risks?.find(r => r.id === existingId);
+        if (!riskToUpdate) {
+           toast({ variant: 'destructive', title: 'Error', description: 'Risk item to update not found.' });
+           return;
+        }
+        updatedRisks = (selectedProject.risks || []).map(r =>
+          r.id === existingId ? { ...riskToUpdate, ...riskDetails, riskScore } : r
+        );
+        toastMessage = `Risk "${riskDetails.title}" has been updated.`;
+      } else { // Adding a new risk
+        const newRiskWithId: RiskItem = {
+          ...riskDetails,
+          id: `risk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          riskScore,
+        };
+        updatedRisks = [...(selectedProject.risks || []), newRiskWithId];
+        toastMessage = `Risk "${newRiskWithId.title}" has been registered.`;
+      }
+
+
       const updatedProject: Project = {
         ...selectedProject,
         risks: updatedRisks,
       };
       updateProjectData(updatedProject);
       toast({
-        title: 'Risk Registered',
-        description: `Risk "${newRisk.title}" has been added to project '${selectedProject.name}'.`,
+        title: existingId ? 'Risk Updated' : 'Risk Registered',
+        description: toastMessage,
       });
     },
     [selectedProject, updateProjectData, toast]
   );
+
 
   return {
     handleSaveMembers,
     handleSaveHolidayCalendars,
     handleSaveTeams,
     handleSaveConfigurations,
-    handleSaveRisk, // Export new handler
+    handleSaveRisk,
   };
 };

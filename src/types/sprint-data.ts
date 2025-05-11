@@ -189,7 +189,12 @@ export const riskStatuses: RiskStatus[] = [
   'Accepted',
 ];
 
-export type RiskLikelihood = 'Very Low' | 'Low' | 'Medium' | 'High' | 'Very High';
+export type RiskLikelihood =
+  | 'Very Low'
+  | 'Low'
+  | 'Medium'
+  | 'High'
+  | 'Very High';
 export const riskLikelihoods: RiskLikelihood[] = [
   'Very Low',
   'Low',
@@ -227,7 +232,7 @@ export const riskImpactValues: Record<RiskImpact, number> = {
 };
 
 export interface RiskItem {
-  id: string;
+  id: string; // Unique ID for the risk
   title: string;
   description: string;
   identifiedDate: string; // YYYY-MM-DD
@@ -354,7 +359,7 @@ export interface DailyProgressDataPoint {
   tasksCompleted?: number; // Add optional field for tasks completed
 }
 
-// Initial state for a new risk item
+// Initial state for a new risk item - ID is generated on save
 export const initialRiskItem: Omit<RiskItem, 'id' | 'riskScore'> = {
   title: '',
   description: '',
