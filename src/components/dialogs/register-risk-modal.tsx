@@ -1,3 +1,4 @@
+// src/components/dialogs/register-risk-modal.tsx
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -27,6 +28,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import { ScrollArea } from '@/components/ui/scroll-area'; // Added import for ScrollArea
 import { CalendarIcon, AlertTriangle, Save } from 'lucide-react';
 import type {
   RiskItem,
@@ -55,6 +57,7 @@ interface RegisterRiskModalProps {
   onSaveRisk: (newRisk: RiskItem) => void;
   projectMembers: Member[]; // To populate Owner dropdown
   existingRiskTitles: string[]; // To check for duplicate titles
+  // initialData?: RiskItem | null; // For editing existing risks
 }
 
 export default function RegisterRiskModal({
@@ -63,6 +66,7 @@ export default function RegisterRiskModal({
   onSaveRisk,
   projectMembers,
   existingRiskTitles,
+  // initialData,
 }: RegisterRiskModalProps) {
   const [riskDetails, setRiskDetails] = useState<Omit<RiskItem, 'id' | 'riskScore'>>(
     initialRiskItem
@@ -80,10 +84,26 @@ export default function RegisterRiskModal({
 
   useEffect(() => {
     if (isOpen) {
+      // if (initialData) {
+      //   setRiskDetails({
+      //     title: initialData.title,
+      //     description: initialData.description,
+      //     identifiedDate: initialData.identifiedDate,
+      //     owner: initialData.owner,
+      //     category: initialData.category,
+      //     status: initialData.status,
+      //     likelihood: initialData.likelihood,
+      //     impact: initialData.impact,
+      //     mitigationStrategies: initialData.mitigationStrategies,
+      //     contingencyPlan: initialData.contingencyPlan,
+      //   });
+      //   setIdentifiedDateObj(initialData.identifiedDate ? parseISO(initialData.identifiedDate) : undefined);
+      // } else {
       setRiskDetails(initialRiskItem);
       setIdentifiedDateObj(undefined);
+      // }
     }
-  }, [isOpen]);
+  }, [isOpen, /*initialData*/]);
 
   const handleInputChange = (
     field: keyof Omit<RiskItem, 'id' | 'riskScore' | 'identifiedDate'>,
@@ -119,6 +139,17 @@ export default function RegisterRiskModal({
       });
       return;
     }
+    // if (
+    //   (!initialData || initialData.title.toLowerCase() !== riskDetails.title.trim().toLowerCase()) &&
+    //   existingRiskTitles.includes(riskDetails.title.trim().toLowerCase())
+    // ) {
+    //   toast({
+    //     variant: 'destructive',
+    //     title: 'Validation Error',
+    //     description: 'A risk with this title already exists.',
+    //   });
+    //   return;
+    // }
     if (existingRiskTitles.includes(riskDetails.title.trim().toLowerCase())) {
          toast({ variant: 'destructive', title: 'Validation Error', description: 'A risk with this title already exists.' });
          return;
@@ -137,8 +168,9 @@ export default function RegisterRiskModal({
     }
 
     const newRisk: RiskItem = {
+      // ...initialData, // Spread initialData first to preserve ID if editing
       ...riskDetails,
-      id: `risk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: /*initialData?.id ||*/ `risk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       riskScore: calculateRiskScore(),
     };
     onSaveRisk(newRisk);
