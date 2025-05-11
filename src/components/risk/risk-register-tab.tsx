@@ -116,8 +116,7 @@ export default function RiskRegisterTab({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[150px]">Risk ID</TableHead>{' '}
-                      {/* Added Risk ID column */}
+                      <TableHead className="w-[150px]">Risk ID</TableHead>
                       <TableHead className="w-[250px]">Title</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Owner</TableHead>
@@ -136,8 +135,7 @@ export default function RiskRegisterTab({
                       <TableRow key={risk.id}>
                         <TableCell className="font-mono text-xs">
                           {risk.id}
-                        </TableCell>{' '}
-                        {/* Display Risk ID */}
+                        </TableCell>
                         <TableCell className="font-medium">
                           {risk.title}
                         </TableCell>
