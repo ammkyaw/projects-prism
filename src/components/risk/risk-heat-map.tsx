@@ -115,7 +115,9 @@ export default function RiskHeatMap({ risks }: RiskHeatMapProps) {
                     )}
                     title={`${count} risk(s) with ${likelihood} likelihood and ${impact} impact`}
                   >
-                    <span className="text-lg font-semibold">{count}</span>
+                    <span className="text-lg font-semibold">
+                      {count > 0 ? count : ''}
+                    </span>
                   </td>
                 );
               })}
