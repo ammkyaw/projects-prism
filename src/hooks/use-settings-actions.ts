@@ -1,3 +1,4 @@
+
 import { useCallback } from 'react';
 import type {
   Project,
@@ -14,6 +15,7 @@ import {
   riskLikelihoodValues,
   riskImpactValues,
 } from '@/types/sprint-data'; // Import the missing values
+import { format } from 'date-fns'; // Import format from date-fns
 
 interface UseSettingsActionsProps {
   selectedProject: Project | null;
@@ -180,8 +182,6 @@ export const useSettingsActions = ({
         return;
       }
 
-      // Use the likelihood and impact from the submitted details for calculation.
-      // If updating, these values in `riskDetails` would be the latest from the form.
       const likelihoodValue =
         riskLikelihoodValues[riskDetails.likelihood as RiskLikelihood] || 0;
       const impactValue =
@@ -193,7 +193,6 @@ export const useSettingsActions = ({
       let toastMessage = '';
 
       if (existingId) {
-        // Updating an existing risk
         const riskToUpdate = selectedProject.risks?.find(
           (r) => r.id === existingId
         );
@@ -212,16 +211,14 @@ export const useSettingsActions = ({
         );
         toastMessage = `Risk "${riskDetails.title}" has been updated.`;
       } else {
-        // Adding a new risk
+        const newRiskId = `Risk_${format(new Date(), 'yyyyMMddHHmmss')}`;
         const newRiskWithId: RiskItem = {
           ...riskDetails,
-          id: `risk_${Date.now()}_${Math.random()
-            .toString(36)
-            .substring(2, 7)}`,
+          id: newRiskId,
           riskScore,
         };
         updatedRisks = [...(selectedProject.risks || []), newRiskWithId];
-        toastMessage = `Risk "${newRiskWithId.title}" has been registered.`;
+        toastMessage = `Risk "${newRiskWithId.title}" has been registered with ID: ${newRiskId}.`;
       }
 
       const updatedProject: Project = {
