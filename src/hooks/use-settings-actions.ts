@@ -6,6 +6,7 @@ import type {
   Team,
   ToastFun,
   StoryPointScale, // Import StoryPointScale
+  RiskItem, // Import RiskItem
 } from '@/types/sprint-data';
 
 interface UseSettingsActionsProps {
@@ -161,10 +162,36 @@ export const useSettingsActions = ({
     [selectedProject, updateProjectData, toast]
   );
 
+  // Handler to save a new risk item
+  const handleSaveRisk = useCallback(
+    (newRisk: RiskItem) => {
+      if (!selectedProject) {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'No project selected to add the risk to.',
+        });
+        return;
+      }
+      const updatedRisks = [...(selectedProject.risks || []), newRisk];
+      const updatedProject: Project = {
+        ...selectedProject,
+        risks: updatedRisks,
+      };
+      updateProjectData(updatedProject);
+      toast({
+        title: 'Risk Registered',
+        description: `Risk "${newRisk.title}" has been added to project '${selectedProject.name}'.`,
+      });
+    },
+    [selectedProject, updateProjectData, toast]
+  );
+
   return {
     handleSaveMembers,
     handleSaveHolidayCalendars,
     handleSaveTeams,
-    handleSaveConfigurations, // Export new handler
+    handleSaveConfigurations,
+    handleSaveRisk, // Export new handler
   };
 };

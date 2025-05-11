@@ -63,7 +63,6 @@ export const taskTypes: TaskType[] = [
 ];
 export const predefinedTaskTypes: readonly TaskType[] = [...taskTypes];
 
-
 // Severity Types for Bug tasks
 export type SeverityType = 'Low' | 'Medium' | 'High' | 'Critical';
 export const severities: SeverityType[] = [
@@ -153,8 +152,94 @@ export interface SprintData {
 
 // New type for Story Point Scales
 export type StoryPointScale = 'Fibonacci' | 'Modified Fibonacci' | 'Linear';
-export const storyPointScaleOptions: StoryPointScale[] = ['Fibonacci', 'Modified Fibonacci', 'Linear'];
+export const storyPointScaleOptions: StoryPointScale[] = [
+  'Fibonacci',
+  'Modified Fibonacci',
+  'Linear',
+];
 
+// Risk Management Types
+export type RiskCategory =
+  | 'Technical'
+  | 'Schedule'
+  | 'Budget'
+  | 'Resource'
+  | 'External'
+  | 'Scope Creep';
+export const riskCategories: RiskCategory[] = [
+  'Technical',
+  'Schedule',
+  'Budget',
+  'Resource',
+  'External',
+  'Scope Creep',
+];
+
+export type RiskStatus =
+  | 'Open'
+  | 'In Progress'
+  | 'Mitigated'
+  | 'Closed'
+  | 'Accepted';
+export const riskStatuses: RiskStatus[] = [
+  'Open',
+  'In Progress',
+  'Mitigated',
+  'Closed',
+  'Accepted',
+];
+
+export type RiskLikelihood = 'Very Low' | 'Low' | 'Medium' | 'High' | 'Very High';
+export const riskLikelihoods: RiskLikelihood[] = [
+  'Very Low',
+  'Low',
+  'Medium',
+  'High',
+  'Very High',
+];
+export const riskLikelihoodValues: Record<RiskLikelihood, number> = {
+  'Very Low': 1,
+  Low: 2,
+  Medium: 3,
+  High: 4,
+  'Very High': 5,
+};
+
+export type RiskImpact =
+  | 'Insignificant'
+  | 'Minor'
+  | 'Moderate'
+  | 'Major'
+  | 'Catastrophic';
+export const riskImpacts: RiskImpact[] = [
+  'Insignificant',
+  'Minor',
+  'Moderate',
+  'Major',
+  'Catastrophic',
+];
+export const riskImpactValues: Record<RiskImpact, number> = {
+  Insignificant: 1,
+  Minor: 2,
+  Moderate: 3,
+  Major: 4,
+  Catastrophic: 5,
+};
+
+export interface RiskItem {
+  id: string;
+  title: string;
+  description: string;
+  identifiedDate: string; // YYYY-MM-DD
+  owner: string; // Member name or free text
+  category: RiskCategory;
+  status: RiskStatus;
+  likelihood: RiskLikelihood;
+  impact: RiskImpact;
+  riskScore: number; // Calculated: Likelihood_value * Impact_value
+  mitigationStrategies: string;
+  contingencyPlan: string;
+}
 
 export interface Project {
   id: string;
@@ -164,6 +249,7 @@ export interface Project {
   holidayCalendars?: HolidayCalendar[];
   teams?: Team[];
   backlog?: Task[];
+  risks?: RiskItem[]; // Add risks array
   // New configuration fields
   storyPointScale?: StoryPointScale;
   customTaskTypes?: string[];
@@ -206,8 +292,9 @@ export const taskStatuses: Array<Task['status']> = [
   'Done',
   'Blocked',
 ];
-export const predefinedTicketStatuses: readonly (Task['status'])[] = [...taskStatuses];
-
+export const predefinedTicketStatuses: readonly (Task['status'])[] = [
+  ...taskStatuses,
+];
 
 export const taskPriorities: Array<Task['priority']> = [
   'Highest',
@@ -266,3 +353,17 @@ export interface DailyProgressDataPoint {
   points: number;
   tasksCompleted?: number; // Add optional field for tasks completed
 }
+
+// Initial state for a new risk item
+export const initialRiskItem: Omit<RiskItem, 'id' | 'riskScore'> = {
+  title: '',
+  description: '',
+  identifiedDate: '',
+  owner: '',
+  category: 'Technical',
+  status: 'Open',
+  likelihood: 'Medium',
+  impact: 'Moderate',
+  mitigationStrategies: '',
+  contingencyPlan: '',
+};

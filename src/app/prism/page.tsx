@@ -113,8 +113,15 @@ import type {
   ToastFun,
   Sprint,
   StoryPointScale,
+  RiskItem, // Import RiskItem
 } from '@/types/sprint-data';
-import { initialSprintData, taskPriorities, storyPointScaleOptions, predefinedTaskTypes, predefinedTicketStatuses } from '@/types/sprint-data';
+import {
+  initialSprintData,
+  taskPriorities,
+  storyPointScaleOptions,
+  predefinedTaskTypes,
+  predefinedTicketStatuses,
+} from '@/types/sprint-data';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useSprintsActions } from '@/hooks/use-sprints-actions';
@@ -166,10 +173,8 @@ function PrismPage() {
   const { toast } = useToast();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [loginToastShown, setLoginToastShown] = useState(false);
-  const [
-    selectedSprintForPlanning,
-    setSelectedSprintForPlanning,
-  ] = useState<Sprint | null>(null);
+  const [selectedSprintForPlanning, setSelectedSprintForPlanning] =
+    useState<Sprint | null>(null);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
   const {
@@ -249,7 +254,7 @@ function PrismPage() {
   const handleMainTabChange = useCallback(
     (mainTabKey: string) => {
       setSelectedSprintForPlanning(null);
-      if (['dashboard', 'evaluation'].includes(mainTabKey)) { // Removed 'risk' as it now has subtabs
+      if (['dashboard', 'evaluation'].includes(mainTabKey)) {
         setActiveTab(mainTabKey);
       } else {
         const defaultSub = defaultSubTabs[mainTabKey] || '';
@@ -330,12 +335,55 @@ function PrismPage() {
     selectedProjectId,
   });
 
-  const { handleSaveMembers, handleSaveHolidayCalendars, handleSaveTeams, handleSaveConfigurations } =
-    useSettingsActions({
-      selectedProject,
-      updateProjectData,
-      toast,
-    });
+  const {
+    handleSaveMembers,
+    handleSaveHolidayCalendars,
+    handleSaveTeams,
+    handleSaveConfigurations,
+    handleSaveRisk, // Add handleSaveRisk
+  } = useSettingsActions({
+    selectedProject,
+    updateProjectData,
+    toast,
+  });
+
+  // --- Risk Actions (Directly in PrismPage for now, can be moved to a hook) ---
+  const handleSaveRiskItem = useCallback(
+    (newRisk: RiskItem) => {
+      if (!selectedProject) return;
+      const updatedRisks = [...(selectedProject.risks || []), newRisk];
+      updateProjectData({ ...selectedProject, risks: updatedRisks });
+      // Toast is handled by the useSettingsActions.handleSaveRisk
+    },
+    [selectedProject, updateProjectData]
+  );
+
+  const handleUpdateRiskItem = useCallback(
+    (updatedRisk: RiskItem) => {
+      if (!selectedProject) return;
+      const updatedRisks = (selectedProject.risks || []).map((r) =>
+        r.id === updatedRisk.id ? updatedRisk : r
+      );
+      updateProjectData({ ...selectedProject, risks: updatedRisks });
+    },
+    [selectedProject, updateProjectData]
+  );
+
+  const handleDeleteRiskItem = useCallback(
+    (riskId: string) => {
+      if (!selectedProject) return;
+      const updatedRisks = (selectedProject.risks || []).filter(
+        (r) => r.id !== riskId
+      );
+      updateProjectData({ ...selectedProject, risks: updatedRisks });
+      toast({
+        title: 'Risk Deleted',
+        description: 'The risk item has been removed.',
+      });
+    },
+    [selectedProject, updateProjectData, toast]
+  );
+  // --- End Risk Actions ---
 
   const handleAddMembersToNewProject = useCallback(
     (addedMembers: Member[]) => {
@@ -403,6 +451,7 @@ function PrismPage() {
       holidayCalendars: [],
       teams: [],
       backlog: [],
+      risks: [], // Initialize risks array
       storyPointScale: 'Fibonacci',
       customTaskTypes: [],
       customTicketStatuses: [],
@@ -546,13 +595,25 @@ function PrismPage() {
         history: { label: 'History', icon: History, component: HistoryTab },
       },
     },
-    risk: { // Updated Risk tab
+    risk: {
       label: 'Risk',
       icon: AlertTriangle,
       subTabs: {
-        overview: { label: 'Overview', icon: ShieldAlert, component: RiskOverviewTab },
-        register: { label: 'Register', icon: FileText, component: RiskRegisterTab },
-        mitigation: { label: 'Mitigation', icon: ShieldCheck, component: RiskMitigationTab },
+        overview: {
+          label: 'Overview',
+          icon: ShieldAlert,
+          component: RiskOverviewTab,
+        },
+        register: {
+          label: 'Register',
+          icon: FileText,
+          component: RiskRegisterTab,
+        },
+        mitigation: {
+          label: 'Mitigation',
+          icon: ShieldCheck,
+          component: RiskMitigationTab,
+        },
       },
     },
     evaluation: {
@@ -714,9 +775,16 @@ function PrismPage() {
             onRevertTask: handleRevertTaskToBacklog,
             onAddBacklogItems: handleMoveSelectedBacklogItemsToSprint,
             onBackToOverview: handleBackToOverview,
-            storyPointScale: selectedProject.storyPointScale ?? storyPointScaleOptions[0],
-            customTaskTypes: [...predefinedTaskTypes, ...(selectedProject.customTaskTypes || [])],
-            customTicketStatuses: [...predefinedTicketStatuses, ...(selectedProject.customTicketStatuses || [])],
+            storyPointScale:
+              selectedProject.storyPointScale ?? storyPointScaleOptions[0],
+            customTaskTypes: [
+              ...predefinedTaskTypes,
+              ...(selectedProject.customTaskTypes || []),
+            ],
+            customTicketStatuses: [
+              ...predefinedTicketStatuses,
+              ...(selectedProject.customTicketStatuses || []),
+            ],
           };
           break;
         case 'sprints/retrospective':
@@ -737,7 +805,10 @@ function PrismPage() {
             onMoveToSprint: handleMoveToSprint,
             generateNextBacklogId: generateNextBacklogIdHelper,
             allProjectBacklogItems: selectedProject.backlog ?? [],
-            customTaskTypes: [...predefinedTaskTypes, ...(selectedProject.customTaskTypes || [])],
+            customTaskTypes: [
+              ...predefinedTaskTypes,
+              ...(selectedProject.customTaskTypes || []),
+            ],
           };
           break;
         case 'backlog/grooming':
@@ -777,13 +848,32 @@ function PrismPage() {
             onUndoBacklogAction: handleUndoBacklogAction,
           };
           break;
-        case 'risk/overview': // Added Risk Overview
-        case 'risk/register': // Added Risk Register
-        case 'risk/mitigation': // Added Risk Mitigation
+        case 'risk/overview':
           componentProps = {
             ...componentProps,
+            // Add specific props for RiskOverviewTab if needed
             sprintData: selectedProject.sprintData,
             backlog: selectedProject.backlog,
+            risks: selectedProject.risks ?? [],
+          };
+          break;
+        case 'risk/register':
+          componentProps = {
+            ...componentProps,
+            risks: selectedProject.risks ?? [],
+            members: selectedProject.members ?? [],
+            onSaveRisk: handleSaveRiskItem,
+            onUpdateRisk: handleUpdateRiskItem,
+            onDeleteRisk: handleDeleteRiskItem,
+          };
+          break;
+        case 'risk/mitigation':
+          componentProps = {
+            ...componentProps,
+            // Add specific props for RiskMitigationTab if needed
+            sprintData: selectedProject.sprintData,
+            backlog: selectedProject.backlog,
+            risks: selectedProject.risks ?? [],
           };
           break;
         case 'analytics/charts':
@@ -1164,4 +1254,3 @@ function PrismPage() {
     </div>
   );
 }
-

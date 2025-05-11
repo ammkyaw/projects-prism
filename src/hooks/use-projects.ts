@@ -44,6 +44,7 @@ const fetchProjects = async (): Promise<AppData> => {
     members: project.members ?? [],
     teams: project.teams ?? [],
     holidayCalendars: project.holidayCalendars ?? [],
+    risks: project.risks ?? [], // Initialize risks if undefined
     // Default new config fields
     storyPointScale: project.storyPointScale ?? 'Fibonacci',
     customTaskTypes: project.customTaskTypes ?? [],
