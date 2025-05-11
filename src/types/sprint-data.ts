@@ -269,7 +269,7 @@ export const initialSprintData: SprintData = {
 export const initialSprintPlanning: SprintPlanning = {
   goal: '',
   newTasks: [],
-  spilloverTasks: Task[];
+  spilloverTasks: [],
   definitionOfDone: '',
   testingStrategy: '',
 };
@@ -294,7 +294,7 @@ export const taskStatuses: Array<Task['status']> = [
   'Done',
   'Blocked',
 ];
-export const predefinedTicketStatuses: readonly Task['status'][] = [
+export const predefinedTicketStatuses: readonly (Task['status'] | null)[] = [
   ...taskStatuses,
 ];
 
@@ -324,23 +324,23 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
   taskType: 'New Feature',
   createdDate: '',
   initiator: null,
-  dependsOn: [];
-  needsGrooming: false;
-  readyForSprint: false;
-  movedToSprint: null;
-  historyStatus: null;
-  splitFromId: null;
-  mergeEventId: null;
-  devEstimatedTime: null;
-  qaEstimatedTime: null;
-  bufferTime: null;
-  assignee: null;
-  reviewer: null;
-  status: null;
-  startDate: null;
-  completedDate: null;
-  devTime: undefined; // Remove or align devTime
-  severity: null; // Initialize severity
+  dependsOn: [],
+  needsGrooming: false,
+  readyForSprint: false,
+  movedToSprint: null,
+  historyStatus: null,
+  splitFromId: null,
+  mergeEventId: null,
+  devEstimatedTime: null,
+  qaEstimatedTime: null,
+  bufferTime: null,
+  assignee: null,
+  reviewer: null,
+  status: null,
+  startDate: null,
+  completedDate: null,
+  devTime: undefined, // Remove or align devTime
+  severity: null, // Initialize severity
 };
 
 export type ToastFun = (props: {
