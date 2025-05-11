@@ -22,20 +22,20 @@ const getCellColor = (
   // Darker colors for higher risk.
   if (likelihood === 'Almost Certain') {
     if (impact === 'Catastrophic') return 'bg-red-600 text-white'; // Bright Red
-    if (impact === 'Major') return 'bg-red-700 text-white'; // Dark Red
-    if (impact === 'Moderate') return 'bg-orange-500 text-white';
+    if (impact === 'Major') return 'bg-red-900 text-white'; // Dark Red
+    if (impact === 'Moderate') return 'bg-orange-400 text-black';
     if (impact === 'Minor') return 'bg-orange-400 text-black';
     return 'bg-yellow-400 text-black'; // Insignificant
   }
   if (likelihood === 'Likely') {
-    if (impact === 'Catastrophic') return 'bg-red-700 text-white';
-    if (impact === 'Major') return 'bg-red-700 text-white';
-    if (impact === 'Moderate') return 'bg-orange-500 text-white';
+    if (impact === 'Catastrophic') return 'bg-red-900 text-white';
+    if (impact === 'Major') return 'bg-red-900 text-white';
+    if (impact === 'Moderate') return 'bg-orange-400 text-black';
     if (impact === 'Minor') return 'bg-yellow-400 text-black';
     return 'bg-yellow-400 text-black'; // Insignificant
   }
   if (likelihood === 'Possible') {
-    if (impact === 'Catastrophic') return 'bg-orange-500 text-white';
+    if (impact === 'Catastrophic') return 'bg-orange-400 text-black';
     if (impact === 'Major') return 'bg-orange-400 text-black';
     if (impact === 'Moderate') return 'bg-yellow-400 text-black';
     if (impact === 'Minor') return 'bg-yellow-400 text-black';
