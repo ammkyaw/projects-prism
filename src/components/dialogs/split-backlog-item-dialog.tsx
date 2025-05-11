@@ -136,7 +136,7 @@ export default function SplitBacklogItemDialog({
   };
 
   const handleStoryPointsChange = (internalId: string, value: string) => {
-     setSplitTaskRows((rows) =>
+    setSplitTaskRows((rows) =>
       rows.map((row) =>
         row._internalId === internalId ? { ...row, storyPoints: value } : row
       )
@@ -185,9 +185,9 @@ export default function SplitBacklogItemDialog({
       if (storyPointsRaw) {
         const parsedSP = parseInt(storyPointsRaw, 10);
         if (!isNaN(parsedSP) && parsedSP >= 0) {
-            storyPointsValue = parsedSP;
+          storyPointsValue = parsedSP;
         } else {
-            // error is handled below
+          // error is handled below
         }
       }
       const priority = row.priority ?? 'Medium';
@@ -202,7 +202,9 @@ export default function SplitBacklogItemDialog({
         storyPointsRaw &&
         (isNaN(storyPointsValue as number) || (storyPointsValue as number) < 0)
       ) {
-        rowErrors.push(`Split Task ${index + 1}: Story Points must be a non-negative number or empty.`);
+        rowErrors.push(
+          `Split Task ${index + 1}: Story Points must be a non-negative number or empty.`
+        );
       }
       if (!priority || !taskPriorities.includes(priority as any)) {
         rowErrors.push(`Split Task ${index + 1}: Invalid Priority.`);
@@ -360,7 +362,8 @@ export default function SplitBacklogItemDialog({
                       type="text" // Changed to text
                       value={row.storyPoints?.toString() ?? ''}
                       onChange={(e) =>
-                        handleStoryPointsChange( // Use specific handler
+                        handleStoryPointsChange(
+                          // Use specific handler
                           row._internalId,
                           e.target.value
                         )

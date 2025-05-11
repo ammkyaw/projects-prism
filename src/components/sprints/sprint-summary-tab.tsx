@@ -80,7 +80,8 @@ export default function SprintSummaryTab({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Eye className="h-5 w-5 text-primary" /> Sprint Overview: {projectName}
+          <Eye className="h-5 w-5 text-primary" /> Sprint Overview:{' '}
+          {projectName}
         </CardTitle>
         <CardDescription>
           Overview of all sprints for the project. Click on a sprint number to

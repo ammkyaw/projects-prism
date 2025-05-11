@@ -416,7 +416,10 @@ export default function SprintTimelineChart({
             bufferWorkingDays,
             memberHolidays
           );
-          bufferStartDayIndex = differenceInDays(bufferStartDateObj, sprintStart);
+          bufferStartDayIndex = differenceInDays(
+            bufferStartDateObj,
+            sprintStart
+          );
           bufferEndDayIndex = differenceInDays(bufferEndDateObj, sprintStart);
           // If the buffer phase starts before the sprint but ends within it,
           // its effective start within the sprint's context is day 0 of the sprint.
@@ -510,7 +513,7 @@ export default function SprintTimelineChart({
               });
             }
           });
-      });
+        });
       return assigneeChartData;
     } else {
       // 'task' view (default) - use processedTasks as is
@@ -828,7 +831,7 @@ export default function SprintTimelineChart({
             name="Development"
             yAxisId={0}
           />
-          { viewMode === 'task' &&
+          {viewMode === 'task' && (
             <Bar
               dataKey="qaRange"
               radius={2}
@@ -837,8 +840,8 @@ export default function SprintTimelineChart({
               name="QA"
               yAxisId={0}
             />
-          }
-          { viewMode === 'task' &&
+          )}
+          {viewMode === 'task' && (
             <Bar
               dataKey="bufferRange"
               radius={2}
@@ -847,7 +850,7 @@ export default function SprintTimelineChart({
               name="Buffer"
               yAxisId={0}
             />
-          }
+          )}
 
           {/* Render Weekend and Holiday Reference Areas LAST - These will be in the foreground */}
           {sprintDayIndices

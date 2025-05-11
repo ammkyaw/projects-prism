@@ -31,7 +31,8 @@ export default function RiskMitigationTab({
           <ShieldCheck className="h-5 w-5 text-green-600" /> Risk Mitigation
         </CardTitle>
         <CardDescription>
-          Plan and track mitigation strategies for risks in project '{projectName}'.
+          Plan and track mitigation strategies for risks in project '
+          {projectName}'.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex items-center justify-center text-muted-foreground">

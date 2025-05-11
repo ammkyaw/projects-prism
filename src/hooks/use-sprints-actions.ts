@@ -178,13 +178,14 @@ export const finalizeTasks = (
 
     // if (errors.length > 0 && !errors.every(e => e.startsWith(taskPrefix))) return; // Stop processing this row if critical errors found
     if (errors.length > 0) {
-        // Check if any errors are NOT specific to this row already
-        const criticalErrorForThisRow = errors.some(e => e.startsWith(taskPrefix));
-        if (criticalErrorForThisRow) return; // Stop this row
-        // If errors are general or from other rows, we might still process this one if it's valid itself
-        // This part of logic might need refinement based on how errors should be handled globally vs per-row
+      // Check if any errors are NOT specific to this row already
+      const criticalErrorForThisRow = errors.some((e) =>
+        e.startsWith(taskPrefix)
+      );
+      if (criticalErrorForThisRow) return; // Stop this row
+      // If errors are general or from other rows, we might still process this one if it's valid itself
+      // This part of logic might need refinement based on how errors should be handled globally vs per-row
     }
-
 
     finalTasks.push({
       id:
@@ -258,7 +259,7 @@ export const useSprintsActions = ({
           toast({
             variant: 'destructive',
             title: 'Active Sprint Limit',
-            description: `Only one sprint can be active at a time. Sprint ${tempSprints.find(s => s.status === 'Active')?.sprintNumber} is already active.`,
+            description: `Only one sprint can be active at a time. Sprint ${tempSprints.find((s) => s.status === 'Active')?.sprintNumber} is already active.`,
           });
           return;
         }
@@ -303,7 +304,6 @@ export const useSprintsActions = ({
             ...(validatedPlanning.newTasks || []),
             // Spillover tasks do not count towards commitment of THIS sprint, but are planned work
           ].reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
-
 
           return {
             ...s,
@@ -367,9 +367,9 @@ export const useSprintsActions = ({
         (s) => s.status === 'Active'
       ).length;
 
-       if (
-        (numActive === 1 && numPlanned >=1) ||
-        (numActive === 0 && numPlanned >=2)
+      if (
+        (numActive === 1 && numPlanned >= 1) ||
+        (numActive === 0 && numPlanned >= 2)
       ) {
         toast({
           variant: 'destructive',
@@ -379,7 +379,6 @@ export const useSprintsActions = ({
         });
         return;
       }
-
 
       if (
         currentSprints.some(
@@ -421,7 +420,8 @@ export const useSprintsActions = ({
         spilloverTasks: finalSpilloverTasks,
       };
 
-      const committedPoints = (validatedPlanning.newTasks || []).reduce( // Only new tasks for commitment
+      const committedPoints = (validatedPlanning.newTasks || []).reduce(
+        // Only new tasks for commitment
         (sum, task) => sum + (Number(task.storyPoints) || 0),
         0
       );
@@ -443,7 +443,8 @@ export const useSprintsActions = ({
         sprintData: {
           ...(selectedProject.sprintData ?? initialSprintData),
           sprints: updatedSprints,
-          daysInSprint: Math.max( // This might not be needed if daysInSprint is per sprint
+          daysInSprint: Math.max(
+            // This might not be needed if daysInSprint is per sprint
             selectedProject.sprintData?.daysInSprint || 0,
             newSprint.totalDays
           ),
@@ -465,14 +466,24 @@ export const useSprintsActions = ({
   const handleCompleteSprint = useCallback(
     (sprintNumber: number, latestPlanning: SprintPlanning) => {
       if (!selectedProject) {
-        toast({ variant: 'destructive', title: 'Error', description: 'No project selected.' });
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'No project selected.',
+        });
         return;
       }
       const currentProjectName = selectedProject.name;
-      const sprintToComplete = selectedProject.sprintData.sprints.find(s => s.sprintNumber === sprintNumber);
+      const sprintToComplete = selectedProject.sprintData.sprints.find(
+        (s) => s.sprintNumber === sprintNumber
+      );
 
       if (!sprintToComplete || sprintToComplete.status !== 'Active') {
-        toast({ variant: 'destructive', title: 'Error', description: "Only 'Active' sprints can be completed." });
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: "Only 'Active' sprints can be completed.",
+        });
         return;
       }
 
@@ -481,29 +492,36 @@ export const useSprintsActions = ({
         ...(latestPlanning.spilloverTasks || []),
       ];
 
-      const doneTasks = allTasksInCompletedSprint.filter(task => task.status === 'Done');
-      const undoneTasksOriginal = allTasksInCompletedSprint.filter(task => task.status !== 'Done');
+      const doneTasks = allTasksInCompletedSprint.filter(
+        (task) => task.status === 'Done'
+      );
+      const undoneTasksOriginal = allTasksInCompletedSprint.filter(
+        (task) => task.status !== 'Done'
+      );
       // Completed points should only count from 'New Tasks' that were committed to *this* sprint
       const completedPoints = (latestPlanning.newTasks || [])
-        .filter(task => task.status === 'Done')
+        .filter((task) => task.status === 'Done')
         .reduce((sum, task) => sum + (Number(task.storyPoints) || 0), 0);
-
 
       let updatedSprints = [...selectedProject.sprintData.sprints];
       let updatedBacklog = [...(selectedProject.backlog || [])];
-      let spilloverMessage = "";
+      let spilloverMessage = '';
 
-      const currentSprintIndex = updatedSprints.findIndex(s => s.sprintNumber === sprintNumber);
+      const currentSprintIndex = updatedSprints.findIndex(
+        (s) => s.sprintNumber === sprintNumber
+      );
 
       if (undoneTasksOriginal.length > 0) {
         const nextSprintNumberVal = sprintNumber + 1;
-        const nextSprintIndex = updatedSprints.findIndex(s => s.sprintNumber === nextSprintNumberVal);
+        const nextSprintIndex = updatedSprints.findIndex(
+          (s) => s.sprintNumber === nextSprintNumberVal
+        );
 
         // Create COPIES of undone tasks for spillover
-        const spilloverTaskCopies = undoneTasksOriginal.map(task => ({
+        const spilloverTaskCopies = undoneTasksOriginal.map((task) => ({
           ...initialBacklogTask, // Ensure all fields are present for a new task instance
           ...task, // Copy details from the original undone task
-          id: `spill_${task.id || Date.now()}_${Math.random().toString(36).substring(2,7)}`, // Generate a new unique ID for the spillover copy
+          id: `spill_${task.id || Date.now()}_${Math.random().toString(36).substring(2, 7)}`, // Generate a new unique ID for the spillover copy
           status: 'To Do' as Task['status'], // Reset status
           startDate: null, // Reset start date
           completedDate: null, // Reset completed date
@@ -513,7 +531,11 @@ export const useSprintsActions = ({
           // Other fields like title, description, storyPoints, assignee, backlogId etc. are copied
         }));
 
-        if (nextSprintIndex !== -1 && (updatedSprints[nextSprintIndex].status === 'Planned' || updatedSprints[nextSprintIndex].status === 'Active')) {
+        if (
+          nextSprintIndex !== -1 &&
+          (updatedSprints[nextSprintIndex].status === 'Planned' ||
+            updatedSprints[nextSprintIndex].status === 'Active')
+        ) {
           const nextSprint = { ...updatedSprints[nextSprintIndex] };
           nextSprint.planning = {
             ...(nextSprint.planning || initialSprintPlanning),
@@ -560,7 +582,6 @@ export const useSprintsActions = ({
     [selectedProject, updateProjectData, toast]
   );
 
-
   const handleDeleteSprint = useCallback(
     (sprintNumber: number) => {
       if (!selectedProject) {
@@ -572,15 +593,17 @@ export const useSprintsActions = ({
         return;
       }
       const currentProjectName = selectedProject.name;
-      const sprintToDelete = selectedProject.sprintData.sprints.find(s => s.sprintNumber === sprintNumber);
+      const sprintToDelete = selectedProject.sprintData.sprints.find(
+        (s) => s.sprintNumber === sprintNumber
+      );
 
       if (sprintToDelete && sprintToDelete.status === 'Active') {
-          toast({
-              variant: 'destructive',
-              title: 'Cannot Delete Active Sprint',
-              description: `Sprint ${sprintNumber} is currently Active. Complete or re-plan it before deleting.`,
-          });
-          return;
+        toast({
+          variant: 'destructive',
+          title: 'Cannot Delete Active Sprint',
+          description: `Sprint ${sprintNumber} is currently Active. Complete or re-plan it before deleting.`,
+        });
+        return;
       }
 
       const filteredSprints = (selectedProject.sprintData.sprints ?? []).filter(

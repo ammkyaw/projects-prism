@@ -356,15 +356,15 @@ function PrismPage() {
     [selectedProject, handleSaveRisk] // Ensure handleSaveRisk from the hook is a dependency
   );
 
-
-  const handleUpdateRiskItem = useCallback( // This can now potentially be removed if all updates go through handleSaveOrUpdateRiskItem
+  const handleUpdateRiskItem = useCallback(
+    // This can now potentially be removed if all updates go through handleSaveOrUpdateRiskItem
     (updatedRisk: RiskItem) => {
       if (!selectedProject) return;
       const updatedRisks = (selectedProject.risks || []).map((r) =>
         r.id === updatedRisk.id ? updatedRisk : r
       );
       updateProjectData({ ...selectedProject, risks: updatedRisks });
-       // Toast for update can be added here or handled by the form
+      // Toast for update can be added here or handled by the form
     },
     [selectedProject, updateProjectData]
   );
@@ -383,7 +383,6 @@ function PrismPage() {
     },
     [selectedProject, updateProjectData, toast]
   );
-
 
   const handleAddMembersToNewProject = useCallback(
     (addedMembers: Member[]) => {
@@ -861,8 +860,10 @@ function PrismPage() {
             ...componentProps,
             risks: selectedProject.risks ?? [],
             members: selectedProject.members ?? [],
-            onSaveRisk: (riskDetails: Omit<RiskItem, 'id'|'riskScore'>) => handleSaveOrUpdateRiskItem(riskDetails),
-            onUpdateRisk: (updatedRisk: RiskItem) => handleSaveOrUpdateRiskItem(updatedRisk, updatedRisk.id),
+            onSaveRisk: (riskDetails: Omit<RiskItem, 'id' | 'riskScore'>) =>
+              handleSaveOrUpdateRiskItem(riskDetails),
+            onUpdateRisk: (updatedRisk: RiskItem) =>
+              handleSaveOrUpdateRiskItem(updatedRisk, updatedRisk.id),
             onDeleteRisk: handleDeleteRiskItem,
           };
           break;

@@ -43,7 +43,9 @@ export default function VelocityChart({ data }: VelocityChartProps) {
 
     // Filter for active or completed, sort descending to get latest, take max 10, then sort ascending for chart
     const relevantSprints = data
-      .filter((sprint) => sprint.status === 'Completed' || sprint.status === 'Active')
+      .filter(
+        (sprint) => sprint.status === 'Completed' || sprint.status === 'Active'
+      )
       .sort((a, b) => b.sprintNumber - a.sprintNumber) // Sort descending by sprint number
       .slice(0, 10) // Take the last 10 relevant sprints
       .sort((a, b) => a.sprintNumber - b.sprintNumber); // Sort ascending for chart display
@@ -73,18 +75,20 @@ export default function VelocityChart({ data }: VelocityChartProps) {
     });
   }, [data]);
 
-
   if (!chartData || chartData.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
         <Info className="mr-2 h-4 w-4" /> {/* Added Info icon */}
-        No velocity data available. (Ensure sprints are 'Completed' or 'Active' with 'New Tasks' planned)
+        No velocity data available. (Ensure sprints are 'Completed' or 'Active'
+        with 'New Tasks' planned)
       </div>
     );
   }
-  const maxPoints = Math.max(...chartData.map(d => Math.max(d.committed, d.completed)), 0);
+  const maxPoints = Math.max(
+    ...chartData.map((d) => Math.max(d.committed, d.completed)),
+    0
+  );
   const yAxisMax = maxPoints > 0 ? Math.ceil(maxPoints * 1.1) : 10;
-
 
   return (
     <ChartContainer config={chartConfig} className="h-full w-full">

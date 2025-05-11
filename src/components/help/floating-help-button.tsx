@@ -8,7 +8,9 @@ interface FloatingHelpButtonProps {
   onOpen: () => void;
 }
 
-export default function FloatingHelpButton({ onOpen }: FloatingHelpButtonProps) {
+export default function FloatingHelpButton({
+  onOpen,
+}: FloatingHelpButtonProps) {
   return (
     <Button
       variant="outline"

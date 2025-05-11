@@ -1,4 +1,3 @@
-
 import { useCallback } from 'react';
 import type {
   Project,
@@ -11,10 +10,7 @@ import type {
   RiskLikelihood,
   RiskImpact,
 } from '@/types/sprint-data';
-import {
-  riskLikelihoodValues,
-  riskImpactValues,
-} from '@/types/sprint-data'; // Import the missing values
+import { riskLikelihoodValues, riskImpactValues } from '@/types/sprint-data'; // Import the missing values
 import { format } from 'date-fns'; // Import format from date-fns
 
 interface UseSettingsActionsProps {

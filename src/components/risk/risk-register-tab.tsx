@@ -53,7 +53,9 @@ export default function RiskRegisterTab({
     setIsRegisterModalOpen(true);
   };
 
-  const handleSaveCallback = (riskDetails: Omit<RiskItem, 'id' | 'riskScore'>) => {
+  const handleSaveCallback = (
+    riskDetails: Omit<RiskItem, 'id' | 'riskScore'>
+  ) => {
     if (editingRisk) {
       onUpdateRisk({
         ...riskDetails,
@@ -69,8 +71,8 @@ export default function RiskRegisterTab({
 
   const existingRiskTitles = useMemo(() => {
     return risks
-      .filter(r => !editingRisk || r.id !== editingRisk.id)
-      .map(r => r.title.toLowerCase());
+      .filter((r) => !editingRisk || r.id !== editingRisk.id)
+      .map((r) => r.title.toLowerCase());
   }, [risks, editingRisk]);
 
   const getRiskScoreColor = (score: number): string => {
@@ -90,7 +92,8 @@ export default function RiskRegisterTab({
                 <FileText className="h-5 w-5 text-primary" /> Risk Register
               </CardTitle>
               <CardDescription>
-                Log, track, and manage all identified risks for project '{projectName}'.
+                Log, track, and manage all identified risks for project '
+                {projectName}'.
               </CardDescription>
             </div>
             <Button onClick={() => handleOpenRegisterModal()}>
@@ -109,11 +112,12 @@ export default function RiskRegisterTab({
           ) : (
             <div className="overflow-x-auto">
               {/* Added min-w for horizontal scroll */}
-              <div className="min-w-[1200px]"> 
+              <div className="min-w-[1200px]">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[150px]">Risk ID</TableHead> {/* Added Risk ID column */}
+                      <TableHead className="w-[150px]">Risk ID</TableHead>{' '}
+                      {/* Added Risk ID column */}
                       <TableHead className="w-[250px]">Title</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Owner</TableHead>
@@ -122,38 +126,75 @@ export default function RiskRegisterTab({
                       <TableHead className="text-center">Likelihood</TableHead>
                       <TableHead className="text-center">Impact</TableHead>
                       <TableHead className="text-center">Score</TableHead>
-                      <TableHead className="w-[100px] text-center">Actions</TableHead>
+                      <TableHead className="w-[100px] text-center">
+                        Actions
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {risks.map((risk) => (
                       <TableRow key={risk.id}>
-                        <TableCell className="font-mono text-xs">{risk.id}</TableCell> {/* Display Risk ID */}
-                        <TableCell className="font-medium">{risk.title}</TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {risk.id}
+                        </TableCell>{' '}
+                        {/* Display Risk ID */}
+                        <TableCell className="font-medium">
+                          {risk.title}
+                        </TableCell>
                         <TableCell>{risk.category}</TableCell>
                         <TableCell>{risk.owner}</TableCell>
                         <TableCell>
-                          {risk.identifiedDate && isValid(parseISO(risk.identifiedDate))
-                            ? format(parseISO(risk.identifiedDate), 'MMM d, yyyy')
+                          {risk.identifiedDate &&
+                          isValid(parseISO(risk.identifiedDate))
+                            ? format(
+                                parseISO(risk.identifiedDate),
+                                'MMM d, yyyy'
+                              )
                             : 'N/A'}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={risk.status === 'Closed' || risk.status === 'Mitigated' ? 'secondary' : risk.status === 'Open' ? 'outline' : 'default'} className="capitalize">
+                          <Badge
+                            variant={
+                              risk.status === 'Closed' ||
+                              risk.status === 'Mitigated'
+                                ? 'secondary'
+                                : risk.status === 'Open'
+                                  ? 'outline'
+                                  : 'default'
+                            }
+                            className="capitalize"
+                          >
                             {risk.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-center">{risk.likelihood}</TableCell>
-                        <TableCell className="text-center">{risk.impact}</TableCell>
+                        <TableCell className="text-center">
+                          {risk.likelihood}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {risk.impact}
+                        </TableCell>
                         <TableCell className="text-center">
                           <Badge className={getRiskScoreColor(risk.riskScore)}>
                             {risk.riskScore}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button variant="ghost" size="icon" onClick={() => handleOpenRegisterModal(risk)} className="h-8 w-8" title="Edit Risk">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleOpenRegisterModal(risk)}
+                            className="h-8 w-8"
+                            title="Edit Risk"
+                          >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => onDeleteRisk(risk.id)} className="h-8 w-8 text-destructive hover:text-destructive" title="Delete Risk">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onDeleteRisk(risk.id)}
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            title="Delete Risk"
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </TableCell>

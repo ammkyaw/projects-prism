@@ -301,8 +301,7 @@ export default function SprintPlanningTab({
       .sort((a, b) => a.sprintNumber - b.sprintNumber);
   }, [sprints]);
 
-  const isFormDisabled =
-    selectedSprint?.status === 'Completed'; // Simplified read-only check
+  const isFormDisabled = selectedSprint?.status === 'Completed'; // Simplified read-only check
 
   const isSprintActive = selectedSprint?.status === 'Active';
   const isSprintPlanned = selectedSprint?.status === 'Planned';
@@ -401,8 +400,7 @@ export default function SprintPlanningTab({
 
   useEffect(() => {
     if (selectedSprint && !isCreatingNewSprint) {
-      const loadedPlanning =
-        selectedSprint.planning ?? initialSprintPlanning;
+      const loadedPlanning = selectedSprint.planning ?? initialSprintPlanning;
       setPlanningData(loadedPlanning);
       const mapTaskToRow = (
         task: Task,
@@ -551,11 +549,7 @@ export default function SprintPlanningTab({
       targetSprintNum !== undefined &&
       targetSprintNum !== null
     ) {
-      onRevertTask(
-        targetSprintNum,
-        taskToRemove.id,
-        taskToRemove.backlogId
-      );
+      onRevertTask(targetSprintNum, taskToRemove.id, taskToRemove.backlogId);
     }
     updater((prevRows) =>
       prevRows.filter((row) => row._internalId !== internalId)
@@ -848,11 +842,7 @@ export default function SprintPlanningTab({
   };
 
   const handleStartSprint = () => {
-    if (
-      !selectedSprint ||
-      !isSprintPlanned ||
-      selectedSprintNumber === null
-    ) {
+    if (!selectedSprint || !isSprintPlanned || selectedSprintNumber === null) {
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -898,11 +888,7 @@ export default function SprintPlanningTab({
   };
 
   const handleCompleteSprintClick = () => {
-    if (
-      !selectedSprint ||
-      !isSprintActive ||
-      selectedSprintNumber === null
-    )
+    if (!selectedSprint || !isSprintActive || selectedSprintNumber === null)
       return;
     const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(
       newTasks,
@@ -1178,10 +1164,7 @@ export default function SprintPlanningTab({
                     <SelectValue placeholder="Severity" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem
-                      value="none"
-                      className="text-muted-foreground"
-                    >
+                    <SelectItem value="none" className="text-muted-foreground">
                       -- Select --
                     </SelectItem>
                     {severities.map((option) => (
@@ -1655,7 +1638,9 @@ export default function SprintPlanningTab({
                 size="icon"
                 onClick={() => setTimelineViewMode('task')}
                 title="View by Task"
-                disabled={isFormDisabled && selectedSprint?.status !== 'Completed'} // Keep enabled for completed sprints
+                disabled={
+                  isFormDisabled && selectedSprint?.status !== 'Completed'
+                } // Keep enabled for completed sprints
               >
                 <GanttChartSquare className="h-4 w-4" />
               </Button>
@@ -1666,7 +1651,9 @@ export default function SprintPlanningTab({
                 size="icon"
                 onClick={() => setTimelineViewMode('assignee')}
                 title="View by Assignee"
-                disabled={isFormDisabled && selectedSprint?.status !== 'Completed'} // Keep enabled for completed sprints
+                disabled={
+                  isFormDisabled && selectedSprint?.status !== 'Completed'
+                } // Keep enabled for completed sprints
               >
                 <Users className="h-4 w-4" />
               </Button>
@@ -1903,15 +1890,12 @@ export default function SprintPlanningTab({
             {renderPlanningForm(isFormDisabled)}
           </CardContent>
           <CardFooter className="flex justify-end gap-2 border-t pt-4">
-            {isFormDisabled && onBackToOverview && ( // Show Back button if completed
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onBackToOverview}
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview
-              </Button>
-            )}
+            {isFormDisabled &&
+              onBackToOverview && ( // Show Back button if completed
+                <Button variant="outline" size="sm" onClick={onBackToOverview}>
+                  <ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview
+                </Button>
+              )}
             {!isFormDisabled && isSprintPlanned && (
               <Button
                 onClick={handleStartSprint}
@@ -1952,9 +1936,7 @@ export default function SprintPlanningTab({
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleCompleteSprintClick}
-                    >
+                    <AlertDialogAction onClick={handleCompleteSprintClick}>
                       Complete Sprint
                     </AlertDialogAction>
                   </AlertDialogFooter>
@@ -1962,11 +1944,9 @@ export default function SprintPlanningTab({
               </AlertDialog>
             )}
             {!isFormDisabled && (
-                 <Button
-                 onClick={handleSaveExistingSprintPlanning}
-               >
-                 Save Planning
-               </Button>
+              <Button onClick={handleSaveExistingSprintPlanning}>
+                Save Planning
+              </Button>
             )}
           </CardFooter>
         </Card>

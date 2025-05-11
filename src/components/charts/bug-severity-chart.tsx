@@ -33,22 +33,24 @@ const severityColors: { [key in SeverityType]: string } = {
   Low: 'hsl(var(--chart-2))', // Green-ish or a light blue
 };
 
-const chartConfig = severities.reduce(
-  (acc, severity) => {
-    acc[severity] = {
-      label: severity,
-      color: severityColors[severity],
-    };
-    return acc;
-  },
-  {} as ChartConfig
-);
+const chartConfig = severities.reduce((acc, severity) => {
+  acc[severity] = {
+    label: severity,
+    color: severityColors[severity],
+  };
+  return acc;
+}, {} as ChartConfig);
 
 export default function BugSeverityChart({ sprint }: BugSeverityChartProps) {
   const { pieChartData, totalBugs, totalTasks, bugPercentage } = useMemo(() => {
     if (!sprint || !sprint.planning) {
       // Check if sprint or its planning data is null
-      return { pieChartData: [], totalBugs: 0, totalTasks: 0, bugPercentage: 0 };
+      return {
+        pieChartData: [],
+        totalBugs: 0,
+        totalTasks: 0,
+        bugPercentage: 0,
+      };
     }
 
     const severityCounts: { [key in SeverityType]?: number } = {};

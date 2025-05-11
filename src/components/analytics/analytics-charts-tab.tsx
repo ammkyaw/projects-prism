@@ -180,7 +180,8 @@ export default function AnalyticsChartsTab({
               <LineChart className="h-5 w-5 text-primary" /> Velocity Chart
             </CardTitle>
             <CardDescription>
-              Committed vs. Completed points for project '{projectName}'. (Max last 10 Sprints)
+              Committed vs. Completed points for project '{projectName}'. (Max
+              last 10 Sprints)
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[calc(100%-100px)] pl-2">
@@ -300,7 +301,7 @@ export default function AnalyticsChartsTab({
         </Card>
 
         {/* Bug Severity Chart - New Chart */}
-        <Card className="h-[450px] lg:col-span-1"> 
+        <Card className="h-[450px] lg:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <PieChartIcon className="h-5 w-5 text-destructive" /> Bug Severity

@@ -169,9 +169,9 @@ export default function BacklogTab({
     direction: SortDirection;
   } | null>(null);
   const [isFilteringReady, setIsFilteringReady] = useState(false);
-  const savedRowRefs = useRef<Map<string, React.RefObject<HTMLTableRowElement>>>( // Changed to HTMLTableRowElement
-    new Map()
-  );
+  const savedRowRefs = useRef<
+    Map<string, React.RefObject<HTMLTableRowElement>>
+  >(new Map()); // Changed to HTMLTableRowElement
 
   const displayableSavedItems = useMemo(() => {
     return savedBacklogItems.filter(
@@ -187,14 +187,18 @@ export default function BacklogTab({
 
   useEffect(() => {
     savedRowRefs.current.clear();
-    const initialDisplayableItems = (initialBacklog || []).filter( // Add null check for initialBacklog
+    const initialDisplayableItems = (initialBacklog || []).filter(
+      // Add null check for initialBacklog
       (task) => !task.movedToSprint && !task.historyStatus
     );
 
     const mappedItems = initialDisplayableItems.map((item) => {
       const internalId = item.id;
       if (!savedRowRefs.current.has(internalId)) {
-        savedRowRefs.current.set(internalId, React.createRef<HTMLTableRowElement>()); // Changed to HTMLTableRowElement
+        savedRowRefs.current.set(
+          internalId,
+          React.createRef<HTMLTableRowElement>()
+        ); // Changed to HTMLTableRowElement
       }
       return {
         ...item,
@@ -364,7 +368,6 @@ export default function BacklogTab({
     setHasUnsavedChanges(true);
   };
 
-
   const handleNewDateChange = (
     internalId: string,
     field: 'createdDate',
@@ -509,7 +512,8 @@ export default function BacklogTab({
     let hasErrors = false;
     const itemsToSave: Task[] = [];
     const allKnownBacklogIds = new Set<string>();
-    allProjectBacklogItems.forEach((task) => { // Use allProjectBacklogItems for initial population
+    allProjectBacklogItems.forEach((task) => {
+      // Use allProjectBacklogItems for initial population
       if (task.backlogId) allKnownBacklogIds.add(task.backlogId.toLowerCase());
     });
 
@@ -568,8 +572,13 @@ export default function BacklogTab({
         );
       }
       if (!title) rowErrors.push('Title required');
-      if (storyPointsRaw && (isNaN(storyPointsValue as number) || (storyPointsValue as number) < 0)) {
-        rowErrors.push(`Row ${index + 1}: Story Points must be a non-negative number or empty.`);
+      if (
+        storyPointsRaw &&
+        (isNaN(storyPointsValue as number) || (storyPointsValue as number) < 0)
+      ) {
+        rowErrors.push(
+          `Row ${index + 1}: Story Points must be a non-negative number or empty.`
+        );
       }
       if (!createdDate || !isValid(parseISO(createdDate))) {
         rowErrors.push('Invalid Created Date (use YYYY-MM-DD)');
@@ -639,7 +648,11 @@ export default function BacklogTab({
 
     if (hasErrors) return;
     if (itemsToSave.length === 0) {
-      if (newBacklogRows.length > 0 && newBacklogRows.some(row => row.title?.trim() || row.backlogId?.trim())) { // Only toast if there was actual input
+      if (
+        newBacklogRows.length > 0 &&
+        newBacklogRows.some((row) => row.title?.trim() || row.backlogId?.trim())
+      ) {
+        // Only toast if there was actual input
         toast({
           title: 'No New Items',
           description: 'No valid new items to save.',
@@ -660,11 +673,10 @@ export default function BacklogTab({
 
   const handleSavedItemEditToggle = (itemId: string) => {
     setSavedBacklogItems((prev) =>
-      prev.map(
-        (item) =>
-          item.id === itemId
-            ? { ...item, isEditing: !item.isEditing }
-            : { ...item, isEditing: false }
+      prev.map((item) =>
+        item.id === itemId
+          ? { ...item, isEditing: !item.isEditing }
+          : { ...item, isEditing: false }
       )
     );
   };
@@ -707,7 +719,6 @@ export default function BacklogTab({
     setHasUnsavedChanges(true);
   };
 
-
   const handleSavedSelectChange = (
     itemId: string,
     field: 'taskType' | 'priority' | 'initiator' | 'severity',
@@ -749,14 +760,14 @@ export default function BacklogTab({
     const title = itemToSave.title?.trim();
     const storyPointsRaw = itemToSave.storyPoints?.toString().trim() ?? '';
     let storyPointsValue: number | null = null;
-      if (storyPointsRaw) {
-        const parsedSP = parseInt(storyPointsRaw, 10);
-        if (!isNaN(parsedSP) && parsedSP >= 0) {
-          storyPointsValue = parsedSP;
-        } else {
-          // error handling handled below
-        }
+    if (storyPointsRaw) {
+      const parsedSP = parseInt(storyPointsRaw, 10);
+      if (!isNaN(parsedSP) && parsedSP >= 0) {
+        storyPointsValue = parsedSP;
+      } else {
+        // error handling handled below
       }
+    }
     const taskType = itemToSave.taskType;
     const severity = itemToSave.severity;
 
@@ -764,7 +775,8 @@ export default function BacklogTab({
     let errors: string[] = [];
     if (!backlogId) errors.push(`Backlog ID required`);
     if (
-      allProjectBacklogItems.some( // Use allProjectBacklogItems for uniqueness check
+      allProjectBacklogItems.some(
+        // Use allProjectBacklogItems for uniqueness check
         (t) =>
           t.id !== itemId &&
           t.backlogId?.toLowerCase() === backlogId.toLowerCase()
@@ -776,10 +788,12 @@ export default function BacklogTab({
     if (taskType === 'Bug' && (!severity || !severities.includes(severity))) {
       errors.push('Severity is required for Bugs.');
     }
-    if (storyPointsRaw && (isNaN(storyPointsValue as number) || (storyPointsValue as number) < 0)) {
-        errors.push('Story Points must be a non-negative number or empty.');
+    if (
+      storyPointsRaw &&
+      (isNaN(storyPointsValue as number) || (storyPointsValue as number) < 0)
+    ) {
+      errors.push('Story Points must be a non-negative number or empty.');
     }
-
 
     if (errors.length > 0) {
       toast({
@@ -801,7 +815,13 @@ export default function BacklogTab({
       onUpdateSavedItem(finalTask);
       setSavedBacklogItems((prev) =>
         prev.map((item) =>
-          item.id === itemId ? { ...item, isEditing: false, storyPoints: storyPointsValue?.toString() ?? '' } : item
+          item.id === itemId
+            ? {
+                ...item,
+                isEditing: false,
+                storyPoints: storyPointsValue?.toString() ?? '',
+              }
+            : item
         )
       );
       setHasUnsavedChanges(false); // Reset after successful save
@@ -824,7 +844,8 @@ export default function BacklogTab({
 
   const potentialDependenciesForNewItems = useMemo(() => {
     if (!editingDepsTaskId) return [];
-    const allBacklogItemsForDeps = [ // Use allProjectBacklogItems for context
+    const allBacklogItemsForDeps = [
+      // Use allProjectBacklogItems for context
       ...allProjectBacklogItems.map((t) => ({
         id: t.backlogId!,
         title: t.title || `Item ${t.backlogId}`,
@@ -872,254 +893,274 @@ export default function BacklogTab({
                     <TableHead>Title*</TableHead>
                     <TableHead className="w-[120px]">Task Type*</TableHead>
                     <TableHead className="w-[100px]">Severity</TableHead>
-                    <TableHead className="w-[80px] text-right">Story Pts</TableHead>
+                    <TableHead className="w-[80px] text-right">
+                      Story Pts
+                    </TableHead>
                     <TableHead className="w-[120px]">Initiator</TableHead>
                     <TableHead className="w-[120px]">Created Date*</TableHead>
                     <TableHead className="w-[100px]">Priority*</TableHead>
                     <TableHead className="w-[100px]">Dependencies</TableHead>
-                    <TableHead className="w-[80px] text-center">Groom?</TableHead>
-                    <TableHead className="w-[60px] text-center">Ready?</TableHead>
+                    <TableHead className="w-[80px] text-center">
+                      Groom?
+                    </TableHead>
+                    <TableHead className="w-[60px] text-center">
+                      Ready?
+                    </TableHead>
                     <TableHead className="w-[40px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                {newBacklogRows.map((row) => (
-                  <TableRow
-                    key={row._internalId}
-                  >
-                    <TableCell className="font-medium">
-                      <Input
-                        id={`new-backlog-id-${row._internalId}`}
-                        value={row.backlogId ?? ''}
-                        readOnly
-                        className="h-9 cursor-default bg-muted/50"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        id={`new-backlog-title-${row._internalId}`}
-                        value={row.title ?? ''}
-                        onChange={(e) =>
-                          handleNewInputChange(
-                            row._internalId,
-                            'title',
-                            e.target.value
-                          )
-                        }
-                        placeholder="Task Title"
-                        className="h-9"
-                        required
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={row.taskType ?? 'New Feature'}
-                        onValueChange={(value) =>
-                          handleNewSelectChange(
-                            row._internalId,
-                            'taskType',
-                            value
-                          )
-                        }
-                      >
-                        <SelectTrigger
-                          id={`new-backlog-type-${row._internalId}`}
-                          className="h-9"
-                        >
-                          <SelectValue placeholder="Type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {taskTypes.map((option) => (
-                            <SelectItem key={option} value={option}>
-                              {option}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={row.severity ?? 'none'}
-                        onValueChange={(value) => handleNewSelectChange(row._internalId, 'severity', value)}
-                        disabled={row.taskType !== 'Bug'}
-                      >
-                        <SelectTrigger id={`new-severity-${row._internalId}`} className="h-9">
-                          <SelectValue placeholder="Severity" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none" className="text-muted-foreground">-- Select --</SelectItem>
-                          {severities.map(option => (
-                            <SelectItem key={option} value={option}>{option}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
+                  {newBacklogRows.map((row) => (
+                    <TableRow key={row._internalId}>
+                      <TableCell className="font-medium">
                         <Input
-                            id={`new-story-points-${row._internalId}`}
-                            type="text"
-                            value={row.storyPoints ?? ''}
-                            onChange={(e) =>
-                                handleNewStoryPointsChange(
-                                    row._internalId,
-                                    e.target.value
-                                )
-                            }
-                            placeholder="Pts"
-                            className="h-9 text-right"
+                          id={`new-backlog-id-${row._internalId}`}
+                          value={row.backlogId ?? ''}
+                          readOnly
+                          className="h-9 cursor-default bg-muted/50"
                         />
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={row.initiator ?? 'none'}
-                        onValueChange={(value) =>
-                          handleNewSelectChange(
-                            row._internalId,
-                            'initiator',
-                            value
-                          )
-                        }
-                        disabled={members.length === 0}
-                      >
-                        <SelectTrigger
-                          id={`new-backlog-initiator-${row._internalId}`}
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          id={`new-backlog-title-${row._internalId}`}
+                          value={row.title ?? ''}
+                          onChange={(e) =>
+                            handleNewInputChange(
+                              row._internalId,
+                              'title',
+                              e.target.value
+                            )
+                          }
+                          placeholder="Task Title"
                           className="h-9"
+                          required
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={row.taskType ?? 'New Feature'}
+                          onValueChange={(value) =>
+                            handleNewSelectChange(
+                              row._internalId,
+                              'taskType',
+                              value
+                            )
+                          }
                         >
-                          <SelectValue placeholder="Initiator" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem
-                            value="none"
-                            className="text-muted-foreground"
+                          <SelectTrigger
+                            id={`new-backlog-type-${row._internalId}`}
+                            className="h-9"
                           >
-                            -- None --
-                          </SelectItem>
-                          {members.map((member) => (
-                            <SelectItem key={member.id} value={member.name}>
-                              {member.name}
-                            </SelectItem>
-                          ))}
-                          {members.length === 0 && (
-                            <SelectItem value="no-members" disabled>
-                              No members
-                            </SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        id={`new-backlog-created-${row._internalId}`}
-                        type="date"
-                        value={row.createdDate}
-                        onChange={(e) =>
-                          handleNewInputChange(
-                            row._internalId,
-                            'createdDate',
-                            e.target.value
-                          )
-                        }
-                        required
-                        className="h-9 w-full"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={row.priority ?? 'Medium'}
-                        onValueChange={(value) =>
-                          handleNewSelectChange(
-                            row._internalId,
-                            'priority',
-                            value
-                          )
-                        }
-                      >
-                        <SelectTrigger
-                          id={`new-backlog-priority-${row._internalId}`}
-                          className="h-9"
+                            <SelectValue placeholder="Type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {taskTypes.map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={row.severity ?? 'none'}
+                          onValueChange={(value) =>
+                            handleNewSelectChange(
+                              row._internalId,
+                              'severity',
+                              value
+                            )
+                          }
+                          disabled={row.taskType !== 'Bug'}
                         >
-                          <SelectValue placeholder="Priority" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {taskPriorities.map((option) => (
-                            <SelectItem key={option} value={option}>
-                              {option}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell className="self-center">
-                      <div className="flex min-h-[36px] flex-wrap items-center gap-1">
-                        {row.dependsOn && row.dependsOn.length > 0 ? (
-                          row.dependsOn.map((depId) => (
-                            <span
-                              key={depId}
-                              className="rounded bg-muted/50 px-1 py-0.5 text-xs text-muted-foreground"
+                          <SelectTrigger
+                            id={`new-severity-${row._internalId}`}
+                            className="h-9"
+                          >
+                            <SelectValue placeholder="Severity" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem
+                              value="none"
+                              className="text-muted-foreground"
                             >
-                              {depId}
+                              -- Select --
+                            </SelectItem>
+                            {severities.map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          id={`new-story-points-${row._internalId}`}
+                          type="text"
+                          value={row.storyPoints ?? ''}
+                          onChange={(e) =>
+                            handleNewStoryPointsChange(
+                              row._internalId,
+                              e.target.value
+                            )
+                          }
+                          placeholder="Pts"
+                          className="h-9 text-right"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={row.initiator ?? 'none'}
+                          onValueChange={(value) =>
+                            handleNewSelectChange(
+                              row._internalId,
+                              'initiator',
+                              value
+                            )
+                          }
+                          disabled={members.length === 0}
+                        >
+                          <SelectTrigger
+                            id={`new-backlog-initiator-${row._internalId}`}
+                            className="h-9"
+                          >
+                            <SelectValue placeholder="Initiator" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem
+                              value="none"
+                              className="text-muted-foreground"
+                            >
+                              -- None --
+                            </SelectItem>
+                            {members.map((member) => (
+                              <SelectItem key={member.id} value={member.name}>
+                                {member.name}
+                              </SelectItem>
+                            ))}
+                            {members.length === 0 && (
+                              <SelectItem value="no-members" disabled>
+                                No members
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          id={`new-backlog-created-${row._internalId}`}
+                          type="date"
+                          value={row.createdDate}
+                          onChange={(e) =>
+                            handleNewInputChange(
+                              row._internalId,
+                              'createdDate',
+                              e.target.value
+                            )
+                          }
+                          required
+                          className="h-9 w-full"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={row.priority ?? 'Medium'}
+                          onValueChange={(value) =>
+                            handleNewSelectChange(
+                              row._internalId,
+                              'priority',
+                              value
+                            )
+                          }
+                        >
+                          <SelectTrigger
+                            id={`new-backlog-priority-${row._internalId}`}
+                            className="h-9"
+                          >
+                            <SelectValue placeholder="Priority" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {taskPriorities.map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="self-center">
+                        <div className="flex min-h-[36px] flex-wrap items-center gap-1">
+                          {row.dependsOn && row.dependsOn.length > 0 ? (
+                            row.dependsOn.map((depId) => (
+                              <span
+                                key={depId}
+                                className="rounded bg-muted/50 px-1 py-0.5 text-xs text-muted-foreground"
+                              >
+                                {depId}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs italic text-muted-foreground">
+                              None
                             </span>
-                          ))
-                        ) : (
-                          <span className="text-xs italic text-muted-foreground">
-                            None
-                          </span>
-                        )}
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="ml-1 h-6 w-6"
+                            onClick={() =>
+                              handleOpenDepsDialog(row._internalId, true)
+                            }
+                            aria-label="Edit Dependencies"
+                          >
+                            <LinkIcon className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Checkbox
+                          id={`new-needs-grooming-${row._internalId}`}
+                          checked={row.needsGrooming}
+                          onCheckedChange={(checked) =>
+                            handleNewCheckboxChange(
+                              row._internalId,
+                              'needsGrooming',
+                              checked
+                            )
+                          }
+                          className="h-5 w-5"
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Checkbox
+                          id={`new-ready-sprint-${row._internalId}`}
+                          checked={row.readyForSprint}
+                          onCheckedChange={(checked) =>
+                            handleNewCheckboxChange(
+                              row._internalId,
+                              'readyForSprint',
+                              checked
+                            )
+                          }
+                          className="h-5 w-5"
+                        />
+                      </TableCell>
+                      <TableCell>
                         <Button
+                          type="button"
                           variant="ghost"
                           size="icon"
-                          className="ml-1 h-6 w-6"
-                          onClick={() =>
-                            handleOpenDepsDialog(row._internalId, true)
-                          }
-                          aria-label="Edit Dependencies"
+                          onClick={() => handleRemoveNewRow(row._internalId)}
+                          className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                          aria-label="Remove new backlog row"
                         >
-                          <LinkIcon className="h-3 w-3" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Checkbox
-                        id={`new-needs-grooming-${row._internalId}`}
-                        checked={row.needsGrooming}
-                        onCheckedChange={(checked) =>
-                          handleNewCheckboxChange(
-                            row._internalId,
-                            'needsGrooming',
-                            checked
-                          )
-                        }
-                        className="h-5 w-5"
-                      />
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Checkbox
-                        id={`new-ready-sprint-${row._internalId}`}
-                        checked={row.readyForSprint}
-                        onCheckedChange={(checked) =>
-                          handleNewCheckboxChange(
-                            row._internalId,
-                            'readyForSprint',
-                            checked
-                          )
-                        }
-                        className="h-5 w-5"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemoveNewRow(row._internalId)}
-                        className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                        aria-label="Remove new backlog row"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
               <Button
@@ -1213,18 +1254,30 @@ export default function BacklogTab({
                         </Button>
                       </TableHead>
                       <TableHead className="w-[120px]">
-                         <Button variant="ghost" onClick={() => requestSort('taskType')} className="h-auto justify-start px-1 text-xs font-medium text-muted-foreground">
-                            Task Type {getSortIndicator('taskType')}
+                        <Button
+                          variant="ghost"
+                          onClick={() => requestSort('taskType')}
+                          className="h-auto justify-start px-1 text-xs font-medium text-muted-foreground"
+                        >
+                          Task Type {getSortIndicator('taskType')}
                         </Button>
                       </TableHead>
                       <TableHead className="w-[80px] text-right">
-                        <Button variant="ghost" onClick={() => requestSort('storyPoints')} className="h-auto justify-end px-1 text-xs font-medium text-muted-foreground">
-                            Story Pts {getSortIndicator('storyPoints')}
+                        <Button
+                          variant="ghost"
+                          onClick={() => requestSort('storyPoints')}
+                          className="h-auto justify-end px-1 text-xs font-medium text-muted-foreground"
+                        >
+                          Story Pts {getSortIndicator('storyPoints')}
                         </Button>
                       </TableHead>
-                       <TableHead className="w-[100px]">
-                        <Button variant="ghost" onClick={() => requestSort('severity')} className="h-auto justify-start px-1 text-xs font-medium text-muted-foreground">
-                            Severity {getSortIndicator('severity')}
+                      <TableHead className="w-[100px]">
+                        <Button
+                          variant="ghost"
+                          onClick={() => requestSort('severity')}
+                          className="h-auto justify-start px-1 text-xs font-medium text-muted-foreground"
+                        >
+                          Severity {getSortIndicator('severity')}
                         </Button>
                       </TableHead>
                       <TableHead className="w-[120px]">Initiator</TableHead>
@@ -1371,28 +1424,49 @@ export default function BacklogTab({
                               className="h-9 text-right"
                             />
                           ) : (
-                            <span className="text-sm text-right block w-full">{row.storyPoints ?? '-'}</span>
+                            <span className="block w-full text-right text-sm">
+                              {row.storyPoints ?? '-'}
+                            </span>
                           )}
                         </TableCell>
                         <TableCell>
                           {row.isEditing ? (
                             <Select
                               value={row.severity ?? 'none'}
-                              onValueChange={(value) => handleSavedSelectChange(row.id, 'severity', value)}
+                              onValueChange={(value) =>
+                                handleSavedSelectChange(
+                                  row.id,
+                                  'severity',
+                                  value
+                                )
+                              }
                               disabled={row.taskType !== 'Bug'}
                             >
-                              <SelectTrigger id={`saved-severity-${row.id}`} className="h-9">
+                              <SelectTrigger
+                                id={`saved-severity-${row.id}`}
+                                className="h-9"
+                              >
                                 <SelectValue placeholder="Severity" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="none" className="text-muted-foreground">-- Select --</SelectItem>
-                                {severities.map(option => (
-                                  <SelectItem key={option} value={option}>{option}</SelectItem>
+                                <SelectItem
+                                  value="none"
+                                  className="text-muted-foreground"
+                                >
+                                  -- Select --
+                                </SelectItem>
+                                {severities.map((option) => (
+                                  <SelectItem key={option} value={option}>
+                                    {option}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           ) : (
-                            <span className="text-sm">{row.severity || (row.taskType === 'Bug' ? '-' : '')}</span>
+                            <span className="text-sm">
+                              {row.severity ||
+                                (row.taskType === 'Bug' ? '-' : '')}
+                            </span>
                           )}
                         </TableCell>
                         <TableCell>
@@ -1640,10 +1714,14 @@ export default function BacklogTab({
                 </Label>
                 <span className="col-span-2">{viewingTask.taskType}</span>
               </div>
-               {viewingTask.taskType === 'Bug' && (
+              {viewingTask.taskType === 'Bug' && (
                 <div className="grid grid-cols-3 items-center gap-4">
-                  <Label className="text-right font-medium text-muted-foreground">Severity</Label>
-                  <span className="col-span-2">{viewingTask.severity || '-'}</span>
+                  <Label className="text-right font-medium text-muted-foreground">
+                    Severity
+                  </Label>
+                  <span className="col-span-2">
+                    {viewingTask.severity || '-'}
+                  </span>
                 </div>
               )}
               <div className="grid grid-cols-3 items-center gap-4">

@@ -143,8 +143,14 @@ export default function MergeBacklogDialog({
 
   const handleConfirm = () => {
     // Validate required fields for the new merged task
-    const { backlogId, title, priority, taskType, createdDate, storyPoints: storyPointsRaw } =
-      mergedTaskDetails;
+    const {
+      backlogId,
+      title,
+      priority,
+      taskType,
+      createdDate,
+      storyPoints: storyPointsRaw,
+    } = mergedTaskDetails;
     if (!backlogId?.trim()) {
       // Validate generated ID (should always exist but check anyway)
       toast({
@@ -197,15 +203,18 @@ export default function MergeBacklogDialog({
 
     let finalStoryPoints: number | null = null;
     if (storyPointsRaw != null && storyPointsRaw !== '') {
-        const parsedSP = parseInt(storyPointsRaw.toString(), 10);
-        if (!isNaN(parsedSP) && parsedSP >= 0) {
-            finalStoryPoints = parsedSP;
-        } else {
-            toast({ variant: 'destructive', title: 'Validation Error', description: 'Story Points must be a non-negative number or empty.' });
-            return;
-        }
+      const parsedSP = parseInt(storyPointsRaw.toString(), 10);
+      if (!isNaN(parsedSP) && parsedSP >= 0) {
+        finalStoryPoints = parsedSP;
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Validation Error',
+          description: 'Story Points must be a non-negative number or empty.',
+        });
+        return;
+      }
     }
-
 
     const finalMergedTask: Task = {
       ...initialBacklogTask, // Start with defaults
@@ -239,7 +248,7 @@ export default function MergeBacklogDialog({
   };
 
   const handleStoryPointsChange = (value: string) => {
-      setMergedTaskDetails((prev) => ({ ...prev, storyPoints: value }));
+    setMergedTaskDetails((prev) => ({ ...prev, storyPoints: value }));
   };
 
   const handlePriorityChange = (value: string) => {
@@ -407,9 +416,7 @@ export default function MergeBacklogDialog({
                       id="merged-sp"
                       type="text" // Changed to text to allow empty
                       value={mergedTaskDetails.storyPoints?.toString() ?? ''}
-                      onChange={(e) =>
-                        handleStoryPointsChange(e.target.value)
-                      }
+                      onChange={(e) => handleStoryPointsChange(e.target.value)}
                       placeholder="Est. SP"
                     />
                   </div>

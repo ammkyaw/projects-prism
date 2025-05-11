@@ -65,12 +65,7 @@ export const predefinedTaskTypes: readonly TaskType[] = [...taskTypes];
 
 // Severity Types for Bug tasks
 export type SeverityType = 'Low' | 'Medium' | 'High' | 'Critical';
-export const severities: SeverityType[] = [
-  'Low',
-  'Medium',
-  'High',
-  'Critical',
-];
+export const severities: SeverityType[] = ['Low', 'Medium', 'High', 'Critical'];
 
 // Represents the status of a backlog item in history
 export type HistoryStatus = 'Move' | 'Split' | 'Merge';
@@ -297,7 +292,7 @@ export const taskStatuses: Array<Task['status']> = [
   'Done',
   'Blocked',
 ];
-export const predefinedTicketStatuses: readonly (Task['status'])[] = [
+export const predefinedTicketStatuses: readonly Task['status'][] = [
   ...taskStatuses,
 ];
 

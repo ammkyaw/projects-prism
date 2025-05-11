@@ -68,9 +68,8 @@ export default function RegisterRiskModal({
   existingRiskTitles,
   initialData,
 }: RegisterRiskModalProps) {
-  const [riskDetails, setRiskDetails] = useState<Omit<RiskItem, 'id' | 'riskScore'>>(
-    initialRiskItem
-  );
+  const [riskDetails, setRiskDetails] =
+    useState<Omit<RiskItem, 'id' | 'riskScore'>>(initialRiskItem);
   const [identifiedDateObj, setIdentifiedDateObj] = useState<Date | undefined>(
     undefined
   );
@@ -80,7 +79,7 @@ export default function RegisterRiskModal({
     const likelihoodValue = riskLikelihoodValues[riskDetails.likelihood];
     const impactValue = riskImpactValues[riskDetails.impact];
     if (likelihoodValue && impactValue) {
-       return likelihoodValue * impactValue;
+      return likelihoodValue * impactValue;
     }
     return 0; // Return 0 if likelihood or impact is not set
   }, [riskDetails.likelihood, riskDetails.impact]);
@@ -90,7 +89,11 @@ export default function RegisterRiskModal({
       if (initialData) {
         const { id, riskScore, ...editableData } = initialData; // Exclude id and riskScore
         setRiskDetails(editableData);
-        setIdentifiedDateObj(initialData.identifiedDate ? parseISO(initialData.identifiedDate) : undefined);
+        setIdentifiedDateObj(
+          initialData.identifiedDate
+            ? parseISO(initialData.identifiedDate)
+            : undefined
+        );
       } else {
         setRiskDetails(initialRiskItem);
         setIdentifiedDateObj(undefined);
@@ -132,9 +135,12 @@ export default function RegisterRiskModal({
       });
       return;
     }
-     // Check for duplicates only if it's a new risk or if the title has changed for an existing risk
+    // Check for duplicates only if it's a new risk or if the title has changed for an existing risk
     if (
-      (!initialData || (initialData && initialData.title.toLowerCase() !== riskDetails.title.trim().toLowerCase())) &&
+      (!initialData ||
+        (initialData &&
+          initialData.title.toLowerCase() !==
+            riskDetails.title.trim().toLowerCase())) &&
       existingRiskTitles.includes(riskDetails.title.trim().toLowerCase())
     ) {
       toast({
@@ -153,8 +159,12 @@ export default function RegisterRiskModal({
       return;
     }
     if (!riskDetails.owner) {
-         toast({ variant: 'destructive', title: 'Validation Error', description: 'Owner is required.' });
-         return;
+      toast({
+        variant: 'destructive',
+        title: 'Validation Error',
+        description: 'Owner is required.',
+      });
+      return;
     }
     // The ID and riskScore will be handled by the parent/hook,
     // or preserved if initialData (editing) is present.
@@ -169,10 +179,12 @@ export default function RegisterRiskModal({
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-primary" /> {initialData ? 'Edit Risk' : 'Register New Risk'}
+            <AlertTriangle className="h-5 w-5 text-primary" />{' '}
+            {initialData ? 'Edit Risk' : 'Register New Risk'}
           </DialogTitle>
           <DialogDescription>
-            Fill in the details for the {initialData ? 'risk item' : 'new risk item'}.
+            Fill in the details for the{' '}
+            {initialData ? 'risk item' : 'new risk item'}.
           </DialogDescription>
         </DialogHeader>
 
@@ -242,13 +254,19 @@ export default function RegisterRiskModal({
                     <SelectValue placeholder="Select Owner" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none" disabled>-- Select Owner --</SelectItem>
+                    <SelectItem value="none" disabled>
+                      -- Select Owner --
+                    </SelectItem>
                     {projectMembers.map((member) => (
                       <SelectItem key={member.id} value={member.name}>
                         {member.name} ({member.role})
                       </SelectItem>
                     ))}
-                     {projectMembers.length === 0 && <SelectItem value="no-members" disabled>No members in project</SelectItem>}
+                    {projectMembers.length === 0 && (
+                      <SelectItem value="no-members" disabled>
+                        No members in project
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -372,7 +390,7 @@ export default function RegisterRiskModal({
                 rows={3}
               />
             </div>
-             <p className="text-xs text-muted-foreground">* Required field.</p>
+            <p className="text-xs text-muted-foreground">* Required field.</p>
           </div>
         </ScrollArea>
 
