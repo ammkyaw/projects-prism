@@ -178,10 +178,12 @@ export const useSettingsActions = ({
         return;
       }
 
-      const likelihoodValue =
-        riskLikelihoodValues[riskDetails.likelihood as RiskLikelihood] || 0;
-      const impactValue =
-        riskImpactValues[riskDetails.impact as RiskImpact] || 0;
+      // Ensure likelihood and impact have valid values for score calculation
+      const likelihood: RiskLikelihood = riskDetails.likelihood || 'Possible'; // Default if empty
+      const impact: RiskImpact = riskDetails.impact || 'Moderate'; // Default if empty
+
+      const likelihoodValue = riskLikelihoodValues[likelihood] || 0;
+      const impactValue = riskImpactValues[impact] || 0;
 
       const riskScore = likelihoodValue * impactValue;
 
@@ -202,7 +204,7 @@ export const useSettingsActions = ({
         }
         updatedRisks = (selectedProject.risks || []).map((r) =>
           r.id === existingId
-            ? { ...riskToUpdate, ...riskDetails, riskScore }
+            ? { ...riskToUpdate, ...riskDetails, likelihood, impact, riskScore }
             : r
         );
         toastMessage = `Risk "${riskDetails.title}" has been updated.`;
@@ -210,6 +212,8 @@ export const useSettingsActions = ({
         const newRiskId = `Risk_${format(new Date(), 'yyyyMMddHHmmss')}`;
         const newRiskWithId: RiskItem = {
           ...riskDetails,
+          likelihood,
+          impact,
           id: newRiskId,
           riskScore,
         };

@@ -41,7 +41,7 @@ import type {
 import {
   riskCategories,
   riskStatuses,
-  riskLikelihoods, // Use the updated array from types
+  riskLikelihoods,
   riskImpacts,
   riskLikelihoodValues,
   riskImpactValues,
@@ -76,21 +76,23 @@ export default function RegisterRiskModal({
   const { toast } = useToast();
 
   const calculateRiskScore = useCallback((): number => {
-    const likelihoodValue = riskLikelihoodValues[riskDetails.likelihood as RiskLikelihood]; // Ensure type assertion
-    const impactValue = riskImpactValues[riskDetails.impact as RiskImpact]; // Ensure type assertion
+    const likelihoodValue =
+      riskLikelihoodValues[riskDetails.likelihood as RiskLikelihood];
+    const impactValue = riskImpactValues[riskDetails.impact as RiskImpact];
     if (likelihoodValue && impactValue) {
       return likelihoodValue * impactValue;
     }
-    return 0; // Return 0 if likelihood or impact is not set
+    return 0;
   }, [riskDetails.likelihood, riskDetails.impact]);
 
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
-        const { id, riskScore, ...editableData } = initialData; // Exclude id and riskScore
+        const { id, riskScore, ...editableData } = initialData;
         setRiskDetails(editableData);
         setIdentifiedDateObj(
-          initialData.identifiedDate && isValid(parseISO(initialData.identifiedDate))
+          initialData.identifiedDate &&
+            isValid(parseISO(initialData.identifiedDate))
             ? parseISO(initialData.identifiedDate)
             : undefined
         );
@@ -127,13 +129,9 @@ export default function RegisterRiskModal({
   };
 
   const handleSave = () => {
+    let errors: string[] = [];
     if (!riskDetails.title.trim()) {
-      toast({
-        variant: 'destructive',
-        title: 'Validation Error',
-        description: 'Risk title is required.',
-      });
-      return;
+      errors.push('Risk title is required.');
     }
     if (
       (!initialData ||
@@ -142,29 +140,30 @@ export default function RegisterRiskModal({
             riskDetails.title.trim().toLowerCase())) &&
       existingRiskTitles.includes(riskDetails.title.trim().toLowerCase())
     ) {
-      toast({
-        variant: 'destructive',
-        title: 'Validation Error',
-        description: 'A risk with this title already exists.',
-      });
-      return;
+      errors.push('A risk with this title already exists.');
     }
     if (!riskDetails.identifiedDate) {
-      toast({
-        variant: 'destructive',
-        title: 'Validation Error',
-        description: 'Identified date is required.',
-      });
-      return;
+      errors.push('Identified date is required.');
     }
     if (!riskDetails.owner) {
+      errors.push('Owner is required.');
+    }
+    if (!riskDetails.likelihood) {
+      errors.push('Likelihood is required.');
+    }
+    if (!riskDetails.impact) {
+      errors.push('Impact is required.');
+    }
+
+    if (errors.length > 0) {
       toast({
         variant: 'destructive',
         title: 'Validation Error',
-        description: 'Owner is required.',
+        description: errors.join('\n'),
       });
       return;
     }
+
     onSaveRisk(riskDetails);
     onOpenChange(false);
   };
@@ -309,7 +308,7 @@ export default function RegisterRiskModal({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="risk-likelihood">Likelihood</Label>
+                <Label htmlFor="risk-likelihood">Likelihood*</Label>
                 <Select
                   value={riskDetails.likelihood}
                   onValueChange={(value) =>
@@ -329,7 +328,7 @@ export default function RegisterRiskModal({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="risk-impact">Impact</Label>
+                <Label htmlFor="risk-impact">Impact*</Label>
                 <Select
                   value={riskDetails.impact}
                   onValueChange={(value) =>
