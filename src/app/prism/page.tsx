@@ -937,6 +937,7 @@ function PrismPage() {
           sprintData: selectedProject.sprintData,
           backlog: selectedProject.backlog,
           members: selectedProject.members,
+          risks: selectedProject.risks,
         };
       }
     }

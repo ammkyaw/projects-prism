@@ -190,6 +190,7 @@ export type RiskLikelihood =
   | 'Possible'
   | 'Likely'
   | 'Almost Certain';
+// Order for Heatmap Rows (bottom to top)
 export const riskLikelihoods: RiskLikelihood[] = [
   'Rare',
   'Unlikely',
@@ -211,6 +212,7 @@ export type RiskImpact =
   | 'Moderate'
   | 'Major'
   | 'Catastrophic';
+// Order for Heatmap Columns (left to right)
 export const riskImpacts: RiskImpact[] = [
   'Insignificant',
   'Minor',
@@ -267,7 +269,7 @@ export const initialSprintData: SprintData = {
 export const initialSprintPlanning: SprintPlanning = {
   goal: '',
   newTasks: [],
-  spilloverTasks: [],
+  spilloverTasks: Task[];
   definitionOfDone: '',
   testingStrategy: '',
 };
@@ -322,23 +324,23 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
   taskType: 'New Feature',
   createdDate: '',
   initiator: null,
-  dependsOn: [],
-  needsGrooming: false,
-  readyForSprint: false,
-  movedToSprint: null,
-  historyStatus: null,
-  splitFromId: null,
-  mergeEventId: null,
-  devEstimatedTime: null,
-  qaEstimatedTime: null,
-  bufferTime: null,
-  assignee: null,
-  reviewer: null,
-  status: null,
-  startDate: null,
-  completedDate: null,
-  devTime: undefined, // Remove or align devTime
-  severity: null, // Initialize severity
+  dependsOn: [];
+  needsGrooming: false;
+  readyForSprint: false;
+  movedToSprint: null;
+  historyStatus: null;
+  splitFromId: null;
+  mergeEventId: null;
+  devEstimatedTime: null;
+  qaEstimatedTime: null;
+  bufferTime: null;
+  assignee: null;
+  reviewer: null;
+  status: null;
+  startDate: null;
+  completedDate: null;
+  devTime: undefined; // Remove or align devTime
+  severity: null; // Initialize severity
 };
 
 export type ToastFun = (props: {
