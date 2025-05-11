@@ -32,11 +32,11 @@ const LandingPage = () => {
 
   // Function to handle successful login (passed to the modal)
   const handleSuccessfulLogin = () => {
-    setIsLoginModalOpen(false); // Close the modal first
     // The LoginModal will handle showing "Logging in..."
     // The dashboard page will handle showing "Loading project data..."
     // and "Login Successful" upon successful data fetch.
     router.push('/prism'); // Navigate to the main app page after successful login
+    // The modal will unmount automatically due to page navigation.
   };
 
   return (

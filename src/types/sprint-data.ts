@@ -61,6 +61,8 @@ export const taskTypes: TaskType[] = [
   'CI/CD',
   'Compliance',
 ];
+export const predefinedTaskTypes: readonly TaskType[] = [...taskTypes];
+
 
 // Severity Types for Bug tasks
 export type SeverityType = 'Low' | 'Medium' | 'High' | 'Critical';
@@ -204,6 +206,8 @@ export const taskStatuses: Array<Task['status']> = [
   'Done',
   'Blocked',
 ];
+export const predefinedTicketStatuses: readonly (Task['status'])[] = [...taskStatuses];
+
 
 export const taskPriorities: Array<Task['priority']> = [
   'Highest',
