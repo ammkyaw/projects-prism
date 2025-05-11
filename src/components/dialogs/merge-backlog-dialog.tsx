@@ -31,7 +31,7 @@ import {
   initialBacklogTask,
 } from '@/types/sprint-data';
 import { useToast } from '@/hooks/use-toast';
-import { format, isValid, parseISO } from 'date-fns'; // Removed getYear
+import { format, isValid, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 interface MergeBacklogDialogProps {
@@ -39,8 +39,6 @@ interface MergeBacklogDialogProps {
   onOpenChange: (open: boolean) => void;
   availableBacklogItems: Task[]; // All items available for merging
   onConfirmMerge: (taskIdsToMerge: string[], mergedTask: Task) => void;
-  // Remove generateNextBacklogId prop as ID generation is now based on selected items
-  // generateNextBacklogId: (allProjectBacklogItems: Task[]) => string;
   allProjectBacklogItems: Task[]; // Still needed for context if validation is complex
 }
 
@@ -62,7 +60,6 @@ export default function MergeBacklogDialog({
   onOpenChange,
   availableBacklogItems,
   onConfirmMerge,
-  // generateNextBacklogId, // Removed prop
   allProjectBacklogItems, // Kept for potential context/validation
 }: MergeBacklogDialogProps) {
   const [step, setStep] = useState<'select' | 'confirm'>('select');
@@ -135,7 +132,7 @@ export default function MergeBacklogDialog({
       initiator: firstSelectedItem?.initiator, // Optional: Maybe take initiator from first? Or leave blank?
       dependsOn: [...new Set(selectedTasks.flatMap((t) => t.dependsOn || []))], // Combine unique dependencies
       createdDate: format(new Date(), 'yyyy-MM-dd'), // Set created date to now
-      storyPoints: null, // Requires re-estimation
+      storyPoints: null, // Requires re-estimation, store as null initially
     });
     setStep('confirm');
   };
@@ -146,7 +143,7 @@ export default function MergeBacklogDialog({
 
   const handleConfirm = () => {
     // Validate required fields for the new merged task
-    const { backlogId, title, priority, taskType, createdDate } =
+    const { backlogId, title, priority, taskType, createdDate, storyPoints: storyPointsRaw } =
       mergedTaskDetails;
     if (!backlogId?.trim()) {
       // Validate generated ID (should always exist but check anyway)
@@ -157,14 +154,12 @@ export default function MergeBacklogDialog({
       });
       return;
     }
-    // Basic check for potential collisions with the '-m' suffix, though unlikely
     if (allProjectBacklogItems.some((t) => t.backlogId === backlogId)) {
       toast({
         variant: 'destructive',
         title: 'Validation Error',
         description: `Generated Backlog ID "${backlogId}" might conflict. Please adjust manually if needed (though this is rare).`,
       });
-      // Consider allowing manual override or regeneration if collisions are a concern
       // For now, we proceed.
     }
     if (!title?.trim()) {
@@ -200,12 +195,25 @@ export default function MergeBacklogDialog({
       return;
     }
 
+    let finalStoryPoints: number | null = null;
+    if (storyPointsRaw != null && storyPointsRaw !== '') {
+        const parsedSP = parseInt(storyPointsRaw.toString(), 10);
+        if (!isNaN(parsedSP) && parsedSP >= 0) {
+            finalStoryPoints = parsedSP;
+        } else {
+            toast({ variant: 'destructive', title: 'Validation Error', description: 'Story Points must be a non-negative number or empty.' });
+            return;
+        }
+    }
+
+
     const finalMergedTask: Task = {
       ...initialBacklogTask, // Start with defaults
       ...mergedTaskDetails, // Apply edited details
       id: '', // Will be set by parent
       backlogId: backlogId.trim(), // Use the validated ID
       ticketNumber: backlogId.trim(), // Use backlogId as initial ticketNumber
+      storyPoints: finalStoryPoints, // Use parsed story points
       needsGrooming: true, // Merged items always need grooming
       readyForSprint: false,
     };
@@ -223,11 +231,15 @@ export default function MergeBacklogDialog({
       | 'movedToSprint'
       | 'status'
       | 'startDate'
+      // Story points handled by its own handler
     >,
     value: string | number | string[] | undefined
   ) => {
-    // Adjusted fields
     setMergedTaskDetails((prev) => ({ ...prev, [field]: value ?? '' }));
+  };
+
+  const handleStoryPointsChange = (value: string) => {
+      setMergedTaskDetails((prev) => ({ ...prev, storyPoints: value }));
   };
 
   const handlePriorityChange = (value: string) => {
@@ -393,13 +405,12 @@ export default function MergeBacklogDialog({
                     <Label htmlFor="merged-sp">Story Points</Label>
                     <Input
                       id="merged-sp"
-                      type="number"
-                      value={mergedTaskDetails.storyPoints ?? ''}
+                      type="text" // Changed to text to allow empty
+                      value={mergedTaskDetails.storyPoints?.toString() ?? ''}
                       onChange={(e) =>
-                        handleInputChange('storyPoints', e.target.value)
+                        handleStoryPointsChange(e.target.value)
                       }
                       placeholder="Est. SP"
-                      min="0"
                     />
                   </div>
                 </div>
@@ -427,7 +438,6 @@ export default function MergeBacklogDialog({
                     rows={5}
                   />
                 </div>
-                {/* Could add Initiator, Dependencies selection here if needed */}
               </div>
             </ScrollArea>
             <DialogFooter className="mt-4">

@@ -134,6 +134,7 @@ export const useBacklogActions = ({
       const sprintTask: Task = {
         ...initialBacklogTask,
         ...backlogItem,
+        storyPoints: backlogItem.storyPoints ?? null, // Ensure storyPoints is carried over
         id: `sprint_task_${backlogItem.id}_${Date.now()}`, // Ensure a new unique ID for the sprint task instance
         status: 'To Do',
         startDate: null, // Will be planned in the sprint
@@ -245,8 +246,9 @@ export const useBacklogActions = ({
 
           // 2. Create a new task object for the sprint plan
           const sprintTask: Task = {
-            ...initialBacklogTask, // Start with defaults to ensure all Task fields are present
+            ...initialBacklogTask, // Start with defaults to ensure all fields are present
             ...originalItem, // Spread original item details
+            storyPoints: originalItem.storyPoints ?? null, // Carry over story points
             id: `sprint_task_instance_${originalItem.id}_${Date.now()}`, // New unique ID for the SPRINT TASK instance
             status: 'To Do', // Default status for new sprint tasks
             startDate: null, // Needs to be planned within the sprint
@@ -266,7 +268,6 @@ export const useBacklogActions = ({
             title: originalItem.title,
             description: originalItem.description,
             acceptanceCriteria: originalItem.acceptanceCriteria,
-            storyPoints: originalItem.storyPoints,
             priority: originalItem.priority,
             taskType: originalItem.taskType,
             createdDate: originalItem.createdDate,
@@ -525,6 +526,7 @@ export const useBacklogActions = ({
           ...initialBacklogTask, // Ensure all fields are present
           ...task,
           id: newId,
+          storyPoints: task.storyPoints ?? null, // Reset story points for split items
           // backlogId and ticketNumber are already set in SplitDialog
           needsGrooming: true, // Newly split items need grooming
           readyForSprint: false,
@@ -684,6 +686,7 @@ export const useBacklogActions = ({
         ...initialBacklogTask, // Base defaults
         ...mergedTask, // User-provided details for the new task
         id: `merged_item_${mergeEventId}_${Date.now()}`, // Unique ID for the new merged item
+        storyPoints: mergedTask.storyPoints ?? null, // Use what was set in dialog, or null; merged items need re-estimation
         // backlogId and ticketNumber should be set by the MergeDialog based on suffix logic
         needsGrooming: true, // New merged item needs grooming
         readyForSprint: false,

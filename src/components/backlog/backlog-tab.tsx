@@ -34,7 +34,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogClose,
-  DialogFooter,
+  DialogFooter as BacklogDialogFooter,
 } from '@/components/ui/dialog';
 import {
   Tooltip,
@@ -97,6 +97,7 @@ interface BacklogTabProps {
   generateNextBacklogId: (allProjectBacklogItems: Task[]) => string;
   onUpdateSavedItem: (updatedItem: Task) => void;
   onDeleteSavedItem: (itemId: string) => void;
+  allProjectBacklogItems: Task[]; // For ID generation uniqueness
 }
 
 type SortKey =
@@ -107,18 +108,19 @@ type SortKey =
   | 'needsGrooming'
   | 'readyForSprint'
   | 'taskType' // Added taskType for sorting
-  | 'severity'; // Added severity for sorting
+  | 'severity' // Added severity for sorting
+  | 'storyPoints'; // Added storyPoints for sorting
 
 type SortDirection = 'asc' | 'desc';
 
-interface EditingBacklogRow extends Omit<Task, 'status' | 'storyPoints'> {
+interface EditingBacklogRow extends Omit<Task, 'status'> {
+  // Story points can be string for input
   _internalId: string;
   createdDateObj?: Date | undefined;
-  storyPoints?: string | null; // Allow string for input
 }
 
 interface DisplayBacklogRow extends Task {
-  ref?: React.RefObject<HTMLDivElement>;
+  ref?: React.RefObject<HTMLTableRowElement>; // Changed to HTMLTableRowElement
   isEditing?: boolean;
 }
 
@@ -132,29 +134,6 @@ const parseDateString = (dateString: string | undefined): Date | undefined => {
   }
 };
 
-const generateNextBacklogIdHelper = (
-  allProjectBacklogItems: Task[]
-): string => {
-  const currentYear = getYear(new Date()).toString().slice(-2);
-  const prefix = `BL-${currentYear}`;
-  let maxNum = 0;
-
-  allProjectBacklogItems.forEach((item) => {
-    const id = item.backlogId;
-    const match = id?.match(/^BL-\d{2}(\d{4})(?:-.*)?$/);
-    if (id && id.startsWith(prefix) && match) {
-      const numPart = parseInt(match[1], 10);
-      if (!isNaN(numPart) && numPart > maxNum) {
-        maxNum = numPart;
-      }
-    }
-  });
-
-  const nextNum = maxNum + 1;
-  const nextNumPadded = nextNum.toString().padStart(4, '0');
-  return `${prefix}${nextNumPadded}`;
-};
-
 export default function BacklogTab({
   projectId,
   projectName,
@@ -166,6 +145,7 @@ export default function BacklogTab({
   generateNextBacklogId,
   onUpdateSavedItem,
   onDeleteSavedItem,
+  allProjectBacklogItems,
 }: BacklogTabProps) {
   const [newBacklogRows, setNewBacklogRows] = useState<EditingBacklogRow[]>([]);
   const [savedBacklogItems, setSavedBacklogItems] = useState<
@@ -189,7 +169,7 @@ export default function BacklogTab({
     direction: SortDirection;
   } | null>(null);
   const [isFilteringReady, setIsFilteringReady] = useState(false);
-  const savedRowRefs = useRef<Map<string, React.RefObject<HTMLDivElement>>>(
+  const savedRowRefs = useRef<Map<string, React.RefObject<HTMLTableRowElement>>>( // Changed to HTMLTableRowElement
     new Map()
   );
 
@@ -207,14 +187,14 @@ export default function BacklogTab({
 
   useEffect(() => {
     savedRowRefs.current.clear();
-    const initialDisplayableItems = initialBacklog.filter(
+    const initialDisplayableItems = (initialBacklog || []).filter( // Add null check for initialBacklog
       (task) => !task.movedToSprint && !task.historyStatus
     );
 
     const mappedItems = initialDisplayableItems.map((item) => {
       const internalId = item.id;
       if (!savedRowRefs.current.has(internalId)) {
-        savedRowRefs.current.set(internalId, React.createRef<HTMLDivElement>());
+        savedRowRefs.current.set(internalId, React.createRef<HTMLTableRowElement>()); // Changed to HTMLTableRowElement
       }
       return {
         ...item,
@@ -222,7 +202,7 @@ export default function BacklogTab({
         ref: savedRowRefs.current.get(internalId),
         isEditing: false,
         createdDateObj: parseDateString(item.createdDate),
-        storyPoints: item.storyPoints?.toString() ?? '', // Ensure storyPoints is string for input
+        storyPoints: item.storyPoints?.toString() ?? '',
       };
     });
     setSavedBacklogItems(mappedItems);
@@ -261,8 +241,12 @@ export default function BacklogTab({
             bValue = dateB.getTime();
             break;
           case 'severity':
-            aValue = severities.indexOf(a.severity || 'Medium'); // Or a default
+            aValue = severities.indexOf(a.severity || 'Medium');
             bValue = severities.indexOf(b.severity || 'Medium');
+            break;
+          case 'storyPoints':
+            aValue = Number(a.storyPoints ?? -1); // Treat null/empty as -1 for sorting
+            bValue = Number(b.storyPoints ?? -1);
             break;
           default:
             aValue =
@@ -313,11 +297,10 @@ export default function BacklogTab({
   const toggleFilterReady = () => setIsFilteringReady((prev) => !prev);
 
   const handleAddNewRow = () => {
-    const allCurrentItems = [...initialBacklog, ...newBacklogRows];
-    const nextId = generateNextBacklogIdHelper(allCurrentItems);
+    const allCurrentItems = [...allProjectBacklogItems, ...newBacklogRows];
+    const nextId = generateNextBacklogId(allCurrentItems);
     const newRow: EditingBacklogRow = {
-      ...(initialBacklogTask as Omit<Task, 'id' | 'storyPoints'>), // Cast to exclude id
-      storyPoints: null, // Ensure storyPoints is handled correctly
+      ...(initialBacklogTask as Omit<Task, 'id'>),
       _internalId: `new_backlog_${Date.now()}_${Math.random()}`,
       id: '',
       backlogId: nextId,
@@ -327,6 +310,7 @@ export default function BacklogTab({
       needsGrooming: false,
       readyForSprint: false,
       severity: null,
+      storyPoints: null, // Initialize storyPoints
     };
     setNewBacklogRows((prev) => [...prev, newRow]);
     setHasUnsavedChanges(true);
@@ -352,7 +336,7 @@ export default function BacklogTab({
       | 'needsGrooming'
       | 'readyForSprint'
       | 'historyStatus'
-      | 'storyPoints'
+      // storyPoints handled separately
     >,
     value: string | number | undefined
   ) => {
@@ -360,7 +344,6 @@ export default function BacklogTab({
       rows.map((row) => {
         if (row._internalId === internalId) {
           const updatedRow = { ...row, [field]: value ?? '' };
-          // If taskType changes from 'Bug', reset severity
           if (field === 'taskType' && value !== 'Bug') {
             updatedRow.severity = null;
           }
@@ -380,6 +363,7 @@ export default function BacklogTab({
     );
     setHasUnsavedChanges(true);
   };
+
 
   const handleNewDateChange = (
     internalId: string,
@@ -525,7 +509,7 @@ export default function BacklogTab({
     let hasErrors = false;
     const itemsToSave: Task[] = [];
     const allKnownBacklogIds = new Set<string>();
-    initialBacklog.forEach((task) => {
+    allProjectBacklogItems.forEach((task) => { // Use allProjectBacklogItems for initial population
       if (task.backlogId) allKnownBacklogIds.add(task.backlogId.toLowerCase());
     });
 
@@ -538,14 +522,22 @@ export default function BacklogTab({
       if (isEmptyRow && newBacklogRows.length === 1) {
         setNewBacklogRows([]);
         setHasUnsavedChanges(false);
-        toast({ title: 'No New Items', description: 'No new items to save.' });
+        // toast({ title: 'No New Items', description: 'No new items to save.' }); // Removed as it might be confusing if the only row was empty
         return;
       }
 
       const backlogId = row.backlogId?.trim() || '';
       const title = row.title?.trim();
       const storyPointsRaw = row.storyPoints?.toString().trim() ?? '';
-      const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : null; // Ensure null if empty
+      let storyPointsValue: number | null = null;
+      if (storyPointsRaw) {
+        const parsedSP = parseInt(storyPointsRaw, 10);
+        if (!isNaN(parsedSP) && parsedSP >= 0) {
+          storyPointsValue = parsedSP;
+        } else {
+          // error handling handled below
+        }
+      }
       const taskType = row.taskType ?? 'New Feature';
       const createdDate = row.createdDate ?? '';
       const initiator = row.initiator?.trim() || '';
@@ -576,8 +568,8 @@ export default function BacklogTab({
         );
       }
       if (!title) rowErrors.push('Title required');
-      if (storyPointsRaw && (isNaN(storyPoints as number) || (storyPoints as number) < 0)) {
-        rowErrors.push(`Row ${index + 1}: Invalid Story Points`);
+      if (storyPointsRaw && (isNaN(storyPointsValue as number) || (storyPointsValue as number) < 0)) {
+        rowErrors.push(`Row ${index + 1}: Story Points must be a non-negative number or empty.`);
       }
       if (!createdDate || !isValid(parseISO(createdDate))) {
         rowErrors.push('Invalid Created Date (use YYYY-MM-DD)');
@@ -592,7 +584,7 @@ export default function BacklogTab({
         rowErrors.push('Invalid Priority');
       }
       const combinedBacklogIds = new Set([
-        ...initialBacklog.map((t) => t.backlogId!).filter(Boolean),
+        ...allProjectBacklogItems.map((t) => t.backlogId!).filter(Boolean), // Use allProjectBacklogItems
         ...newBacklogRows
           .filter((r) => r._internalId !== row._internalId && r.backlogId)
           .map((r) => r.backlogId!),
@@ -623,7 +615,7 @@ export default function BacklogTab({
         ticketNumber: backlogId,
         title,
         description: row.description?.trim() ?? '',
-        storyPoints,
+        storyPoints: storyPointsValue,
         taskType: taskType as TaskType,
         createdDate,
         initiator,
@@ -647,7 +639,7 @@ export default function BacklogTab({
 
     if (hasErrors) return;
     if (itemsToSave.length === 0) {
-      if (newBacklogRows.length > 0) {
+      if (newBacklogRows.length > 0 && newBacklogRows.some(row => row.title?.trim() || row.backlogId?.trim())) { // Only toast if there was actual input
         toast({
           title: 'No New Items',
           description: 'No valid new items to save.',
@@ -687,7 +679,7 @@ export default function BacklogTab({
       | 'isEditing'
       | 'createdDateObj'
       | 'dependsOn'
-      | 'storyPoints'
+      // storyPoints handled separately
     >,
     value: string | number | undefined
   ) => {
@@ -756,7 +748,15 @@ export default function BacklogTab({
     const backlogId = itemToSave.backlogId?.trim() || '';
     const title = itemToSave.title?.trim();
     const storyPointsRaw = itemToSave.storyPoints?.toString().trim() ?? '';
-    const storyPoints = storyPointsRaw ? parseInt(storyPointsRaw, 10) : null;
+    let storyPointsValue: number | null = null;
+      if (storyPointsRaw) {
+        const parsedSP = parseInt(storyPointsRaw, 10);
+        if (!isNaN(parsedSP) && parsedSP >= 0) {
+          storyPointsValue = parsedSP;
+        } else {
+          // error handling handled below
+        }
+      }
     const taskType = itemToSave.taskType;
     const severity = itemToSave.severity;
 
@@ -764,7 +764,7 @@ export default function BacklogTab({
     let errors: string[] = [];
     if (!backlogId) errors.push(`Backlog ID required`);
     if (
-      initialBacklog.some(
+      allProjectBacklogItems.some( // Use allProjectBacklogItems for uniqueness check
         (t) =>
           t.id !== itemId &&
           t.backlogId?.toLowerCase() === backlogId.toLowerCase()
@@ -775,6 +775,9 @@ export default function BacklogTab({
     if (!title) errors.push('Title required');
     if (taskType === 'Bug' && (!severity || !severities.includes(severity))) {
       errors.push('Severity is required for Bugs.');
+    }
+    if (storyPointsRaw && (isNaN(storyPointsValue as number) || (storyPointsValue as number) < 0)) {
+        errors.push('Story Points must be a non-negative number or empty.');
     }
 
 
@@ -792,15 +795,16 @@ export default function BacklogTab({
         itemToSave;
       const finalTask: Task = {
         ...baseTask,
-        storyPoints: storyPoints, // Use parsed story points
-        severity: taskType === 'Bug' ? severity : null, // Ensure severity is null if not a bug
+        storyPoints: storyPointsValue,
+        severity: taskType === 'Bug' ? severity : null,
       };
       onUpdateSavedItem(finalTask);
       setSavedBacklogItems((prev) =>
         prev.map((item) =>
-          item.id === itemId ? { ...item, isEditing: false, storyPoints: storyPoints?.toString() ?? '' } : item
+          item.id === itemId ? { ...item, isEditing: false, storyPoints: storyPointsValue?.toString() ?? '' } : item
         )
       );
+      setHasUnsavedChanges(false); // Reset after successful save
       toast({
         title: 'Success',
         description: `Backlog item '${finalTask.backlogId}' updated.`,
@@ -820,8 +824,8 @@ export default function BacklogTab({
 
   const potentialDependenciesForNewItems = useMemo(() => {
     if (!editingDepsTaskId) return [];
-    const allBacklogItems = [
-      ...savedBacklogItems.map((t) => ({
+    const allBacklogItemsForDeps = [ // Use allProjectBacklogItems for context
+      ...allProjectBacklogItems.map((t) => ({
         id: t.backlogId!,
         title: t.title || `Item ${t.backlogId}`,
       })),
@@ -832,8 +836,8 @@ export default function BacklogTab({
           title: r.title || `Item ${r.backlogId}`,
         })),
     ];
-    return allBacklogItems.filter((item) => item.id?.trim());
-  }, [savedBacklogItems, newBacklogRows, editingDepsTaskId]);
+    return allBacklogItemsForDeps.filter((item) => item.id?.trim());
+  }, [allProjectBacklogItems, newBacklogRows, editingDepsTaskId]);
 
   return (
     <>
@@ -852,7 +856,7 @@ export default function BacklogTab({
             </div>
             <Button
               onClick={handleSaveNewItems}
-              disabled={newBacklogRows.length === 0}
+              disabled={newBacklogRows.length === 0 || !hasUnsavedChanges}
             >
               <Save className="mr-2 h-4 w-4" /> Save New Items
             </Button>
@@ -860,67 +864,38 @@ export default function BacklogTab({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="overflow-x-auto">
-            <div className="min-w-[1800px] space-y-4"> {/* Increased min-width */}
-              <div className="sticky top-0 z-10 hidden grid-cols-[120px_1fr_120px_100px_120px_120px_100px_100px_80px_60px_60px_40px] items-center gap-x-3 border-b bg-card pb-2 md:grid"> {/* Adjusted grid for severity */}
-                <Label className="text-xs font-medium text-muted-foreground">
-                  Backlog ID*
-                </Label>
-                <Label className="text-xs font-medium text-muted-foreground">
-                  Title*
-                </Label>
-                <Label className="text-xs font-medium text-muted-foreground">
-                  Task Type*
-                </Label>
-                 <Label className="text-xs font-medium text-muted-foreground"> {/* Severity Header */}
-                  Severity
-                </Label>
-                <Label className="text-xs font-medium text-muted-foreground">
-                  Initiator
-                </Label>
-                <Label className="text-xs font-medium text-muted-foreground">
-                  Created Date*
-                </Label>
-                <Label className="text-xs font-medium text-muted-foreground">
-                  Priority*
-                </Label>
-                <Label className="text-xs font-medium text-muted-foreground">
-                  Dependencies
-                </Label>
-                <Label className="text-center text-xs font-medium text-muted-foreground">
-                  Groom?
-                </Label>
-                <Label className="text-center text-xs font-medium text-muted-foreground">
-                  Ready?
-                </Label>
-                <div />
-              </div>
-              <div className="space-y-4 md:space-y-2">
+            <div className="min-w-[1800px] space-y-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[120px]">Backlog ID*</TableHead>
+                    <TableHead>Title*</TableHead>
+                    <TableHead className="w-[120px]">Task Type*</TableHead>
+                    <TableHead className="w-[100px]">Severity</TableHead>
+                    <TableHead className="w-[80px] text-right">Story Pts</TableHead>
+                    <TableHead className="w-[120px]">Initiator</TableHead>
+                    <TableHead className="w-[120px]">Created Date*</TableHead>
+                    <TableHead className="w-[100px]">Priority*</TableHead>
+                    <TableHead className="w-[100px]">Dependencies</TableHead>
+                    <TableHead className="w-[80px] text-center">Groom?</TableHead>
+                    <TableHead className="w-[60px] text-center">Ready?</TableHead>
+                    <TableHead className="w-[40px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                 {newBacklogRows.map((row) => (
-                  <div
+                  <TableRow
                     key={row._internalId}
-                    className="grid grid-cols-2 items-start gap-x-3 gap-y-2 border-b pb-4 last:border-b-0 md:grid-cols-[120px_1fr_120px_100px_120px_120px_100px_100px_80px_60px_60px_40px] md:border-none md:pb-0" // Adjusted grid for severity
                   >
-                    <div className="col-span-1 md:col-span-1">
-                      <Label
-                        htmlFor={`new-backlog-id-${row._internalId}`}
-                        className="text-xs font-medium md:hidden"
-                      >
-                        Backlog ID*
-                      </Label>
+                    <TableCell className="font-medium">
                       <Input
                         id={`new-backlog-id-${row._internalId}`}
                         value={row.backlogId ?? ''}
                         readOnly
                         className="h-9 cursor-default bg-muted/50"
                       />
-                    </div>
-                    <div className="col-span-2 md:col-span-1">
-                      <Label
-                        htmlFor={`new-backlog-title-${row._internalId}`}
-                        className="text-xs font-medium md:hidden"
-                      >
-                        Title*
-                      </Label>
+                    </TableCell>
+                    <TableCell>
                       <Input
                         id={`new-backlog-title-${row._internalId}`}
                         value={row.title ?? ''}
@@ -935,14 +910,8 @@ export default function BacklogTab({
                         className="h-9"
                         required
                       />
-                    </div>
-                    <div className="col-span-1 md:col-span-1">
-                      <Label
-                        htmlFor={`new-backlog-type-${row._internalId}`}
-                        className="text-xs font-medium md:hidden"
-                      >
-                        Task Type*
-                      </Label>
+                    </TableCell>
+                    <TableCell>
                       <Select
                         value={row.taskType ?? 'New Feature'}
                         onValueChange={(value) =>
@@ -967,10 +936,8 @@ export default function BacklogTab({
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
-                     {/* Severity Dropdown */}
-                    <div className="col-span-1 md:col-span-1">
-                      <Label htmlFor={`new-severity-${row._internalId}`} className="text-xs font-medium md:hidden">Severity</Label>
+                    </TableCell>
+                    <TableCell>
                       <Select
                         value={row.severity ?? 'none'}
                         onValueChange={(value) => handleNewSelectChange(row._internalId, 'severity', value)}
@@ -986,14 +953,23 @@ export default function BacklogTab({
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
-                    <div className="col-span-1 md:col-span-1">
-                      <Label
-                        htmlFor={`new-backlog-initiator-${row._internalId}`}
-                        className="text-xs font-medium md:hidden"
-                      >
-                        Initiator
-                      </Label>
+                    </TableCell>
+                    <TableCell>
+                        <Input
+                            id={`new-story-points-${row._internalId}`}
+                            type="text"
+                            value={row.storyPoints ?? ''}
+                            onChange={(e) =>
+                                handleNewStoryPointsChange(
+                                    row._internalId,
+                                    e.target.value
+                                )
+                            }
+                            placeholder="Pts"
+                            className="h-9 text-right"
+                        />
+                    </TableCell>
+                    <TableCell>
                       <Select
                         value={row.initiator ?? 'none'}
                         onValueChange={(value) =>
@@ -1030,14 +1006,8 @@ export default function BacklogTab({
                           )}
                         </SelectContent>
                       </Select>
-                    </div>
-                    <div className="col-span-1 md:col-span-1">
-                      <Label
-                        htmlFor={`new-backlog-created-${row._internalId}`}
-                        className="text-xs font-medium md:hidden"
-                      >
-                        Created Date*
-                      </Label>
+                    </TableCell>
+                    <TableCell>
                       <Input
                         id={`new-backlog-created-${row._internalId}`}
                         type="date"
@@ -1052,14 +1022,8 @@ export default function BacklogTab({
                         required
                         className="h-9 w-full"
                       />
-                    </div>
-                    <div className="col-span-1 md:col-span-1">
-                      <Label
-                        htmlFor={`new-backlog-priority-${row._internalId}`}
-                        className="text-xs font-medium md:hidden"
-                      >
-                        Priority*
-                      </Label>
+                    </TableCell>
+                    <TableCell>
                       <Select
                         value={row.priority ?? 'Medium'}
                         onValueChange={(value) =>
@@ -1084,14 +1048,8 @@ export default function BacklogTab({
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
-                    <div className="col-span-2 self-center md:col-span-1">
-                      <Label
-                        htmlFor={`new-backlog-deps-${row._internalId}`}
-                        className="text-xs font-medium md:hidden"
-                      >
-                        Dependencies
-                      </Label>
+                    </TableCell>
+                    <TableCell className="self-center">
                       <div className="flex min-h-[36px] flex-wrap items-center gap-1">
                         {row.dependsOn && row.dependsOn.length > 0 ? (
                           row.dependsOn.map((depId) => (
@@ -1119,14 +1077,8 @@ export default function BacklogTab({
                           <LinkIcon className="h-3 w-3" />
                         </Button>
                       </div>
-                    </div>
-                    <div className="col-span-1 flex items-center justify-center pt-2 md:col-span-1 md:pt-0">
-                      <Label
-                        htmlFor={`new-needs-grooming-${row._internalId}`}
-                        className="text-xs font-medium md:hidden"
-                      >
-                        Groom?
-                      </Label>
+                    </TableCell>
+                    <TableCell className="text-center">
                       <Checkbox
                         id={`new-needs-grooming-${row._internalId}`}
                         checked={row.needsGrooming}
@@ -1139,14 +1091,8 @@ export default function BacklogTab({
                         }
                         className="h-5 w-5"
                       />
-                    </div>
-                    <div className="col-span-1 flex items-center justify-center pt-2 md:col-span-1 md:pt-0">
-                      <Label
-                        htmlFor={`new-ready-sprint-${row._internalId}`}
-                        className="text-xs font-medium md:hidden"
-                      >
-                        Ready?
-                      </Label>
+                    </TableCell>
+                    <TableCell className="text-center">
                       <Checkbox
                         id={`new-ready-sprint-${row._internalId}`}
                         checked={row.readyForSprint}
@@ -1159,8 +1105,8 @@ export default function BacklogTab({
                         }
                         className="h-5 w-5"
                       />
-                    </div>
-                    <div className="col-span-2 mt-1 flex items-center justify-end md:col-span-1 md:mt-0 md:self-center">
+                    </TableCell>
+                    <TableCell>
                       <Button
                         type="button"
                         variant="ghost"
@@ -1171,10 +1117,11 @@ export default function BacklogTab({
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    </div>
-                  </div>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </div>
+                </TableBody>
+              </Table>
               <Button
                 type="button"
                 onClick={handleAddNewRow}
@@ -1191,10 +1138,9 @@ export default function BacklogTab({
             <p className="text-xs text-muted-foreground">* Required field.</p>
             <Button
               onClick={handleSaveNewItems}
-              disabled={newBacklogRows.length === 0}
+              disabled={newBacklogRows.length === 0 || !hasUnsavedChanges}
             >
-              <Save className="mr-2 h-4 w-4" /> Save New Items (
-              {newBacklogRows.length})
+              <Save className="mr-2 h-4 w-4" /> Save New Items
             </Button>
           </CardFooter>
         </CardContent>
@@ -1244,7 +1190,7 @@ export default function BacklogTab({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <div className="min-w-[1800px] space-y-4"> {/* Increased min-width */}
+              <div className="min-w-[1800px] space-y-4">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1271,7 +1217,12 @@ export default function BacklogTab({
                             Task Type {getSortIndicator('taskType')}
                         </Button>
                       </TableHead>
-                       <TableHead className="w-[100px]"> {/* Severity Column */}
+                      <TableHead className="w-[80px] text-right">
+                        <Button variant="ghost" onClick={() => requestSort('storyPoints')} className="h-auto justify-end px-1 text-xs font-medium text-muted-foreground">
+                            Story Pts {getSortIndicator('storyPoints')}
+                        </Button>
+                      </TableHead>
+                       <TableHead className="w-[100px]">
                         <Button variant="ghost" onClick={() => requestSort('severity')} className="h-auto justify-start px-1 text-xs font-medium text-muted-foreground">
                             Severity {getSortIndicator('severity')}
                         </Button>
@@ -1404,7 +1355,25 @@ export default function BacklogTab({
                             <span className="text-sm">{row.taskType}</span>
                           )}
                         </TableCell>
-                         {/* Severity Cell */}
+                        <TableCell>
+                          {row.isEditing ? (
+                            <Input
+                              id={`saved-story-points-${row.id}`}
+                              type="text"
+                              value={row.storyPoints?.toString() ?? ''}
+                              onChange={(e) =>
+                                handleSavedStoryPointsChange(
+                                  row.id,
+                                  e.target.value
+                                )
+                              }
+                              placeholder="Pts"
+                              className="h-9 text-right"
+                            />
+                          ) : (
+                            <span className="text-sm text-right block w-full">{row.storyPoints ?? '-'}</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           {row.isEditing ? (
                             <Select
@@ -1685,6 +1654,14 @@ export default function BacklogTab({
               </div>
               <div className="grid grid-cols-3 items-center gap-4">
                 <Label className="text-right font-medium text-muted-foreground">
+                  Story Points
+                </Label>
+                <span className="col-span-2">
+                  {viewingTask.storyPoints ?? '-'}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 items-center gap-4">
+                <Label className="text-right font-medium text-muted-foreground">
                   Initiator
                 </Label>
                 <span className="col-span-2">
@@ -1722,14 +1699,6 @@ export default function BacklogTab({
               </div>
               <div className="grid grid-cols-3 items-center gap-4">
                 <Label className="text-right font-medium text-muted-foreground">
-                  Story Points
-                </Label>
-                <span className="col-span-2">
-                  {viewingTask.storyPoints || '-'}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 items-center gap-4">
-                <Label className="text-right font-medium text-muted-foreground">
                   Needs Grooming
                 </Label>
                 <span className="col-span-2">
@@ -1746,13 +1715,13 @@ export default function BacklogTab({
               </div>
             </div>
           )}
-          <DialogFooter>
+          <BacklogDialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">
                 Close
               </Button>
             </DialogClose>
-          </DialogFooter>
+          </BacklogDialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1794,7 +1763,7 @@ export default function BacklogTab({
               </SelectContent>
             </Select>
           </div>
-          <DialogFooter>
+          <BacklogDialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">
                 Cancel
@@ -1806,7 +1775,7 @@ export default function BacklogTab({
             >
               Move Item
             </Button>
-          </DialogFooter>
+          </BacklogDialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -79,9 +79,9 @@ export const handleExport = (project: Project | null, toast: ToastFun) => {
             BacklogID: task.backlogId,
             Title: task.title,
             Description: task.description,
-            StoryPoints: task.storyPoints,
-            TaskType: task.taskType, // Added TaskType
-            Severity: task.severity ?? '', // Added Severity
+            StoryPoints: task.storyPoints ?? '', // Handle null/undefined
+            TaskType: task.taskType,
+            Severity: task.severity ?? '',
             DevEstTime: task.devEstimatedTime,
             QAEstTime: task.qaEstimatedTime,
             BufferTime: task.bufferTime,
@@ -118,11 +118,11 @@ export const handleExport = (project: Project | null, toast: ToastFun) => {
         Title: task.title,
         Description: task.description,
         TaskType: task.taskType,
-        Severity: task.severity ?? '', // Added Severity
+        Severity: task.severity ?? '',
         Priority: task.priority,
+        StoryPoints: task.storyPoints ?? '', // Added StoryPoints here
         Initiator: task.initiator,
         CreatedDate: task.createdDate,
-        StoryPoints: task.storyPoints,
         DependsOn: (task.dependsOn || []).join(', '),
         MovedToSprint: task.movedToSprint ?? '',
         HistoryStatus: task.historyStatus ?? '',
