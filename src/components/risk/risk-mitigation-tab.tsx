@@ -1,3 +1,4 @@
+// src/components/risk/risk-mitigation-tab.tsx
 'use client';
 
 import type { SprintData, Task } from '@/types/sprint-data';
@@ -8,35 +9,34 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Info, AlertTriangle } from 'lucide-react';
+import { Info, ShieldCheck } from 'lucide-react';
 
-interface RiskTabProps {
+interface RiskMitigationTabProps {
   projectId: string;
   projectName: string;
   sprintData: SprintData | null;
   backlog?: Task[];
 }
 
-export default function RiskTab({
+export default function RiskMitigationTab({
   projectId,
   projectName,
   sprintData,
   backlog,
-}: RiskTabProps) {
+}: RiskMitigationTabProps) {
   return (
     <Card className="flex min-h-[400px] flex-col items-center justify-center border-2 border-dashed">
       <CardHeader className="text-center">
         <CardTitle className="flex items-center justify-center gap-2">
-          <AlertTriangle className="h-5 w-5 text-destructive" /> Risk Management
+          <ShieldCheck className="h-5 w-5 text-green-600" /> Risk Mitigation
         </CardTitle>
         <CardDescription>
-          Identify, assess, and manage risks for project '{projectName}'.
+          Plan and track mitigation strategies for risks in project '{projectName}'.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex items-center justify-center text-muted-foreground">
         <Info className="mr-2 h-5 w-5" />
-        (Risk management features will be implemented here. e.g., Risk register,
-        Mitigation plans)
+        (Risk mitigation plans and progress will be displayed here.)
       </CardContent>
     </Card>
   );

@@ -40,6 +40,9 @@ import {
   AlertTriangle,
   ClipboardCheck,
   Settings2, // For Config Tab Icon
+  ShieldAlert, // For Risk Overview
+  FileText, // For Risk Register
+  ShieldCheck, // For Risk Mitigation
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -68,15 +71,18 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
-  AlertDialogFooter as AlertDFooter, 
-  AlertDialogHeader as AlertDHeader, 
-  AlertDialogTitle as AlertDTitle, 
+  AlertDialogFooter as AlertDFooter,
+  AlertDialogHeader as AlertDHeader,
+  AlertDialogTitle as AlertDTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
 // Main Content Components (Tabs)
 import DashboardTab from '@/components/backlog/dashboard-tab';
-import RiskTab from '@/components/risk/risk-tab';
+// Risk Sub-Tab Components
+import RiskOverviewTab from '@/components/risk/risk-overview-tab';
+import RiskRegisterTab from '@/components/risk/risk-register-tab';
+import RiskMitigationTab from '@/components/risk/risk-mitigation-tab';
 import EvaluationTab from '@/components/evaluation/evaluation-tab';
 
 // Sprint Sub-Tab Components
@@ -93,7 +99,7 @@ import HistoryTab from '@/components/backlog/history-tab';
 import MembersTab from '@/components/settings/members-tab';
 import TeamsTab from '@/components/settings/teams-tab';
 import HolidaysTab from '@/components/settings/holidays-tab';
-import ConfigTab from '@/components/settings/config-tab'; // Import ConfigTab
+import ConfigTab from '@/components/settings/config-tab';
 import AddMembersDialog from '@/components/dialogs/add-members-dialog';
 
 // Analytics Sub-Tab Components
@@ -106,9 +112,9 @@ import type {
   Task,
   ToastFun,
   Sprint,
-  StoryPointScale, // Import StoryPointScale
+  StoryPointScale,
 } from '@/types/sprint-data';
-import { initialSprintData, taskPriorities } from '@/types/sprint-data';
+import { initialSprintData, taskPriorities, storyPointScaleOptions, predefinedTaskTypes, predefinedTicketStatuses } from '@/types/sprint-data';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useSprintsActions } from '@/hooks/use-sprints-actions';
@@ -231,6 +237,7 @@ function PrismPage() {
   const defaultSubTabs: Record<string, string> = {
     sprints: 'overview',
     backlog: 'management',
+    risk: 'overview', // Default for Risk
     analytics: 'charts',
     settings: 'members',
   };
@@ -242,7 +249,7 @@ function PrismPage() {
   const handleMainTabChange = useCallback(
     (mainTabKey: string) => {
       setSelectedSprintForPlanning(null);
-      if (['dashboard', 'risk', 'evaluation'].includes(mainTabKey)) {
+      if (['dashboard', 'evaluation'].includes(mainTabKey)) { // Removed 'risk' as it now has subtabs
         setActiveTab(mainTabKey);
       } else {
         const defaultSub = defaultSubTabs[mainTabKey] || '';
@@ -396,7 +403,7 @@ function PrismPage() {
       holidayCalendars: [],
       teams: [],
       backlog: [],
-      storyPointScale: 'Fibonacci', // Default for new project
+      storyPointScale: 'Fibonacci',
       customTaskTypes: [],
       customTicketStatuses: [],
     };
@@ -539,7 +546,15 @@ function PrismPage() {
         history: { label: 'History', icon: History, component: HistoryTab },
       },
     },
-    risk: { label: 'Risk', icon: AlertTriangle, component: RiskTab },
+    risk: { // Updated Risk tab
+      label: 'Risk',
+      icon: AlertTriangle,
+      subTabs: {
+        overview: { label: 'Overview', icon: ShieldAlert, component: RiskOverviewTab },
+        register: { label: 'Register', icon: FileText, component: RiskRegisterTab },
+        mitigation: { label: 'Mitigation', icon: ShieldCheck, component: RiskMitigationTab },
+      },
+    },
     evaluation: {
       label: 'Evaluation',
       icon: ClipboardCheck,
@@ -572,7 +587,7 @@ function PrismPage() {
           icon: CalendarDays,
           component: HolidaysTab,
         },
-        config: { // New Config sub-tab
+        config: {
           label: 'Config',
           icon: Settings2,
           component: ConfigTab,
@@ -699,6 +714,9 @@ function PrismPage() {
             onRevertTask: handleRevertTaskToBacklog,
             onAddBacklogItems: handleMoveSelectedBacklogItemsToSprint,
             onBackToOverview: handleBackToOverview,
+            storyPointScale: selectedProject.storyPointScale ?? storyPointScaleOptions[0],
+            customTaskTypes: [...predefinedTaskTypes, ...(selectedProject.customTaskTypes || [])],
+            customTicketStatuses: [...predefinedTicketStatuses, ...(selectedProject.customTicketStatuses || [])],
           };
           break;
         case 'sprints/retrospective':
@@ -719,6 +737,7 @@ function PrismPage() {
             onMoveToSprint: handleMoveToSprint,
             generateNextBacklogId: generateNextBacklogIdHelper,
             allProjectBacklogItems: selectedProject.backlog ?? [],
+            customTaskTypes: [...predefinedTaskTypes, ...(selectedProject.customTaskTypes || [])],
           };
           break;
         case 'backlog/grooming':
@@ -758,6 +777,15 @@ function PrismPage() {
             onUndoBacklogAction: handleUndoBacklogAction,
           };
           break;
+        case 'risk/overview': // Added Risk Overview
+        case 'risk/register': // Added Risk Register
+        case 'risk/mitigation': // Added Risk Mitigation
+          componentProps = {
+            ...componentProps,
+            sprintData: selectedProject.sprintData,
+            backlog: selectedProject.backlog,
+          };
+          break;
         case 'analytics/charts':
           componentProps = {
             ...componentProps,
@@ -794,7 +822,7 @@ function PrismPage() {
             onSaveCalendars: handleSaveHolidayCalendars,
           };
           break;
-        case 'settings/config': // New case for ConfigTab
+        case 'settings/config':
           componentProps = {
             ...componentProps,
             initialStoryPointScale: selectedProject.storyPointScale,
@@ -813,12 +841,6 @@ function PrismPage() {
         componentProps = {
           ...componentProps,
           sprintData: selectedProject.sprintData,
-        };
-      } else if (mainKey === 'risk') {
-        componentProps = {
-          ...componentProps,
-          sprintData: selectedProject.sprintData,
-          backlog: selectedProject.backlog,
         };
       } else if (mainKey === 'evaluation') {
         componentProps = {
@@ -1142,3 +1164,4 @@ function PrismPage() {
     </div>
   );
 }
+
