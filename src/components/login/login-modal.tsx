@@ -116,6 +116,7 @@ export default function LoginModal({
       await signInWithEmailAndPassword(auth, emailToAuth, loginPassword);
       onLoginSuccess();
     } catch (err: any) {
+      console.error("Detailed login error object:", err);
       let errorMessage = 'An unexpected error occurred. Please try again.';
       if (err.code) {
         switch (err.code) {
@@ -149,6 +150,7 @@ export default function LoginModal({
         title: 'Login Failed',
         description: errorMessage,
       });
+    } finally {
       setIsLoading(false);
     }
   };
@@ -207,6 +209,7 @@ export default function LoginModal({
         throw new Error('User creation failed unexpectedly.');
       }
     } catch (err: any) {
+      console.error("Detailed signup error object:", err); // Enhanced logging
       let errorMessage = 'An unexpected error occurred. Please try again.';
       if (err.code) {
         switch (err.code) {
@@ -219,18 +222,24 @@ export default function LoginModal({
           case 'auth/weak-password':
             errorMessage = 'Password should be at least 6 characters.';
             break;
-           case 'permission-denied':
+           case 'permission-denied': // Firestore permission error
             errorMessage =
-              'Permission denied. Check Firestore security rules for userProfiles.';
+              'Permission denied. Please check your Firestore security rules for the "userProfiles" collection. Ensure writes are allowed for new user profile creation and reads for username checks.';
             break;
-          case 'unavailable':
+          case 'unavailable': // Firestore/Network issue
             errorMessage =
-              'Could not connect to the database. Check internet connection.';
+              'Could not connect to the database. Please check your internet connection and Firebase setup.';
+            break;
+          default:
+            errorMessage = `An error occurred: ${err.message} (Code: ${err.code})`;
             break;
         }
       } else if (err.message?.includes('Failed to fetch')) {
         errorMessage =
           'Network error. Please check your internet connection.';
+      }
+       else if (err.message) {
+        errorMessage = err.message;
       }
       setError(errorMessage);
       toast({
@@ -238,6 +247,7 @@ export default function LoginModal({
         title: 'Signup Failed',
         description: errorMessage,
       });
+    } finally {
       setIsLoading(false);
     }
   };
@@ -468,3 +478,4 @@ export default function LoginModal({
   );
 }
 
+    
