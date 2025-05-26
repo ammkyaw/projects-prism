@@ -43,6 +43,7 @@ import {
   ShieldAlert, // For Risk Overview
   FileText, // For Risk Register
   ShieldCheck, // For Risk Mitigation
+  LogOut, // For Logout Icon
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -136,7 +137,7 @@ import {
 } from '@/hooks/use-projects';
 import { handleExport } from '@/lib/export';
 import { auth } from '@/lib/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import QueryProvider from '@/components/query-provider';
 import HelpModal from '@/components/help/help-modal';
@@ -347,24 +348,21 @@ function PrismPage() {
     toast,
   });
 
-  // Risk Action: Save New or Update Existing (ID generation handled in useSettingsActions)
   const handleSaveOrUpdateRiskItem = useCallback(
     (riskDetails: Omit<RiskItem, 'id' | 'riskScore'>, existingId?: string) => {
       if (!selectedProject) return;
-      handleSaveRisk(riskDetails, existingId); // Call the hook function
+      handleSaveRisk(riskDetails, existingId);
     },
-    [selectedProject, handleSaveRisk] // Ensure handleSaveRisk from the hook is a dependency
+    [selectedProject, handleSaveRisk]
   );
 
   const handleUpdateRiskItem = useCallback(
-    // This can now potentially be removed if all updates go through handleSaveOrUpdateRiskItem
     (updatedRisk: RiskItem) => {
       if (!selectedProject) return;
       const updatedRisks = (selectedProject.risks || []).map((r) =>
         r.id === updatedRisk.id ? updatedRisk : r
       );
       updateProjectData({ ...selectedProject, risks: updatedRisks });
-      // Toast for update can be added here or handled by the form
     },
     [selectedProject, updateProjectData]
   );
@@ -450,7 +448,7 @@ function PrismPage() {
       holidayCalendars: [],
       teams: [],
       backlog: [],
-      risks: [], // Initialize risks array
+      risks: [],
       storyPointScale: 'Fibonacci',
       customTaskTypes: [],
       customTicketStatuses: [],
@@ -537,6 +535,21 @@ function PrismPage() {
         setProjectToDeleteId(null);
       },
     });
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      toast({ title: 'Logged Out', description: 'You have been logged out.' });
+      router.push('/');
+    } catch (error) {
+      console.error('Error logging out:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Logout Error',
+        description: 'Failed to log out. Please try again.',
+      });
+    }
   };
 
   const tabsConfig: Record<
@@ -1093,6 +1106,16 @@ function PrismPage() {
               </Button>
             )}
           <ModeToggle />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleLogout}
+            aria-label="Logout"
+            className="p-2"
+            title="Logout"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </header>
 
