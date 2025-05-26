@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -35,7 +36,8 @@ body {
     --chart-3: 30 80% 55%;  /* Orange */
     --chart-4: 260 70% 55%; /* Purple */
     --chart-5: 350 75% 60%; /* Pink/Rose */
-    --chart-6: 120 50% 50%; /* Green (can be added if needed) */
+    /* --chart-6: 120 50% 50%; /* Green (can be added if needed) */
+
 
     --critical: 0 100% 50%; /* Bright Red for critical items (e.g., in risks) */
     --holiday-1: 210 40% 50%; /* Muted Blue - keep as is or adjust if needed */
@@ -53,6 +55,7 @@ body {
     --sidebar-accent-foreground: 240 5.9% 10%; /* Dark gray for hover/accent text */
     --sidebar-border: 240 5.9% 88%; /* Slightly darker border for sidebar */
     --sidebar-ring: 221 83% 53%; /* Primary color for focus rings in sidebar */
+    --weekend-color: 0 0% 10%; /* Black for weekends in light mode */
   }
 
   .dark {
@@ -81,7 +84,7 @@ body {
     --chart-3: 210 50% 60%;
     --chart-4: 147 100% 57%;
     --chart-5: 300 76% 72%;
-    --chart-6: 40 100% 50%;
+    /* --chart-6: 40 100% 50%; */
     --critical: 0 100% 50%; /* Bright Red */
     --holiday-1: 0 100% 20%;
     --holiday-2: 0 100% 10%;
@@ -94,6 +97,7 @@ body {
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 230 100% 30%;
+    --weekend-color: 0 0% 20%; /* Dark grey for weekends in dark mode */
   }
 }
 

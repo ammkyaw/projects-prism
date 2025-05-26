@@ -1,3 +1,4 @@
+
 import * as XLSX from 'xlsx';
 import type { Project, Task, Sprint } from '@/types/sprint-data';
 
@@ -83,6 +84,7 @@ export const handleExport = (project: Project | null, toast: ToastFun) => {
             TaskType: task.taskType,
             Severity: task.severity ?? '',
             DevEstTime: task.devEstimatedTime,
+            ReviewEstTime: task.reviewEstimatedTime, // New field
             QAEstTime: task.qaEstimatedTime,
             BufferTime: task.bufferTime,
             Assignee: task.assignee,
@@ -120,7 +122,7 @@ export const handleExport = (project: Project | null, toast: ToastFun) => {
         TaskType: task.taskType,
         Severity: task.severity ?? '',
         Priority: task.priority,
-        StoryPoints: task.storyPoints ?? '', // Added StoryPoints here
+        StoryPoints: task.storyPoints ?? '',
         Initiator: task.initiator,
         CreatedDate: task.createdDate,
         DependsOn: (task.dependsOn || []).join(', '),
@@ -204,7 +206,7 @@ export const handleExport = (project: Project | null, toast: ToastFun) => {
     const projectNameSlug = project.name
       .replace(/[^a-z0-9]/gi, '_')
       .toLowerCase();
-    XLSX.writeFile(wb, `project_prism_${projectNameSlug}_report.xlsx`); // Updated filename
+    XLSX.writeFile(wb, `projects_prism_${projectNameSlug}_report.xlsx`);
     toast({
       title: 'Success',
       description: `Data for project '${project.name}' exported to Excel.`,

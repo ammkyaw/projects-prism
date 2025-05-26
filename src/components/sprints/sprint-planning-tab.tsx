@@ -1,3 +1,4 @@
+
 // src/components/sprints/sprint-planning-tab.tsx
 'use client';
 
@@ -100,7 +101,175 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { finalizeTasks } from '@/hooks/use-sprints-actions';
+// Make finalizeTasks a local helper
+const parseEstimatedTimeToDaysLocal = (
+  timeString: string | undefined | null
+): number | null => {
+  if (!timeString) return null;
+  timeString = timeString.trim().toLowerCase();
+  let totalDays = 0;
+  const parts = timeString.match(/(\d+w)?\s*(\d+d)?/);
+  if (!parts || (parts[1] === undefined && parts[2] === undefined)) {
+    const simpleDays = parseInt(timeString, 10);
+    if (!isNaN(simpleDays) && simpleDays >= 0) return simpleDays;
+    return null;
+  }
+  const weekPart = parts[1];
+  const dayPart = parts[2];
+  if (weekPart) {
+    const weeks = parseInt(weekPart.replace('w', ''), 10);
+    if (!isNaN(weeks)) totalDays += weeks * 5;
+  }
+  if (dayPart) {
+    const days = parseInt(dayPart.replace('d', ''), 10);
+    if (!isNaN(days)) totalDays += days;
+  }
+  if (totalDays === 0 && /^\d+$/.test(timeString)) {
+    const simpleDays = parseInt(timeString, 10);
+    if (!isNaN(simpleDays) && simpleDays >= 0) return simpleDays;
+  }
+  return totalDays >= 0
+    ? totalDays
+    : timeString === '0' || timeString === '0d'
+      ? 0
+      : null;
+};
+
+const finalizeTasksLocal = (
+  taskRows: Task[],
+  taskType: 'new' | 'spillover',
+  sprintNumber: number | string | null
+): { tasks: Task[]; errors: string[] } => {
+  const finalTasks: Task[] = [];
+  const errors: string[] = [];
+  taskRows.forEach((row, index) => {
+    const taskPrefix = `${taskType === 'new' ? 'New' : 'Spillover'} Task (Row ${index + 1})`;
+    if (
+      !row.ticketNumber?.trim() &&
+      !row.storyPoints?.toString().trim() &&
+      !row.devEstimatedTime?.trim() &&
+      !row.reviewEstimatedTime?.trim() &&
+      !row.qaEstimatedTime?.trim() &&
+      !row.bufferTime?.trim() &&
+      !row.startDate
+    ) {
+      if (
+        taskRows.length === 1 &&
+        !row.ticketNumber?.trim() &&
+        !row.storyPoints?.toString().trim()
+      )
+        return;
+      return;
+    }
+    const ticketNumber = row.ticketNumber?.trim();
+    const storyPointsRaw = row.storyPoints?.toString().trim();
+    let storyPoints: number | null = null;
+    if (storyPointsRaw) {
+      const parsed = parseInt(storyPointsRaw, 10);
+      if (!isNaN(parsed) && parsed >= 0) storyPoints = parsed;
+      else
+        errors.push(
+          `${taskPrefix}: Invalid Story Points. Must be a non-negative number.`
+        );
+    }
+    const devEstimatedTime = row.devEstimatedTime?.trim() || null;
+    const reviewEstimatedTime = row.reviewEstimatedTime?.trim() || '1d'; // Default to 1d
+    const qaEstimatedTime = row.qaEstimatedTime?.trim() || '2d';
+    const bufferTime = row.bufferTime?.trim() || '1d';
+    const assignee = row.assignee?.trim() || '';
+    const reviewer = row.reviewer?.trim() || '';
+    const status = row.status?.trim() as Task['status'];
+    const startDate = row.startDate;
+    const completedDate = row.completedDate;
+    const title = row.title?.trim();
+    const description = row.description?.trim();
+    const priority = row.priority;
+    const currentTaskType = row.taskType ?? 'New Feature';
+    const currentSeverity = row.severity ?? null;
+
+    if (!ticketNumber) errors.push(`${taskPrefix}: Ticket # is required.`);
+    if (!startDate)
+      errors.push(`${taskPrefix}: Start Date is required for timeline.`);
+    if (!currentTaskType || !taskTypes.includes(currentTaskType as any))
+      errors.push(`${taskPrefix}: Invalid Task Type.`);
+    if (
+      currentTaskType === 'Bug' &&
+      (!currentSeverity || !severities.includes(currentSeverity))
+    )
+      errors.push(
+        `${taskPrefix}: Severity is required and must be valid for Bugs.`
+      );
+    if (
+      devEstimatedTime &&
+      parseEstimatedTimeToDaysLocal(devEstimatedTime) === null
+    )
+      errors.push(
+        `${taskPrefix}: Invalid Dev Est. Time. Use formats like '2d', '1w 3d', '5'.`
+      );
+    if (
+      reviewEstimatedTime &&
+      parseEstimatedTimeToDaysLocal(reviewEstimatedTime) === null
+    )
+      errors.push(
+        `${taskPrefix}: Invalid Review Est. Time. Use formats like '1d', '4h'.`
+      );
+    if (qaEstimatedTime && parseEstimatedTimeToDaysLocal(qaEstimatedTime) === null)
+      errors.push(
+        `${taskPrefix}: Invalid QA Est. Time. Use formats like '2d', '1w 3d', '5'.`
+      );
+    if (bufferTime && parseEstimatedTimeToDaysLocal(bufferTime) === null)
+      errors.push(
+        `${taskPrefix}: Invalid Buffer Time. Use formats like '2d', '1w 3d', '5'.`
+      );
+    if (!status || !taskStatuses.includes(status))
+      errors.push(`${taskPrefix}: Invalid status.`);
+    if (startDate && !isValid(parseISO(startDate)))
+      errors.push(`${taskPrefix}: Invalid Start Date format (YYYY-MM-DD).`);
+    if (completedDate && !isValid(parseISO(completedDate)))
+      errors.push(`${taskPrefix}: Invalid Completed Date format (YYYY-MM-DD).`);
+
+    if (errors.length > 0) {
+      const criticalErrorForThisRow = errors.some((e) =>
+        e.startsWith(taskPrefix)
+      );
+      if (criticalErrorForThisRow) return;
+    }
+
+    finalTasks.push({
+      id:
+        row.id ||
+        `task_${sprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
+      ticketNumber: ticketNumber || '',
+      backlogId: row.backlogId,
+      title: title,
+      description: description,
+      storyPoints: storyPoints,
+      devEstimatedTime: devEstimatedTime,
+      reviewEstimatedTime: reviewEstimatedTime,
+      qaEstimatedTime: qaEstimatedTime,
+      bufferTime: bufferTime,
+      assignee: assignee,
+      reviewer: reviewer,
+      status: status,
+      startDate: startDate,
+      completedDate: completedDate,
+      priority: priority,
+      acceptanceCriteria: row.acceptanceCriteria,
+      dependsOn: row.dependsOn,
+      taskType: currentTaskType as TaskType,
+      severity: currentTaskType === 'Bug' ? currentSeverity : null,
+      createdDate: row.createdDate,
+      initiator: row.initiator,
+      needsGrooming: row.needsGrooming,
+      readyForSprint: row.readyForSprint,
+      movedToSprint: row.movedToSprint,
+      historyStatus: row.historyStatus,
+      splitFromId: row.splitFromId,
+      mergeEventId: row.mergeEventId,
+    });
+  });
+  return { tasks: finalTasks, errors };
+};
 
 const DURATION_OPTIONS = ['1 Week', '2 Weeks', '3 Weeks', '4 Weeks'];
 
@@ -203,6 +372,7 @@ const createEmptyTaskRow = (): TaskRow => ({
   backlogId: '',
   storyPoints: '',
   devEstimatedTime: '',
+  reviewEstimatedTime: '1d', // Default Review Est
   qaEstimatedTime: '2d',
   bufferTime: '1d',
   assignee: '',
@@ -301,7 +471,7 @@ export default function SprintPlanningTab({
       .sort((a, b) => a.sprintNumber - b.sprintNumber);
   }, [sprints]);
 
-  const isFormDisabled = selectedSprint?.status === 'Completed'; // Simplified read-only check
+  const isFormDisabled = selectedSprint?.status === 'Completed';
 
   const isSprintActive = selectedSprint?.status === 'Active';
   const isSprintPlanned = selectedSprint?.status === 'Planned';
@@ -310,8 +480,8 @@ export default function SprintPlanningTab({
     const numPlanned = sprints.filter((s) => s.status === 'Planned').length;
     const numActive = sprints.filter((s) => s.status === 'Active').length;
     const canPlanNew =
-      (numActive === 0 && numPlanned < 2) || // 0 active, can have up to 2 planned
-      (numActive === 1 && numPlanned < 1); // 1 active, can have up to 1 planned
+      (numActive === 0 && numPlanned < 2) ||
+      (numActive === 1 && numPlanned < 1);
     const canStartNew = numActive === 0;
     return { numPlanned, numActive, canPlanNew, canStartNew };
   }, [sprints]);
@@ -413,6 +583,7 @@ export default function SprintPlanningTab({
         backlogId: task.backlogId ?? '',
         storyPoints: task.storyPoints?.toString() ?? '',
         devEstimatedTime: task.devEstimatedTime ?? '',
+        reviewEstimatedTime: task.reviewEstimatedTime ?? '1d', // Default review est
         qaEstimatedTime: task.qaEstimatedTime ?? '2d',
         bufferTime: task.bufferTime ?? '1d',
         assignee: task.assignee ?? '',
@@ -648,6 +819,15 @@ export default function SprintPlanningTab({
     setIsBacklogDialogOpen(true);
   };
 
+  const handleBacklogItemToggle = (itemId: string, checked: boolean) => {
+    setSelectedBacklogIds((prev) => {
+      const newSelection = new Set(prev);
+      if (checked) newSelection.add(itemId);
+      else newSelection.delete(itemId);
+      return newSelection;
+    });
+  };
+
   const handleAddSelectedBacklogItems = () => {
     if (selectedBacklogIds.size === 0) {
       toast({
@@ -684,6 +864,7 @@ export default function SprintPlanningTab({
           _internalId: `backlog_added_${task.id}_${Date.now()}`,
           startDateObj: parseDateString(task.startDate),
           storyPoints: task.storyPoints?.toString() ?? '',
+          reviewEstimatedTime: task.reviewEstimatedTime ?? '1d',
           qaEstimatedTime: task.qaEstimatedTime ?? '2d',
           bufferTime: task.bufferTime ?? '1d',
           backlogId: task.backlogId ?? '',
@@ -723,16 +904,13 @@ export default function SprintPlanningTab({
       });
       return;
     }
-    const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(
+    const { tasks: finalNewTasks, errors: newErrors } = finalizeTasksLocal(
       newTasks,
       'new',
       selectedSprintNumber
     );
-    const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(
-      spilloverTasks,
-      'spillover',
-      selectedSprintNumber
-    );
+    const { tasks: finalSpilloverTasks, errors: spillErrors } =
+      finalizeTasksLocal(spilloverTasks, 'spillover', selectedSprintNumber);
     const allErrors = [...newErrors, ...spillErrors];
     if (allErrors.length > 0) {
       toast({
@@ -811,16 +989,13 @@ export default function SprintPlanningTab({
       duration: duration,
       totalDays: totalDays,
     };
-    const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(
+    const { tasks: finalNewTasks, errors: newErrors } = finalizeTasksLocal(
       newTasks,
       'new',
       sprintDetails.sprintNumber
     );
-    const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(
-      spilloverTasks,
-      'spillover',
-      sprintDetails.sprintNumber
-    );
+    const { tasks: finalSpilloverTasks, errors: spillErrors } =
+      finalizeTasksLocal(spilloverTasks, 'spillover', sprintDetails.sprintNumber);
     const allErrors = [...newErrors, ...spillErrors];
     if (allErrors.length > 0) {
       toast({
@@ -858,16 +1033,13 @@ export default function SprintPlanningTab({
       });
       return;
     }
-    const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(
+    const { tasks: finalNewTasks, errors: newErrors } = finalizeTasksLocal(
       newTasks,
       'new',
       selectedSprintNumber
     );
-    const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(
-      spilloverTasks,
-      'spillover',
-      selectedSprintNumber
-    );
+    const { tasks: finalSpilloverTasks, errors: spillErrors } =
+      finalizeTasksLocal(spilloverTasks, 'spillover', selectedSprintNumber);
     const allErrors = [...newErrors, ...spillErrors];
     if (allErrors.length > 0) {
       toast({
@@ -890,16 +1062,13 @@ export default function SprintPlanningTab({
   const handleCompleteSprintClick = () => {
     if (!selectedSprint || !isSprintActive || selectedSprintNumber === null)
       return;
-    const { tasks: finalNewTasks, errors: newErrors } = finalizeTasks(
+    const { tasks: finalNewTasks, errors: newErrors } = finalizeTasksLocal(
       newTasks,
       'new',
       selectedSprintNumber
     );
-    const { tasks: finalSpilloverTasks, errors: spillErrors } = finalizeTasks(
-      spilloverTasks,
-      'spillover',
-      selectedSprintNumber
-    );
+    const { tasks: finalSpilloverTasks, errors: spillErrors } =
+      finalizeTasksLocal(spilloverTasks, 'spillover', selectedSprintNumber);
     const allErrors = [...newErrors, ...spillErrors];
     if (allErrors.length > 0) {
       toast({
@@ -1018,8 +1187,8 @@ export default function SprintPlanningTab({
     disabled: boolean
   ) => (
     <div className="overflow-x-auto">
-      <div className="min-w-[1820px] space-y-4">
-        <div className="hidden grid-cols-[100px_120px_120px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] items-center gap-x-2 border-b pb-2 md:grid">
+      <div className="min-w-[2000px] space-y-4">
+        <div className="hidden grid-cols-[100px_120px_120px_100px_70px_100px_100px_100px_100px_150px_150px_120px_100px_80px_40px] items-center gap-x-2 border-b pb-2 md:grid">
           <Label className="text-xs font-medium text-muted-foreground">
             Ticket #*
           </Label>
@@ -1037,6 +1206,9 @@ export default function SprintPlanningTab({
           </Label>
           <Label className="text-right text-xs font-medium text-muted-foreground">
             Dev Est
+          </Label>
+          <Label className="text-right text-xs font-medium text-muted-foreground">
+            Review Est
           </Label>
           <Label className="text-right text-xs font-medium text-muted-foreground">
             QA Est
@@ -1063,7 +1235,7 @@ export default function SprintPlanningTab({
           {taskRows.map((row) => (
             <div
               key={row._internalId}
-              className="grid grid-cols-2 items-start gap-x-2 gap-y-2 border-b pb-4 last:border-b-0 md:grid-cols-[100px_120px_120px_100px_70px_100px_100px_100px_150px_150px_120px_100px_80px_40px] md:border-none md:pb-0"
+              className="grid grid-cols-2 items-start gap-x-2 gap-y-2 border-b pb-4 last:border-b-0 md:grid-cols-[100px_120px_120px_100px_70px_100px_100px_100px_100px_150px_150px_120px_100px_80px_40px] md:border-none md:pb-0"
             >
               <div className="col-span-1 md:col-span-1">
                 <Label
@@ -1217,6 +1389,29 @@ export default function SprintPlanningTab({
                     )
                   }
                   placeholder="e.g., 2d"
+                  className="h-9 w-full text-right"
+                  disabled={disabled}
+                />
+              </div>
+              <div className="col-span-1 md:col-span-1">
+                <Label
+                  htmlFor={`reviewEstTime-${type}-${row._internalId}`}
+                  className="text-xs font-medium md:hidden"
+                >
+                  Review Est
+                </Label>
+                <Input
+                  id={`reviewEstTime-${type}-${row._internalId}`}
+                  value={row.reviewEstimatedTime ?? ''}
+                  onChange={(e) =>
+                    handleTaskInputChange(
+                      type,
+                      row._internalId,
+                      'reviewEstimatedTime',
+                      e.target.value
+                    )
+                  }
+                  placeholder="e.g., 1d"
                   className="h-9 w-full text-right"
                   disabled={disabled}
                 />
@@ -1638,9 +1833,7 @@ export default function SprintPlanningTab({
                 size="icon"
                 onClick={() => setTimelineViewMode('task')}
                 title="View by Task"
-                disabled={
-                  isFormDisabled && selectedSprint?.status !== 'Completed'
-                } // Keep enabled for completed sprints
+                disabled={disabled && selectedSprint?.status !== 'Completed'}
               >
                 <GanttChartSquare className="h-4 w-4" />
               </Button>
@@ -1651,9 +1844,7 @@ export default function SprintPlanningTab({
                 size="icon"
                 onClick={() => setTimelineViewMode('assignee')}
                 title="View by Assignee"
-                disabled={
-                  isFormDisabled && selectedSprint?.status !== 'Completed'
-                } // Keep enabled for completed sprints
+                disabled={disabled && selectedSprint?.status !== 'Completed'}
               >
                 <Users className="h-4 w-4" />
               </Button>
@@ -1688,7 +1879,6 @@ export default function SprintPlanningTab({
 
   return (
     <div className="space-y-6">
-      {/* Card for Sprint Header and Selection/Creation - Hide if viewing Completed Sprint */}
       {selectedSprint?.status !== 'Completed' && (
         <Card>
           <CardHeader>
@@ -1705,7 +1895,7 @@ export default function SprintPlanningTab({
                   variant="outline"
                   size="sm"
                   onClick={handlePlanNewSprintClick}
-                  disabled={!sprintLimits.canPlanNew}
+                  disabled={!sprintLimits.canPlanNew || isFormDisabled}
                   title={
                     !sprintLimits.canPlanNew
                       ? 'Sprint limit reached'
@@ -1859,10 +2049,8 @@ export default function SprintPlanningTab({
         </Card>
       )}
 
-      {/* Display planning form for the selected existing sprint OR read-only details */}
       {!isCreatingNewSprint && selectedSprint && (
         <Card className="mt-6">
-          {/* Conditional Header for non-completed Sprints */}
           {selectedSprint.status !== 'Completed' && (
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1891,7 +2079,7 @@ export default function SprintPlanningTab({
           </CardContent>
           <CardFooter className="flex justify-end gap-2 border-t pt-4">
             {isFormDisabled &&
-              onBackToOverview && ( // Show Back button if completed
+              onBackToOverview && (
                 <Button variant="outline" size="sm" onClick={onBackToOverview}>
                   <ArrowLeft className="mr-2 h-4 w-4" /> Back to Overview
                 </Button>
@@ -1936,7 +2124,10 @@ export default function SprintPlanningTab({
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleCompleteSprintClick}>
+                    <AlertDialogAction
+                      onClick={handleCompleteSprintClick}
+                      disabled={selectedSprint.status === 'Completed'}
+                    >
                       Complete Sprint
                     </AlertDialogAction>
                   </AlertDialogFooter>

@@ -1,3 +1,4 @@
+
 // Represents the status of a sprint
 export type SprintStatus = 'Planned' | 'Active' | 'Completed';
 
@@ -80,6 +81,7 @@ export interface Task {
   acceptanceCriteria?: string;
   storyPoints?: number | string | null; // Allow string for input, convert to number on save
   devEstimatedTime?: string | null;
+  reviewEstimatedTime?: string | null; // New field for Review Estimate
   qaEstimatedTime?: string | null;
   bufferTime?: string | null;
   assignee?: string | null; // Allow null for unassigned
@@ -332,6 +334,7 @@ export const initialBacklogTask: Omit<Task, 'id'> = {
   splitFromId: null,
   mergeEventId: null,
   devEstimatedTime: null,
+  reviewEstimatedTime: null, // New field
   qaEstimatedTime: null,
   bufferTime: null,
   assignee: null,
@@ -364,7 +367,7 @@ export const initialRiskItem: Omit<RiskItem, 'id' | 'riskScore'> = {
   owner: '',
   category: 'Technical',
   status: 'Open',
-  likelihood: 'Possible', // Updated default to 'Possible'
+  likelihood: 'Possible',
   impact: 'Moderate',
   mitigationStrategies: '',
   contingencyPlan: '',
