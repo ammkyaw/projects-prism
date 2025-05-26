@@ -453,10 +453,7 @@ export default function SprintTimelineChart({
                 ...task,
                 name: assigneeName,
                 index: assigneeIndex,
-                tooltip: `Assignee: ${assigneeName} | Ticket: ${task.originalTask?.ticketNumber || 'N/A'} | Dev: ${task.originalTask?.devEstimatedTime || '0d'}`,
-                reviewRange: undefined, // Hide review in assignee view
-                qaRange: undefined, // Hide QA in assignee view
-                bufferRange: undefined, // Hide buffer in assignee view
+                tooltip: `Assignee: ${assigneeName} | Ticket: ${task.originalTask?.ticketNumber || 'N/A'} | Dev: ${task.originalTask?.devEstimatedTime || '0d'} | QA: ${task.originalTask?.qaEstimatedTime || '0d'} | Buffer: ${task.originalTask?.bufferTime || '0d'}`
               });
             }
           });
@@ -739,35 +736,37 @@ export default function SprintTimelineChart({
             shape={<Rectangle radius={0} />}
           />
           {viewMode === 'task' && (
-            <>
-              <Bar
-                dataKey="reviewRange"
-                radius={2}
-                barSize={10}
-                fill={reviewTaskBarColor}
-                name="Review"
-                yAxisId={0}
-                shape={<Rectangle radius={0} />}
-              />
-              <Bar
-                dataKey="qaRange"
-                radius={2}
-                barSize={10}
-                fill={qaTaskBarColor}
-                name="QA"
-                yAxisId={0}
-                shape={<Rectangle radius={0} />}
-              />
-              <Bar
-                dataKey="bufferRange"
-                radius={2}
-                barSize={10}
-                fill={bufferTaskBarColor}
-                name="Buffer"
-                yAxisId={0}
-                shape={<Rectangle radius={0} />}
-              />
-            </>
+            <Bar
+              dataKey="reviewRange"
+              radius={2}
+              barSize={10}
+              fill={reviewTaskBarColor}
+              name="Review"
+              yAxisId={0}
+              shape={<Rectangle radius={0} />}
+            />
+          )}
+          {viewMode === 'task' && (
+            <Bar
+              dataKey="qaRange"
+              radius={2}
+              barSize={10}
+              fill={qaTaskBarColor}
+              name="QA"
+              yAxisId={0}
+              shape={<Rectangle radius={0} />}
+            />
+          )}
+          {viewMode === 'task' && (
+            <Bar
+              dataKey="bufferRange"
+              radius={2}
+              barSize={10}
+              fill={bufferTaskBarColor}
+              name="Buffer"
+              yAxisId={0}
+              shape={<Rectangle radius={0} />}
+            />
           )}
 
           {/* Render Weekend and Holiday Areas on Top */}
