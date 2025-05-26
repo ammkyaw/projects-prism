@@ -39,3 +39,7 @@ next-env.d.ts
 
 .genkit/*
 .env*
+
+.idx/
+.vscode/
+.modified
