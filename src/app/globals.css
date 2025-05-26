@@ -10,87 +10,90 @@ body {
 
 @layer base {
   :root {
-    --background: 0 0% 96%; /* Light Gray (#F5F5F5) */
-    --foreground: 0 0% 3.9%; /* Default dark */
+    --background: 0 0% 98%; /* Off-white, very light gray */
+    --foreground: 240 10% 3.9%; /* Dark cool gray */
     --card: 0 0% 100%; /* White */
-    --card-foreground: 0 0% 3.9%; /* Default dark */
+    --card-foreground: 240 10% 3.9%; /* Dark cool gray */
     --popover: 0 0% 100%; /* White */
-    --popover-foreground: 0 0% 3.9%; /* Default dark */
-    --primary: 220 100% 40%; /* Dark Blue (#003366) */
-    --primary-foreground: 0 0% 98%; /* White, good contrast with dark blue */
-    --secondary: 0 0% 96%; /* Light Gray (#F5F5F5) */
-    --secondary-foreground: 0 0% 9%; /* Default dark */
-    --muted: 0 0% 90%; /* Slightly darker gray for muted */
-    --muted-foreground: 0 0% 45.1%; /* Default muted foreground */
-    --accent: 51 100% 50%; /* Gold (#FFD700) */
-    --accent-foreground: 0 0% 9%; /* Default dark */
-    --destructive: 0 84.2% 60.2%; /* Default destructive */
+    --popover-foreground: 240 10% 3.9%; /* Dark cool gray */
+    --primary: 221 83% 53%; /* A slightly desaturated, professional blue */
+    --primary-foreground: 0 0% 98%; /* Almost white for good contrast */
+    --secondary: 240 4.8% 95.9%; /* Light gray, similar to ShadCN secondary */
+    --secondary-foreground: 240 5.9% 10%; /* Dark gray for secondary text */
+    --muted: 240 4.8% 95.9%; /* Light gray for muted elements */
+    --muted-foreground: 240 3.8% 46.1%; /* Softer gray for muted text */
+    --accent: 210 100% 40%; /* A slightly brighter, but still professional blue for accents */
+    --accent-foreground: 0 0% 98%; /* Almost white for accent text */
+    --destructive: 0 72.2% 50.6%; /* Default destructive (slightly adjusted for harmony) */
     --destructive-foreground: 0 0% 98%; /* Default destructive foreground */
-    --border: 0 0% 89.8%; /* Default border */
-    --input: 0 0% 89.8%; /* Default input */
-    --ring: 210 100% 20%; /* Dark Blue for focus rings */
-    --chart-1: 210 100% 20%; /* Dark Blue */
-    --chart-2: 51 100% 50%; /* Gold */
-    --chart-3: 210 40% 50%; /* Muted Blue */
-    --chart-4: 120 40% 55%; /* Green-ish */
-    --chart-5: 30 90% 60%; /* Orange-ish */
-    --chart-6: 300 76% 72%;
-    --critical: 0 100% 50%;
-    --holiday-1: 210 40% 50%;
-    --holiday-2: 30 90% 60%;
-    --holiday-3: 120 40% 55%;
+    --border: 240 5.9% 90%; /* Light gray border */
+    --input: 240 5.9% 90%; /* Light gray input background */
+    --ring: 221 83% 53%; /* Primary color for focus rings */
+
+    --chart-1: 221 83% 53%; /* Professional Blue */
+    --chart-2: 170 70% 45%; /* Teal/Aqua */
+    --chart-3: 30 80% 55%;  /* Orange */
+    --chart-4: 260 70% 55%; /* Purple */
+    --chart-5: 350 75% 60%; /* Pink/Rose */
+    --chart-6: 120 50% 50%; /* Green (can be added if needed) */
+
+    --critical: 0 100% 50%; /* Bright Red for critical items (e.g., in risks) */
+    --holiday-1: 210 40% 50%; /* Muted Blue - keep as is or adjust if needed */
+    --holiday-2: 30 90% 60%;  /* Orange-ish - keep as is or adjust */
+    --holiday-3: 120 40% 55%; /* Green-ish - keep as is or adjust */
+
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 210 100% 20%; /* Dark Blue for sidebar primary */
-    --sidebar-primary-foreground: 0 0% 98%; /* White for sidebar primary foreground */
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 210 100% 20%; /* Dark Blue for sidebar focus rings */
+
+    /* Sidebar specific colors for light theme */
+    --sidebar-background: 0 0% 96%; /* Slightly off-white, very light gray */
+    --sidebar-foreground: 240 10% 25%; /* Darker gray for sidebar text */
+    --sidebar-primary: 221 83% 53%; /* Primary blue for active sidebar items */
+    --sidebar-primary-foreground: 0 0% 98%; /* White for active sidebar text */
+    --sidebar-accent: 240 4.8% 92%; /* Lighter gray for hover/accent in sidebar */
+    --sidebar-accent-foreground: 240 5.9% 10%; /* Dark gray for hover/accent text */
+    --sidebar-border: 240 5.9% 88%; /* Slightly darker border for sidebar */
+    --sidebar-ring: 221 83% 53%; /* Primary color for focus rings in sidebar */
   }
+
   .dark {
-    /* Define dark mode colors if needed, otherwise fallback */
+    /* Dark theme colors remain unchanged as per request */
     --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
     --card: 240 10% 3.9%;
     --card-foreground: 0 0% 98%;
     --popover: 240 10% 3.9%;
     --popover-foreground: 0 0% 98%;
-    --primary: 240 100% 50%; /* Dark Blue (#003399) */
+    --primary: 240 100% 50%; /* Original Dark Blue (#003399) */
     --primary-foreground: 0 0% 98%; /* Almost white for good contrast */
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
     --muted: 240 3.7% 15.9%;
     --muted-foreground: 0 0% 63.9%;
-    --accent: 51 100% 60%; /* Slightly lighter Gold for dark mode */
+    --accent: 51 100% 60%; /* Original Slightly lighter Gold for dark mode */
     --accent-foreground: 240 5.9% 10%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
-    --ring: 230 100% 30%; /* Dark Blue for focus rings */
-    --chart-1: 230 100% 30%; /* Dark Blue for charts */
-    --chart-2: 51 100% 60%; /* Yellow for charts */
+    --ring: 230 100% 30%; /* Original Dark Blue for focus rings */
+    --chart-1: 230 100% 30%;
+    --chart-2: 51 100% 60%;
     --chart-3: 210 50% 60%;
-    --chart-4: 147 100% 57%; /* Green for charts */
-    --chart-5: 300 76% 72%; /* Pink for charts */
-    --chart-6: 40 100% 50%; /* Orange for charts */
+    --chart-4: 147 100% 57%;
+    --chart-5: 300 76% 72%;
+    --chart-6: 40 100% 50%;
     --critical: 0 100% 50%; /* Bright Red */
     --holiday-1: 0 100% 20%;
     --holiday-2: 0 100% 10%;
     --holiday-3: 0 100% 5%;
-    /* --chart-4: 0 0% 20%;
-    --chart-5: 0 0% 30%;
-    --chart-6: 0 0% 40%; */
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 230 100% 30%; /* Dark Blue for sidebar primary */
-    --sidebar-primary-foreground: 0 0% 98%; /* White for sidebar primary foreground */
+    --sidebar-primary: 230 100% 30%;
+    --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 240 3.7% 15.9%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 230 100% 30%; /* Dark Blue for sidebar focus rings */
+    --sidebar-ring: 230 100% 30%;
   }
 }
 
