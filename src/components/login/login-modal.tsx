@@ -1,7 +1,10 @@
+
 // src/components/login-modal.tsx
 import { useState, useEffect } from 'react';
-import { auth } from '@/lib/firebase'; // Import Firebase auth object
-import { signInWithEmailAndPassword } from 'firebase/auth'; // Import the sign-in function
+import { auth, db } from '@/lib/firebase'; // Import Firebase auth and db objects
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { collection, query, where, getDocs, limit } from 'firebase/firestore'; // Firestore imports
+import type { UserProfile } from '@/types/sprint-data'; // Import UserProfile type
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,7 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { XCircle, Eye, EyeOff, Loader2 } from 'lucide-react'; // Import Eye, EyeOff, and Loader2 icons
+import { XCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -29,9 +32,9 @@ export default function LoginModal({
   onOpenChange,
   onLoginSuccess,
 }: LoginModalProps) {
-  const [username, setUsername] = useState(''); // Changed from email to username
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false); // State for password visibility
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -39,7 +42,6 @@ export default function LoginModal({
 
   useEffect(() => {
     if (isOpen && !prevIsOpen) {
-      // Dialog is opening
       setUsername('');
       setPassword('');
       setError(null);
@@ -55,39 +57,95 @@ export default function LoginModal({
     setIsLoading(true);
 
     try {
-      console.log('Attempting login with username (as email):', username);
-      // Firebase still expects an email for signInWithEmailAndPassword
-      await signInWithEmailAndPassword(auth, username, password);
-      console.log('Firebase login successful');
-      // Toast will be shown by the parent upon successful redirection or data load
-      onLoginSuccess();
-    } catch (err: any) {
-      console.error('Firebase login failed:', err);
-      let errorMessage = 'An unexpected error occurred. Please try again.';
-      switch (err.code) {
-        case 'auth/user-not-found':
-        case 'auth/wrong-password':
-          errorMessage = 'Invalid username or password.';
-          break;
-        case 'auth/invalid-email': // This error might still occur if the "username" isn't a valid email format
-          errorMessage = 'Please enter a valid username (email format).';
-          break;
-        case 'auth/too-many-requests':
-          errorMessage = 'Too many login attempts. Please try again later.';
-          break;
-        case 'auth/invalid-credential':
-          errorMessage = 'Invalid username or password.';
-          break;
+      console.log('Attempting login with username:', username);
+
+      // 1. Query Firestore for the user profile based on username
+      const userProfilesRef = collection(db, 'userProfiles');
+      const q = query(
+        userProfilesRef,
+        where('username', '==', username.trim()),
+        limit(1)
+      );
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        setError('Invalid username or password.');
+        toast({
+          variant: 'destructive',
+          title: 'Login Failed',
+          description: 'Invalid username or password.',
+        });
+        setIsLoading(false);
+        return;
       }
+
+      // Assuming username is unique, there should be at most one document
+      const userProfileDoc = querySnapshot.docs[0];
+      const userProfileData = userProfileDoc.data() as UserProfile;
+      const emailToAuth = userProfileData.email;
+
+      if (!emailToAuth) {
+        // This case should ideally not happen if data is consistent
+        console.error('Email not found for username:', username);
+        setError('User profile incomplete. Please contact support.');
+        toast({
+          variant: 'destructive',
+          title: 'Login Failed',
+          description: 'User profile incomplete.',
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Use the retrieved email to sign in with Firebase Auth
+      console.log('Authenticating with Firebase Auth using email:', emailToAuth);
+      await signInWithEmailAndPassword(auth, emailToAuth, password);
+      console.log('Firebase login successful for email:', emailToAuth);
+      onLoginSuccess();
+      // isLoading will remain true as the modal will unmount on success
+    } catch (err: any) {
+      console.error('Login process failed:', err);
+      let errorMessage = 'An unexpected error occurred. Please try again.';
+      // Firebase auth errors
+      if (err.code) {
+        switch (err.code) {
+          case 'auth/user-not-found': // This would apply to the email, not the username
+          case 'auth/wrong-password':
+            errorMessage = 'Invalid username or password.';
+            break;
+          case 'auth/invalid-email': // Should be caught earlier if email format from profile is bad
+            errorMessage = 'Invalid email format in profile.';
+            break;
+          case 'auth/too-many-requests':
+            errorMessage = 'Too many login attempts. Please try again later.';
+            break;
+          case 'auth/invalid-credential':
+            errorMessage = 'Invalid username or password.';
+            break;
+          // Firestore specific errors (less likely here but good to be aware)
+          case 'permission-denied':
+            errorMessage =
+              'Permission denied. Check Firestore security rules for userProfiles.';
+            break;
+          case 'unavailable':
+            errorMessage =
+              'Could not connect to the database. Please check your internet connection.';
+            break;
+        }
+      } else if (err.message.includes('Failed to fetch')) {
+        // Network error during Firestore query
+        errorMessage =
+          'Network error. Please check your internet connection and try again.';
+      }
+
       setError(errorMessage);
       toast({
         variant: 'destructive',
         title: 'Login Failed',
         description: errorMessage,
       });
-      setIsLoading(false); // Set loading to false only on error
+      setIsLoading(false);
     }
-    // Do not set isLoading to false on success here, as the modal will unmount
   };
 
   const togglePasswordVisibility = () => {
@@ -99,7 +157,6 @@ export default function LoginModal({
       open={isOpen}
       onOpenChange={(open) => {
         if (!isLoading) {
-          // Prevent closing if loading
           onOpenChange(open);
         }
       }}
@@ -126,12 +183,12 @@ export default function LoginModal({
               </Label>
               <Input
                 id="username-login"
-                type="text" // Changed from email to text, but Firebase expects email format
+                type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="col-span-3"
                 required
-                autoComplete="username" // Changed from email
+                autoComplete="username"
                 disabled={isLoading}
               />
             </div>

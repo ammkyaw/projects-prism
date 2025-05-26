@@ -262,6 +262,15 @@ export interface Project {
 
 export type AppData = Project[];
 
+// New UserProfile type
+export interface UserProfile {
+  id?: string; // Document ID from Firestore
+  username: string;
+  email: string;
+  // Add any other profile fields you might need, e.g., displayName, photoURL
+}
+
+
 export const initialSprintData: SprintData = {
   sprints: [],
   totalStoryPoints: 0,
