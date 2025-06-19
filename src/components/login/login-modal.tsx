@@ -139,6 +139,9 @@ export default function LoginModal({
             errorMessage =
               'Could not connect to the database. Check internet connection.';
             break;
+           default:
+            errorMessage = `Login failed: ${err.message || 'Please try again.'}`;
+            break;
         }
       } else if (err.message?.includes('Failed to fetch')) {
         errorMessage =
@@ -477,5 +480,3 @@ export default function LoginModal({
     </Dialog>
   );
 }
-
-    
