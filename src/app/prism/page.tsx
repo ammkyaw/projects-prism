@@ -817,10 +817,10 @@ function PrismPage() {
             onMoveToSprint: handleMoveToSprint,
             generateNextBacklogId: generateNextBacklogIdHelper,
             allProjectBacklogItems: selectedProject.backlog ?? [],
-            customTaskTypes: [
-              ...predefinedTaskTypes,
-              ...(selectedProject.customTaskTypes || []),
-            ],
+            // customTaskTypes: [
+            //   ...predefinedTaskTypes,
+            //   ...(selectedProject.customTaskTypes || []),
+            // ], // Removed as it seems not used here
           };
           break;
         case 'backlog/grooming':
@@ -899,6 +899,9 @@ function PrismPage() {
           componentProps = {
             ...componentProps,
             sprintData: selectedProject.sprintData,
+            members: selectedProject.members ?? [], // Added members
+            backlog: selectedProject.backlog ?? [], // Added backlog
+            // Add any other data needed by reports
           };
           break;
         case 'settings/members':
@@ -1100,6 +1103,8 @@ function PrismPage() {
                 variant="outline"
                 size="sm"
                 className="p-2 md:px-3 md:py-2"
+                disabled // Disabling the button
+                title="Export Project Data is currently disabled" // Optional: add a title to explain why it's disabled
               >
                 <Download className="h-4 w-4 md:mr-2" />
                 <span className="hidden md:inline">Export Project Data</span>
