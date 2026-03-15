@@ -196,6 +196,10 @@ function PrismPage() {
         // Set a session cookie so the middleware can protect /prism server-side.
         document.cookie = 'prism_auth_session=1; path=/; SameSite=Strict';
         setIsAuthenticated(true);
+        // Ensure projects are fetched with the now-confirmed auth.currentUser.
+        // Without this, fetchProjects may have run before Firebase restored the
+        // session, returning [] because auth.currentUser was still null.
+        queryClient.invalidateQueries({ queryKey: ['projects'] });
       } else {
         // Clear the session cookie and React Query cache on sign-out.
         document.cookie = 'prism_auth_session=; path=/; max-age=0; SameSite=Strict';

@@ -6,9 +6,7 @@ import {
   setDoc,
   deleteDoc,
   query,
-  where,
   limit,
-  orderBy,
 } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import type { Project, AppData } from '@/types/sprint-data';
@@ -18,23 +16,26 @@ const PROJECTS_QUERY_KEY = 'projects';
 const PROJECTS_FETCH_LIMIT = 100;
 
 // --- Fetch Projects ---
-// Only returns projects owned by the currently signed-in user (RBAC).
-// Older projects without a `userId` field are intentionally excluded to
-// encourage re-saving them with the owner UID going forward.
+// Returns projects owned by the currently signed-in user.
+// Legacy projects that pre-date the userId field (i.e. userId is absent or empty)
+// are included via client-side filtering so existing data is not silently lost.
+// New projects always get userId stamped at creation time.
 const fetchProjects = async (): Promise<AppData> => {
   const currentUser = auth.currentUser;
   if (!currentUser) return [];
 
   const projectsCollection = collection(db, 'projects');
-  const userProjectsQuery = query(
+  // Fetch a broad set and filter client-side to support both new (userId-stamped)
+  // and legacy (no userId) documents without requiring a Firestore index migration.
+  const projectsQuery = query(
     projectsCollection,
-    where('userId', '==', currentUser.uid),
     limit(PROJECTS_FETCH_LIMIT)
   );
-  const querySnapshot = await getDocs(userProjectsQuery);
-  const projects = querySnapshot.docs.map(
-    (docSnap) => ({ id: docSnap.id, ...docSnap.data() }) as Project
-  );
+  const querySnapshot = await getDocs(projectsQuery);
+  const projects = querySnapshot.docs
+    .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }) as Project)
+    // Keep: projects explicitly owned by this user, OR legacy projects with no owner set.
+    .filter((p) => !p.userId || p.userId === currentUser.uid);
 
   const validatedProjects = projects.map((project) => ({
     ...project,
