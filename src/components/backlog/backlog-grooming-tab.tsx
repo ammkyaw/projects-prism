@@ -241,7 +241,6 @@ export default function BacklogGroomingTab({
 
   // Handler for saving the split items (passed to the dialog)
   const handleConfirmSplit = (originalTaskId: string, splitTasks: Task[]) => {
-    console.log('Confirming split:', originalTaskId, splitTasks);
     onSplitBacklogItem(originalTaskId, splitTasks);
     setIsSplitDialogOpen(false);
     setSplittingTask(null);
@@ -254,7 +253,6 @@ export default function BacklogGroomingTab({
 
   // Handler for confirming the merge operation
   const handleConfirmMerge = (taskIdsToMerge: string[], mergedTask: Task) => {
-    console.log('Confirming merge:', taskIdsToMerge, mergedTask);
     onMergeBacklogItems(taskIdsToMerge, mergedTask);
     setIsMergeDialogOpen(false);
   };

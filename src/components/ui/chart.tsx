@@ -76,13 +76,17 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null;
   }
 
+  // Sanitize the chart id so it can only contain alphanumeric characters,
+  // hyphens, and underscores — preventing CSS injection via a crafted id.
+  const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '');
+
   return (
     <style
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(
             ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
+${prefix} [data-chart=${safeId}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
     const color =

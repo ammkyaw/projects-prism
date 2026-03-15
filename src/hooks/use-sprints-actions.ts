@@ -190,7 +190,7 @@ export const finalizeTasks = (
     finalTasks.push({
       id:
         row.id ||
-        `task_${sprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${Date.now()}_${index}`,
+        `task_${sprintNumber ?? 'new'}_${taskType === 'new' ? 'n' : 's'}_${crypto.randomUUID()}`,
       ticketNumber: ticketNumber || '',
       backlogId: row.backlogId,
       title: title,
@@ -521,7 +521,7 @@ export const useSprintsActions = ({
         const spilloverTaskCopies = undoneTasksOriginal.map((task) => ({
           ...initialBacklogTask, // Ensure all fields are present for a new task instance
           ...task, // Copy details from the original undone task
-          id: `spill_${task.id || Date.now()}_${Math.random().toString(36).substring(2, 7)}`, // Generate a new unique ID for the spillover copy
+          id: `spill_${task.id}_${crypto.randomUUID()}`, // Prefix links spillover back to source task; UUID prevents collisions
           status: 'To Do' as Task['status'], // Reset status
           startDate: null, // Reset start date
           completedDate: null, // Reset completed date

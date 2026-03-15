@@ -194,7 +194,7 @@ export default function EditSprintDetailsPage() {
       ticketNumbers.add(ticketNumber.toLowerCase());
 
       finalDetails.push({
-        id: row.id || `detail_${sprintNumber}_${Date.now()}_${index}`,
+        id: row.id || crypto.randomUUID(),
         ticketNumber,
         developer: row.developer.trim(),
         storyPoints: Number(row.storyPoints),

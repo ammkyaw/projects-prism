@@ -120,53 +120,60 @@ export default function HolidaysTab({
   const { toast } = useToast();
   const currentYear = getYear(new Date()); // Get current year for holiday fetching
 
-  // --- New function to fetch holidays from the Nager.Date API ---
+  // --- Fetch holidays from the Nager.Date API with timeout and input validation ---
   const fetchNagerHolidays = useCallback(
     async (countryCode: string, year: number): Promise<PublicHoliday[]> => {
-      if (!countryCode) return []; // Don't fetch if no country code
+      if (!countryCode) return [];
+
+      // Validate country code: must be exactly 2 uppercase ASCII letters.
+      const VALID_COUNTRY_CODE = /^[A-Z]{2}$/;
+      const sanitizedCode = countryCode.trim().toUpperCase();
+      if (!VALID_COUNTRY_CODE.test(sanitizedCode)) {
+        toast({
+          variant: 'destructive',
+          title: 'Invalid Country Code',
+          description: `"${countryCode}" is not a valid ISO 3166-1 alpha-2 country code.`,
+        });
+        return [];
+      }
+
+      // Enforce a 10-second timeout to prevent the fetch from hanging indefinitely.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
       try {
         const response = await fetch(
-          `https://date.nager.at/api/v3/PublicHolidays/${year}/${countryCode}`
+          `https://date.nager.at/api/v3/PublicHolidays/${year}/${sanitizedCode}`,
+          { signal: controller.signal }
         );
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
-          // Attempt to parse error response body for more details
-          let errorBody = '';
-          try {
-            errorBody = await response.text();
-          } catch {
-            // Ignore if can't read body
-          }
-          console.error(
-            `HTTP error fetching holidays for ${countryCode}: ${response.status} ${response.statusText}`,
-            errorBody
-          );
           throw new Error(
-            `HTTP error! status: ${response.status} - Failed to fetch holidays for ${countryCode}`
+            `HTTP ${response.status} – Failed to fetch holidays for ${sanitizedCode}`
           );
         }
         const data = await response.json();
-        // Map the API response to the PublicHoliday type
         const holidays: PublicHoliday[] = data.map(
-          (item: any, index: number) => ({
-            id: `nager_${countryCode}_${year}_${item.date}_${index}`, // Generate a unique ID using date
+          (item: { date: string; name: string }, index: number) => ({
+            id: `nager_${sanitizedCode}_${year}_${item.date}_${index}`,
             name: item.name,
-            date: item.date, // Already in YYYY-MM-DD format
+            date: item.date, // Already in YYYY-MM-DD format from the API
           })
         );
-        console.log(
-          `Fetched ${holidays.length} holidays for ${countryCode} in ${year}`
-        );
         return holidays;
-      } catch (error: any) {
-        console.error(
-          `Failed to fetch holidays from Nager.Date API for ${countryCode}:`,
-          error.message
-        );
+      } catch (error: unknown) {
+        clearTimeout(timeoutId);
+        const isAbort = error instanceof DOMException && error.name === 'AbortError';
+        const message = isAbort
+          ? 'Request timed out. Please try again.'
+          : error instanceof Error
+            ? error.message
+            : 'Unknown error';
         toast({
           variant: 'destructive',
-          title: 'Error Fetching Holidays',
-          description: `Could not retrieve holidays for ${countryCode}. ${error.message}`,
+          title: isAbort ? 'Timeout Fetching Holidays' : 'Error Fetching Holidays',
+          description: `Could not retrieve holidays for ${sanitizedCode}. ${message}`,
         });
         return [];
       }
@@ -176,7 +183,6 @@ export default function HolidaysTab({
 
   // Initialize or update calendars based on initial prop
   useEffect(() => {
-    console.log('Initializing calendars from props:', initialCalendars);
     const mappedCalendars = initialCalendars.map((cal, calIndex) => ({
       ...cal,
       countryCode: cal.countryCode || '',
