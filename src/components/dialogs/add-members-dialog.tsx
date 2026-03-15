@@ -64,10 +64,6 @@ function AddMembersDialog({
   useEffect(() => {
     // Only initialize if the dialog is opening (was closed, now open)
     if (isOpen && !prevIsOpen) {
-      console.log(
-        'Dialog opening, initializing rows. Existing:',
-        existingMembers
-      ); // Debug log
       const initialRows =
         existingMembers.length > 0
           ? existingMembers.map((member, index) => ({
@@ -77,7 +73,6 @@ function AddMembersDialog({
           : [createEmptyMemberRow()];
       setMemberRows(initialRows);
     } else if (!isOpen && prevIsOpen) {
-      console.log('Dialog closing, resetting rows.'); // Debug log
       setMemberRows([]); // Reset rows when closing to avoid stale data if reopened quickly
     }
     // Update previous state for the next render
@@ -101,9 +96,6 @@ function AddMembersDialog({
     field: 'name' | 'role',
     value: string
   ) => {
-    console.log(
-      `Input change: ${internalId}, Field: ${field}, Value: ${value}`
-    ); // Debug log
     setMemberRows((rows) =>
       rows.map((row) =>
         row._internalId === internalId ? { ...row, [field]: value } : row

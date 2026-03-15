@@ -6,22 +6,35 @@ import {
   setDoc,
   deleteDoc,
   query,
+  where,
+  limit,
   orderBy,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import type { Project, AppData } from '@/types/sprint-data';
 
 const PROJECTS_QUERY_KEY = 'projects';
+/** Maximum number of projects fetched per query to prevent unbounded reads. */
+const PROJECTS_FETCH_LIMIT = 100;
 
 // --- Fetch Projects ---
+// Only returns projects owned by the currently signed-in user (RBAC).
+// Older projects without a `userId` field are intentionally excluded to
+// encourage re-saving them with the owner UID going forward.
 const fetchProjects = async (): Promise<AppData> => {
-  console.log('Fetching projects from Firestore...');
+  const currentUser = auth.currentUser;
+  if (!currentUser) return [];
+
   const projectsCollection = collection(db, 'projects');
-  const querySnapshot = await getDocs(projectsCollection);
-  const projects = querySnapshot.docs.map(
-    (doc) => ({ id: doc.id, ...doc.data() }) as Project
+  const userProjectsQuery = query(
+    projectsCollection,
+    where('userId', '==', currentUser.uid),
+    limit(PROJECTS_FETCH_LIMIT)
   );
-  console.log(`Fetched ${projects.length} projects.`);
+  const querySnapshot = await getDocs(userProjectsQuery);
+  const projects = querySnapshot.docs.map(
+    (docSnap) => ({ id: docSnap.id, ...docSnap.data() }) as Project
+  );
 
   const validatedProjects = projects.map((project) => ({
     ...project,
@@ -44,8 +57,7 @@ const fetchProjects = async (): Promise<AppData> => {
     members: project.members ?? [],
     teams: project.teams ?? [],
     holidayCalendars: project.holidayCalendars ?? [],
-    risks: project.risks ?? [], // Initialize risks if undefined
-    // Default new config fields
+    risks: project.risks ?? [],
     storyPointScale: project.storyPointScale ?? 'Fibonacci',
     customTaskTypes: project.customTaskTypes ?? [],
     customTicketStatuses: project.customTicketStatuses ?? [],
@@ -62,22 +74,17 @@ export function useProjects() {
 
 // --- Update/Add Project ---
 const updateProject = async (project: Project): Promise<void> => {
-  console.log(`Updating project ${project.id} in Firestore...`);
   if (!project.id) throw new Error('Project ID is required for updating.');
   const projectRef = doc(db, 'projects', project.id);
   const { id, ...projectData } = project;
   await setDoc(projectRef, projectData, { merge: true });
-  console.log(`Project ${project.id} updated successfully.`);
 };
 
 export function useUpdateProject() {
   const queryClient = useQueryClient();
   return useMutation<void, Error, Project>({
     mutationFn: updateProject,
-    onSuccess: (_, updatedProject) => {
-      console.log(
-        'Project update mutation successful, invalidating queries...'
-      );
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [PROJECTS_QUERY_KEY] });
     },
     onError: (error) => {
@@ -88,21 +95,16 @@ export function useUpdateProject() {
 
 // --- Delete Project ---
 const deleteProject = async (projectId: string): Promise<void> => {
-  console.log(`Deleting project ${projectId} from Firestore...`);
   if (!projectId) throw new Error('Project ID is required for deletion.');
   const projectRef = doc(db, 'projects', projectId);
   await deleteDoc(projectRef);
-  console.log(`Project ${projectId} deleted successfully.`);
 };
 
 export function useDeleteProject() {
   const queryClient = useQueryClient();
   return useMutation<void, Error, string>({
     mutationFn: deleteProject,
-    onSuccess: (_, projectId) => {
-      console.log(
-        'Project delete mutation successful, invalidating queries...'
-      );
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [PROJECTS_QUERY_KEY] });
     },
     onError: (error) => {

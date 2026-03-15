@@ -135,6 +135,7 @@ import {
   useUpdateProject,
   useDeleteProject,
 } from '@/hooks/use-projects';
+import { useQueryClient } from '@tanstack/react-query';
 import { handleExport } from '@/lib/export';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -142,6 +143,7 @@ import { useRouter } from 'next/navigation';
 import QueryProvider from '@/components/query-provider';
 import HelpModal from '@/components/help/help-modal';
 import FloatingHelpButton from '@/components/help/floating-help-button';
+import { ErrorBoundary } from '@/components/error-boundary';
 
 export default function PrismPageWrapper() {
   return (
@@ -172,6 +174,7 @@ function PrismPage() {
   const [confirmProjectName, setConfirmProjectName] = useState<string>('');
   const [clientNow, setClientNow] = useState<Date | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [loginToastShown, setLoginToastShown] = useState(false);
   const [selectedSprintForPlanning, setSelectedSprintForPlanning] =
@@ -190,14 +193,19 @@ function PrismPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
+        // Set a session cookie so the middleware can protect /prism server-side.
+        document.cookie = 'prism_auth_session=1; path=/; SameSite=Strict';
         setIsAuthenticated(true);
       } else {
+        // Clear the session cookie and React Query cache on sign-out.
+        document.cookie = 'prism_auth_session=; path=/; max-age=0; SameSite=Strict';
+        queryClient.clear();
         setIsAuthenticated(false);
         router.push('/');
       }
     });
     return () => unsubscribe();
-  }, [router]);
+  }, [router, queryClient]);
 
   useEffect(() => {
     setClientNow(new Date());
@@ -441,8 +449,10 @@ function PrismPage() {
       return;
     }
     const newProject: Project = {
-      id: `proj_${Date.now()}`,
+      id: crypto.randomUUID(),
       name: trimmedName,
+      // Attach the owner's UID so Firestore queries can scope by user (RBAC).
+      userId: auth.currentUser?.uid ?? '',
       sprintData: initialSprintData,
       members: [],
       holidayCalendars: [],
@@ -539,11 +549,15 @@ function PrismPage() {
 
   const handleLogout = async () => {
     try {
+      // Clear the React Query cache before signing out to prevent stale data
+      // from being visible if another user picks up the same device.
+      queryClient.clear();
+      // Remove the middleware session cookie.
+      document.cookie = 'prism_auth_session=; path=/; max-age=0; SameSite=Strict';
       await signOut(auth);
       toast({ title: 'Logged Out', description: 'You have been logged out.' });
       router.push('/');
     } catch (error) {
-      console.error('Error logging out:', error);
       toast({
         variant: 'destructive',
         title: 'Logout Error',
@@ -959,14 +973,15 @@ function PrismPage() {
     }
 
     if (!ActiveComponent) {
-      console.error(
-        `Error: ActiveComponent is undefined for tab: ${activeTab}. MainKey: ${mainKey}, SubKey: ${subKey}`
-      );
       return (
         <div>Error: Tab component not found. Please check configuration.</div>
       );
     }
-    return <ActiveComponent {...componentProps} />;
+    return (
+      <ErrorBoundary>
+        <ActiveComponent {...componentProps} />
+      </ErrorBoundary>
+    );
   };
 
   return (

@@ -1,5 +1,15 @@
 // src/components/login/login-modal.tsx
 import React, { useState, useEffect } from 'react';
+
+// Validates that a password meets minimum strength requirements.
+// Returns an error message string or null if the password is strong enough.
+function validatePasswordStrength(password: string): string | null {
+  if (password.length < 8) return 'Password must be at least 8 characters.';
+  if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter.';
+  if (!/[a-z]/.test(password)) return 'Password must contain at least one lowercase letter.';
+  if (!/[0-9]/.test(password)) return 'Password must contain at least one number.';
+  return null;
+}
 import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, getDocs, limit, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -79,7 +89,12 @@ export default function LoginModal({
         throw new Error('User not found.');
       }
 
-      const userProfile = querySnapshot.docs[0].data() as UserProfile;
+      const rawProfile = querySnapshot.docs[0].data();
+      // Runtime validation: ensure the document has the expected shape before casting.
+      if (typeof rawProfile?.email !== 'string' || !rawProfile.email) {
+        throw new Error('User profile data is invalid or corrupted.');
+      }
+      const userProfile = rawProfile as UserProfile;
       const email = userProfile.email;
 
       await signInWithEmailAndPassword(auth, email, loginPassword);
@@ -102,6 +117,13 @@ export default function LoginModal({
 
     if (signupPassword !== signupConfirmPassword) {
       setError('Passwords do not match.');
+      setIsLoading(false);
+      return;
+    }
+
+    const passwordError = validatePasswordStrength(signupPassword);
+    if (passwordError) {
+      setError(passwordError);
       setIsLoading(false);
       return;
     }
@@ -154,7 +176,7 @@ export default function LoginModal({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="mt-4 w-full">
+        <Tabs value={activeTab} onValueChange={(val) => { if (val === 'login' || val === 'signup') setActiveTab(val); }} className="mt-4 w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="login" disabled={isLoading}><LogIn className="mr-2 h-4 w-4" />Login</TabsTrigger>
             <TabsTrigger value="signup" disabled={isLoading}><UserPlus className="mr-2 h-4 w-4" />Signup</TabsTrigger>

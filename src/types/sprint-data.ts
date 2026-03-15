@@ -247,6 +247,8 @@ export interface RiskItem {
 
 export interface Project {
   id: string;
+  /** UID of the Firebase Auth user who owns this project (used for RBAC queries). */
+  userId?: string;
   name: string;
   sprintData: SprintData;
   members: Member[];

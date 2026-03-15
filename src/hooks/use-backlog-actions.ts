@@ -44,7 +44,7 @@ export const useBacklogActions = ({
       // Assign persistent IDs to new items before adding (using a temporary approach)
       const itemsWithIds = newItems.map((item, index) => ({
         ...item,
-        id: item.id || `backlog_${selectedProject.id}_${Date.now()}_${index}`, // Generate ID if missing
+        id: item.id || crypto.randomUUID(), // Generate a collision-safe ID if missing
       }));
       const updatedBacklog = [...existingBacklog, ...itemsWithIds];
       updatedBacklog.sort(
@@ -135,7 +135,7 @@ export const useBacklogActions = ({
         ...initialBacklogTask,
         ...backlogItem,
         storyPoints: backlogItem.storyPoints ?? null, // Ensure storyPoints is carried over
-        id: `sprint_task_${backlogItem.id}_${Date.now()}`, // Ensure a new unique ID for the sprint task instance
+        id: crypto.randomUUID(), // Collision-safe ID for the sprint task instance
         status: 'To Do',
         startDate: null, // Will be planned in the sprint
         movedToSprint: null, // This field is for backlog item history
@@ -249,7 +249,7 @@ export const useBacklogActions = ({
             ...initialBacklogTask, // Start with defaults to ensure all fields are present
             ...originalItem, // Spread original item details
             storyPoints: originalItem.storyPoints ?? null, // Carry over story points
-            id: `sprint_task_instance_${originalItem.id}_${Date.now()}`, // New unique ID for the SPRINT TASK instance
+            id: crypto.randomUUID(), // Collision-safe ID for the sprint task instance
             status: 'To Do', // Default status for new sprint tasks
             startDate: null, // Needs to be planned within the sprint
             completedDate: null,
@@ -520,7 +520,7 @@ export const useBacklogActions = ({
 
       // 2. Prepare new split tasks with unique IDs and backlog IDs
       const newSplitTasksWithIds = splitTasks.map((task, index) => {
-        const newId = `split_instance_${originalItem.id}_${task.backlogId}_${Date.now()}`; // Ensure unique persistent ID for the new instance
+        const newId = crypto.randomUUID(); // Collision-safe ID for the split task instance
 
         return {
           ...initialBacklogTask, // Ensure all fields are present
@@ -640,7 +640,7 @@ export const useBacklogActions = ({
         return;
       }
 
-      const mergeEventId = `merge_evt_${Date.now()}`; // Unique ID for this merge operation
+      const mergeEventId = crypto.randomUUID(); // Collision-safe ID for this merge operation
       let mergedItemDetails: string[] = [];
 
       let currentBacklog = [...(selectedProject.backlog ?? [])];
@@ -685,7 +685,7 @@ export const useBacklogActions = ({
       const newMergedTaskWithDetails: Task = {
         ...initialBacklogTask, // Base defaults
         ...mergedTask, // User-provided details for the new task
-        id: `merged_item_${mergeEventId}_${Date.now()}`, // Unique ID for the new merged item
+        id: crypto.randomUUID(), // Collision-safe ID for the new merged item
         storyPoints: mergedTask.storyPoints ?? null, // Use what was set in dialog, or null; merged items need re-estimation
         // backlogId and ticketNumber should be set by the MergeDialog based on suffix logic
         needsGrooming: true, // New merged item needs grooming
