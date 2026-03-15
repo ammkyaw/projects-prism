@@ -75,7 +75,6 @@ import {
   AlertDialogFooter as AlertDFooter,
   AlertDialogHeader as AlertDHeader,
   AlertDialogTitle as AlertDTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
 // Main Content Components (Tabs)
@@ -118,7 +117,6 @@ import type {
 } from '@/types/sprint-data';
 import {
   initialSprintData,
-  taskPriorities,
   storyPointScaleOptions,
   predefinedTaskTypes,
   predefinedTicketStatuses,
@@ -244,13 +242,6 @@ function PrismPage() {
   const selectedProject = useMemo(() => {
     return projects.find((p) => p.id === selectedProjectId) ?? null;
   }, [projects, selectedProjectId]);
-
-  const plannableSprints = useMemo(() => {
-    if (!selectedProject) return [];
-    return (selectedProject.sprintData?.sprints ?? []).filter(
-      (s) => s.status === 'Active' || s.status === 'Planned'
-    );
-  }, [selectedProject]);
 
   const defaultSubTabs: Record<string, string> = {
     sprints: 'overview',
