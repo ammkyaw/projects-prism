@@ -1,15 +1,5 @@
 // src/components/login/login-modal.tsx
 import React, { useState, useEffect } from 'react';
-
-// Validates that a password meets minimum strength requirements.
-// Returns an error message string or null if the password is strong enough.
-function validatePasswordStrength(password: string): string | null {
-  if (password.length < 8) return 'Password must be at least 8 characters.';
-  if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter.';
-  if (!/[a-z]/.test(password)) return 'Password must contain at least one lowercase letter.';
-  if (!/[0-9]/.test(password)) return 'Password must contain at least one number.';
-  return null;
-}
 import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, getDocs, limit, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -30,6 +20,16 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { XCircle, Eye, EyeOff, Loader2, UserPlus, LogIn, AlertCircle } from 'lucide-react';
+
+// Validates that a password meets minimum strength requirements.
+// Returns an error message string or null if the password is strong enough.
+function validatePasswordStrength(password: string): string | null {
+  if (password.length < 8) return 'Password must be at least 8 characters.';
+  if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter.';
+  if (!/[a-z]/.test(password)) return 'Password must contain at least one lowercase letter.';
+  if (!/[0-9]/.test(password)) return 'Password must contain at least one number.';
+  return null;
+}
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -92,7 +92,7 @@ export default function LoginModal({
       const rawProfile = querySnapshot.docs[0].data();
       // Runtime validation: ensure the document has the expected shape before casting.
       if (typeof rawProfile?.email !== 'string' || !rawProfile.email) {
-        throw new Error('User profile data is invalid or corrupted.');
+        throw new Error('User profile data is missing an email. Please contact support.');
       }
       const userProfile = rawProfile as UserProfile;
       const email = userProfile.email;
@@ -101,10 +101,17 @@ export default function LoginModal({
       // Set the session cookie before navigating so middleware lets the request through.
       document.cookie = 'prism_auth_session=1; path=/; SameSite=Strict';
       onLoginSuccess();
-    } catch (err: any) {
-      console.error("Login Error:", err);
+    } catch (err: unknown) {
+      const firebaseError = err as { code?: string; message?: string };
       let message = 'Invalid username or password.';
-      if (err.code === 'auth/too-many-requests') message = 'Too many attempts. Try again later.';
+      if (firebaseError.code === 'auth/too-many-requests') {
+        message = 'Too many attempts. Try again later.';
+      } else if (firebaseError.code === 'auth/network-request-failed') {
+        message = 'Network error. Please check your connection.';
+      } else if (!firebaseError.code && firebaseError.message) {
+        // Non-Firebase errors (e.g. our own validation) — show the actual message.
+        message = firebaseError.message;
+      }
       setError(message);
       toast({ variant: 'destructive', title: 'Login Failed', description: message });
     } finally {
@@ -157,7 +164,6 @@ export default function LoginModal({
         onLoginSuccess();
       }
     } catch (err: any) {
-      console.error("Signup Error:", err);
       let message = err.message || 'Signup failed. Please try again.';
       if (err.code === 'auth/email-already-in-use') message = 'Email already registered.';
       setError(message);

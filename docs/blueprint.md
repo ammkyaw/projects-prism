@@ -1,4 +1,4 @@
-# **App Name**: Sprint Stats
+# **App Name**: Projects Prism
 
 ## Core Features:
 
