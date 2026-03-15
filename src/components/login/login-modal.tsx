@@ -98,6 +98,8 @@ export default function LoginModal({
       const email = userProfile.email;
 
       await signInWithEmailAndPassword(auth, email, loginPassword);
+      // Set the session cookie before navigating so middleware lets the request through.
+      document.cookie = 'prism_auth_session=1; path=/; SameSite=Strict';
       onLoginSuccess();
     } catch (err: any) {
       console.error("Login Error:", err);
@@ -150,6 +152,8 @@ export default function LoginModal({
         });
 
         toast({ title: 'Welcome to Prism!', description: 'Your account has been created.' });
+        // Set the session cookie before navigating so middleware lets the request through.
+        document.cookie = 'prism_auth_session=1; path=/; SameSite=Strict';
         onLoginSuccess();
       }
     } catch (err: any) {
